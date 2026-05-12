@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "EverDream Expo Demo",
+    "slug": "everdream-expo-demo",
+    "version": "1.0.0",
+    "sdkVersion": "55.0.0",
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
+    "entryPoint": "node_modules/expo/AppEntry.js",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "plugins": [
+      "expo-asset"
+    ]
+  }
+}

@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/dreamjournalapp.tsx","./src/main.tsx","./src/shims.d.ts","./src/vite-env.d.ts","./src/components/shell.tsx","./src/hooks/usehashroute.ts","./src/lib/storage.ts","./src/utils/dreampresentation.ts"],"errors":true,"version":"5.6.3"}
