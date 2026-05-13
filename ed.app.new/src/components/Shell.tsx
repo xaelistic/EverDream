@@ -18,6 +18,7 @@ type ShellProps = {
 
 const navItems: { screen: RouteScreen; label: string; icon: typeof Home }[] = [
   { screen: 'home', label: 'Home', icon: Home },
+  { screen: 'reflection', label: 'Reflect', icon: Moon },
   { screen: 'journal', label: 'Journal', icon: BookOpen },
   { screen: 'record', label: 'Record', icon: Mic },
   { screen: 'insights', label: 'Insights', icon: Sparkles },

@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "0e21cecd-1527-4af8-80b5-b4c6c99e3500"
+      }
+    },
+    "android": {
+      "package": "com.xaelist.everdreamjournal"
+    }
+  }
+}

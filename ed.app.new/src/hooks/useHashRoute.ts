@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 export type RouteScreen =
   | 'home'
+  | 'reflection'
   | 'journal'
   | 'record'
   | 'dream'
@@ -29,6 +30,7 @@ function parseHash(): AppRoute {
   const screen = parts[0] as RouteScreen;
   const allowed: RouteScreen[] = [
     'home',
+    'reflection',
     'journal',
     'record',
     'insights',

@@ -15,6 +15,19 @@
     ],
     "plugins": [
       "expo-asset"
-    ]
+    ],
+    "android": {
+      "package": "com.xaelist.everdreamexpodemo",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "backgroundColor": "#f8f6f0"
+      },
+      "permissions": []
+    },
+    "extra": {
+      "eas": {
+        "projectId": "xaelist/everdream-journal"
+      }
+    }
   }
 }

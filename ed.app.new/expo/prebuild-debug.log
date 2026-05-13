@@ -1,0 +1,159 @@
+2026-05-12T18:22:35.177Z expo:telemetry Recording 1 event(s)
+2026-05-12T18:22:35.217Z expo:env C:\Users\xaeli\Documents\GitHub\EDI\EverDream\ed.app.new\expo\.env does not exist, skipping this env file
+2026-05-12T18:22:35.217Z expo:env C:\Users\xaeli\Documents\GitHub\EDI\EverDream\ed.app.new\expo\.env.development does not exist, skipping this env file
+2026-05-12T18:22:35.217Z expo:env C:\Users\xaeli\Documents\GitHub\EDI\EverDream\ed.app.new\expo\.env.local does not exist, skipping this env file
+2026-05-12T18:22:35.217Z expo:env C:\Users\xaeli\Documents\GitHub\EDI\EverDream\ed.app.new\expo\.env.development.local does not exist, skipping this env file
+- Creating native directory (./android)
+2026-05-12T18:22:35.385Z expo:prebuild:resolveLocalTemplate Using local template from Expo package: C:\Users\xaeli\Documents\GitHub\EDI\EverDream\ed.app.new\expo\node_modules\expo\template.tgz
+2026-05-12T18:22:35.401Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\.gitattributes
+2026-05-12T18:22:35.410Z expo:utils:tar mkdir(p): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android
+2026-05-12T18:22:35.411Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\.gitignore
+2026-05-12T18:22:35.412Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\.gitignore
+2026-05-12T18:22:35.414Z expo:utils:tar mkdir(p): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\ios
+2026-05-12T18:22:35.414Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\ios\.gitignore
+2026-05-12T18:22:35.415Z expo:utils:tar write(755): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\gradlew
+2026-05-12T18:22:35.416Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\ios\Podfile
+2026-05-12T18:22:35.418Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\gradlew.bat
+2026-05-12T18:22:35.419Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\ios\.xcode.env
+2026-05-12T18:22:35.420Z expo:utils:tar mkdir(p): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app
+2026-05-12T18:22:35.420Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\build.gradle
+2026-05-12T18:22:35.422Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\build.gradle
+2026-05-12T18:22:35.423Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\settings.gradle
+2026-05-12T18:22:35.424Z expo:utils:tar mkdir(p): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\ios\EverDreamExpoDemo
+2026-05-12T18:22:35.425Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\ios\EverDreamExpoDemo\EverDreamExpoDemo-Bridging-Header.h
+2026-05-12T18:22:35.426Z expo:utils:tar mkdir(p): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\gradle\wrapper
+2026-05-12T18:22:35.427Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\gradle\wrapper\gradle-wrapper.jar
+2026-05-12T18:22:35.428Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\App.js
+2026-05-12T18:22:35.429Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\index.js
+2026-05-12T18:22:35.430Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\metro.config.js
+2026-05-12T18:22:35.431Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\app.json
+2026-05-12T18:22:35.432Z expo:utils:tar mkdir(p): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\ios\EverDreamExpoDemo\Images.xcassets\AppIcon.appiconset
+2026-05-12T18:22:35.432Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\ios\EverDreamExpoDemo\Images.xcassets\AppIcon.appiconset\Contents.json
+2026-05-12T18:22:35.433Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\ios\EverDreamExpoDemo\Images.xcassets\Contents.json
+2026-05-12T18:22:35.434Z expo:utils:tar mkdir(p): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\ios\EverDreamExpoDemo\Images.xcassets\SplashScreenLegacy.imageset
+2026-05-12T18:22:35.435Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\ios\EverDreamExpoDemo\Images.xcassets\SplashScreenLegacy.imageset\Contents.json
+2026-05-12T18:22:35.436Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\package.json
+2026-05-12T18:22:35.436Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\ios\Podfile.properties.json
+2026-05-12T18:22:35.437Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\debug.keystore
+2026-05-12T18:22:35.438Z expo:utils:tar mkdir(p): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\java\com\everdreamexpodemo
+2026-05-12T18:22:35.440Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\java\com\everdreamexpodemo\MainActivity.kt
+2026-05-12T18:22:35.441Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\java\com\everdreamexpodemo\MainApplication.kt
+2026-05-12T18:22:35.442Z expo:utils:tar mkdir(p): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\ios\EverDreamExpoDemo.xcodeproj
+2026-05-12T18:22:35.442Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\ios\EverDreamExpoDemo.xcodeproj\project.pbxproj
+2026-05-12T18:22:35.443Z expo:utils:tar mkdir(p): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\ios\EverDreamExpoDemo\Supporting
+2026-05-12T18:22:35.443Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\ios\EverDreamExpoDemo\Supporting\Expo.plist
+2026-05-12T18:22:35.445Z expo:utils:tar mkdir(p): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\ios\EverDreamExpoDemo.xcodeproj\project.xcworkspace\xcshareddata
+2026-05-12T18:22:35.446Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\ios\EverDreamExpoDemo.xcodeproj\project.xcworkspace\xcshareddata\IDEWorkspaceChecks.plist
+2026-05-12T18:22:35.447Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\ios\EverDreamExpoDemo\Info.plist
+2026-05-12T18:22:35.448Z expo:utils:tar mkdir(p): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\res\drawable-hdpi
+2026-05-12T18:22:35.449Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\res\drawable-hdpi\splashscreen_logo.png
+2026-05-12T18:22:35.450Z expo:utils:tar mkdir(p): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\res\drawable-mdpi
+2026-05-12T18:22:35.450Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\res\drawable-mdpi\splashscreen_logo.png
+2026-05-12T18:22:35.451Z expo:utils:tar mkdir(p): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\res\drawable-xhdpi
+2026-05-12T18:22:35.452Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\res\drawable-xhdpi\splashscreen_logo.png
+2026-05-12T18:22:35.453Z expo:utils:tar mkdir(p): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\res\drawable-xxhdpi
+2026-05-12T18:22:35.454Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\res\drawable-xxhdpi\splashscreen_logo.png
+2026-05-12T18:22:35.455Z expo:utils:tar mkdir(p): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\res\drawable-xxxhdpi
+2026-05-12T18:22:35.455Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\res\drawable-xxxhdpi\splashscreen_logo.png
+2026-05-12T18:22:35.457Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\ios\EverDreamExpoDemo\Images.xcassets\SplashScreenLegacy.imageset\SplashScreenLegacy.png
+2026-05-12T18:22:35.458Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\proguard-rules.pro
+2026-05-12T18:22:35.460Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\gradle\wrapper\gradle-wrapper.properties
+2026-05-12T18:22:35.461Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\gradle.properties
+2026-05-12T18:22:35.462Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\ios\EverDreamExpoDemo\SplashScreen.storyboard
+2026-05-12T18:22:35.463Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\ios\EverDreamExpoDemo\AppDelegate.swift
+2026-05-12T18:22:35.464Z expo:utils:tar mkdir(p): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\res\mipmap-hdpi
+2026-05-12T18:22:35.465Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\res\mipmap-hdpi\ic_launcher_round.webp
+2026-05-12T18:22:35.466Z expo:utils:tar mkdir(p): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\res\mipmap-mdpi
+2026-05-12T18:22:35.466Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\res\mipmap-mdpi\ic_launcher_round.webp
+2026-05-12T18:22:35.467Z expo:utils:tar mkdir(p): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\res\mipmap-xhdpi
+2026-05-12T18:22:35.468Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\res\mipmap-xhdpi\ic_launcher_round.webp
+2026-05-12T18:22:35.469Z expo:utils:tar mkdir(p): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\res\mipmap-xxhdpi
+2026-05-12T18:22:35.469Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\res\mipmap-xxhdpi\ic_launcher_round.webp
+2026-05-12T18:22:35.471Z expo:utils:tar mkdir(p): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\res\mipmap-xxxhdpi
+2026-05-12T18:22:35.471Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\res\mipmap-xxxhdpi\ic_launcher_round.webp
+2026-05-12T18:22:35.472Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\res\mipmap-hdpi\ic_launcher.webp
+2026-05-12T18:22:35.473Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\res\mipmap-mdpi\ic_launcher.webp
+2026-05-12T18:22:35.477Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\res\mipmap-xhdpi\ic_launcher.webp
+2026-05-12T18:22:35.479Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\res\mipmap-xxhdpi\ic_launcher.webp
+2026-05-12T18:22:35.481Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\res\mipmap-xxxhdpi\ic_launcher.webp
+2026-05-12T18:22:35.484Z expo:utils:tar mkdir(p): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\ios\EverDreamExpoDemo.xcodeproj\xcshareddata\xcschemes
+2026-05-12T18:22:35.485Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\ios\EverDreamExpoDemo.xcodeproj\xcshareddata\xcschemes\EverDreamExpoDemo.xcscheme
+2026-05-12T18:22:35.487Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\ios\EverDreamExpoDemo.xcodeproj\project.xcworkspace\contents.xcworkspacedata
+2026-05-12T18:22:35.488Z expo:utils:tar mkdir(p): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\debug
+2026-05-12T18:22:35.489Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\debug\AndroidManifest.xml
+2026-05-12T18:22:35.491Z expo:utils:tar mkdir(p): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\debugOptimized
+2026-05-12T18:22:35.491Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\debugOptimized\AndroidManifest.xml
+2026-05-12T18:22:35.493Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\AndroidManifest.xml
+2026-05-12T18:22:35.495Z expo:utils:tar mkdir(p): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\res\values
+2026-05-12T18:22:35.496Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\res\values\colors.xml
+2026-05-12T18:22:35.498Z expo:utils:tar mkdir(p): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\res\drawable
+2026-05-12T18:22:35.498Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\res\drawable\ic_launcher_background.xml
+2026-05-12T18:22:35.500Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\res\drawable\rn_edit_text_material.xml
+2026-05-12T18:22:35.501Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\res\values\strings.xml
+2026-05-12T18:22:35.502Z expo:utils:tar write(644): C:\Users\xaeli\AppData\Local\Temp\350de7ad3d64035b0fce2ce82888ef25\android\app\src\main\res\values\styles.xml
+2026-05-12T18:22:35.563Z expo:prebuild:copyTemplateFiles All platforms have an internal gitignore: true
+2026-05-12T18:22:35.748Z expo:prebuild:copyTemplateFiles Got files to transform: ["app.json","android\\settings.gradle","android\\build.gradle","android\\app\\src\\main\\AndroidManifest.xml","android\\app\\src\\debugOptimized\\AndroidManifest.xml","android\\app\\src\\debug\\AndroidManifest.xml","android\\app\\build.gradle","node_modules\\@expo\\log-box\\app.json","android\\app\\src\\main\\res\\values\\styles.xml","android\\app\\src\\main\\res\\values\\strings.xml","android\\app\\src\\main\\res\\values\\colors.xml","android\\app\\src\\main\\res\\drawable\\rn_edit_text_material.xml","android\\app\\src\\main\\res\\drawable\\ic_launcher_background.xml","android\\app\\src\\main\\java\\com\\everdreamexpodemo\\MainApplication.kt","android\\app\\src\\main\\java\\com\\everdreamexpodemo\\MainActivity.kt"]
+2026-05-12T18:22:35.750Z expo:prebuild:copyTemplateFiles Renaming app name in file: C:\Users\xaeli\Documents\GitHub\EDI\EverDream\ed.app.new\expo\app.json
+2026-05-12T18:22:35.751Z expo:prebuild:copyTemplateFiles Renaming app name in file: C:\Users\xaeli\Documents\GitHub\EDI\EverDream\ed.app.new\expo\android\settings.gradle
+2026-05-12T18:22:35.751Z expo:prebuild:copyTemplateFiles Renaming app name in file: C:\Users\xaeli\Documents\GitHub\EDI\EverDream\ed.app.new\expo\android\build.gradle
+2026-05-12T18:22:35.751Z expo:prebuild:copyTemplateFiles Renaming app name in file: C:\Users\xaeli\Documents\GitHub\EDI\EverDream\ed.app.new\expo\android\app\src\debugOptimized\AndroidManifest.xml
+2026-05-12T18:22:35.751Z expo:prebuild:copyTemplateFiles Renaming app name in file: C:\Users\xaeli\Documents\GitHub\EDI\EverDream\ed.app.new\expo\android\app\src\main\AndroidManifest.xml
+2026-05-12T18:22:35.751Z expo:prebuild:copyTemplateFiles Renaming app name in file: C:\Users\xaeli\Documents\GitHub\EDI\EverDream\ed.app.new\expo\android\app\src\debug\AndroidManifest.xml
+2026-05-12T18:22:35.751Z expo:prebuild:copyTemplateFiles Renaming app name in file: C:\Users\xaeli\Documents\GitHub\EDI\EverDream\ed.app.new\expo\android\app\build.gradle
+2026-05-12T18:22:35.751Z expo:prebuild:copyTemplateFiles Renaming app name in file: C:\Users\xaeli\Documents\GitHub\EDI\EverDream\ed.app.new\expo\android\app\src\main\res\values\styles.xml
+2026-05-12T18:22:35.751Z expo:prebuild:copyTemplateFiles Renaming app name in file: C:\Users\xaeli\Documents\GitHub\EDI\EverDream\ed.app.new\expo\android\app\src\main\res\values\strings.xml
+2026-05-12T18:22:35.751Z expo:prebuild:copyTemplateFiles Renaming app name in file: C:\Users\xaeli\Documents\GitHub\EDI\EverDream\ed.app.new\expo\android\app\src\main\res\values\colors.xml
+2026-05-12T18:22:35.752Z expo:prebuild:copyTemplateFiles Renaming app name in file: C:\Users\xaeli\Documents\GitHub\EDI\EverDream\ed.app.new\expo\android\app\src\main\res\drawable\rn_edit_text_material.xml
+2026-05-12T18:22:35.752Z expo:prebuild:copyTemplateFiles Renaming app name in file: C:\Users\xaeli\Documents\GitHub\EDI\EverDream\ed.app.new\expo\android\app\src\main\java\com\everdreamexpodemo\MainActivity.kt
+2026-05-12T18:22:35.752Z expo:prebuild:copyTemplateFiles Renaming app name in file: C:\Users\xaeli\Documents\GitHub\EDI\EverDream\ed.app.new\expo\android\app\src\main\java\com\everdreamexpodemo\MainApplication.kt
+2026-05-12T18:22:35.752Z expo:prebuild:copyTemplateFiles Renaming app name in file: C:\Users\xaeli\Documents\GitHub\EDI\EverDream\ed.app.new\expo\android\app\src\main\res\drawable\ic_launcher_background.xml
+2026-05-12T18:22:35.752Z expo:prebuild:copyTemplateFiles Renaming app name in file: C:\Users\xaeli\Documents\GitHub\EDI\EverDream\ed.app.new\expo\node_modules\@expo\log-box\app.json
+ÔêÜ Created native directory
+- Updating package.json
+ÔÇ║ Using react-native@0.76.9 instead of recommended react-native@0.83.6.
+- Updating package.json
+ÔêÜ Updated package.json | no changes
+2026-05-12T18:22:35.979Z expo:config-plugins:ios:maps Google Maps API Key: null
+2026-05-12T18:22:36.002Z expo:prebuild-config:expo-splash-screen:ios config: undefined
+2026-05-12T18:22:36.012Z expo:prebuild-config Skipping unlinked auto plugin: expo-firebase-analytics
+2026-05-12T18:22:36.012Z expo:prebuild-config Skipping unlinked auto plugin: expo-firebase-core
+2026-05-12T18:22:36.012Z expo:prebuild-config Skipping unlinked auto plugin: expo-google-sign-in
+2026-05-12T18:22:36.012Z expo:prebuild-config Skipping unlinked auto plugin: expo-app-auth
+2026-05-12T18:22:36.012Z expo:prebuild-config Skipping unlinked auto plugin: expo-av
+2026-05-12T18:22:36.012Z expo:prebuild-config Skipping unlinked auto plugin: expo-background-fetch
+2026-05-12T18:22:36.012Z expo:prebuild-config Skipping unlinked auto plugin: expo-brightness
+2026-05-12T18:22:36.012Z expo:prebuild-config Skipping unlinked auto plugin: expo-calendar
+2026-05-12T18:22:36.012Z expo:prebuild-config Skipping unlinked auto plugin: expo-camera
+2026-05-12T18:22:36.012Z expo:prebuild-config Skipping unlinked auto plugin: expo-cellular
+2026-05-12T18:22:36.012Z expo:prebuild-config Skipping unlinked auto plugin: expo-dev-menu
+2026-05-12T18:22:36.012Z expo:prebuild-config Skipping unlinked auto plugin: expo-dev-launcher
+2026-05-12T18:22:36.014Z expo:prebuild-config Skipping unlinked auto plugin: expo-image-picker
+2026-05-12T18:22:36.018Z expo:prebuild-config Skipping unlinked auto plugin: expo-location
+2026-05-12T18:22:36.018Z expo:prebuild-config Skipping unlinked auto plugin: expo-media-library
+2026-05-12T18:22:36.018Z expo:prebuild-config Skipping unlinked auto plugin: expo-screen-orientation
+2026-05-12T18:22:36.018Z expo:prebuild-config Skipping unlinked auto plugin: expo-sensors
+2026-05-12T18:22:36.018Z expo:prebuild-config Skipping unlinked auto plugin: expo-task-manager
+2026-05-12T18:22:36.018Z expo:prebuild-config Skipping unlinked auto plugin: expo-local-authentication
+2026-05-12T18:22:36.046Z expo:config-plugins:mod-compiler run in order: dangerous, manifest, strings, gradleProperties, colors, styles, colorsNight, settingsGradle, projectBuildGradle, appBuildGradle
+android.dangerous: withDefaultBaseMods Ô×£ withAndroidBaseMods Ô×£ withGeneratedBaseMods Ô×£ withAndroidDangerousBaseMod
+2026-05-12T18:22:36.046Z expo:config-plugins:base-mods mods.android.dangerous: file path: [skipped]
+android.dangerous: withAndroidExpoPlugins Ô×£ withPlugins Ô×£ withStaticPlugin Ô×£ withPackageRefactor Ô×£ withDangerousMod
+2026-05-12T18:22:36.062Z expo:config-plugins:android:package Found package "null" for type "debug"
+2026-05-12T18:22:36.068Z expo:config-plugins:android:package Found package "com.everdreamexpodemo" for type "main"
+2026-05-12T18:22:36.068Z expo:config-plugins:android:package Refactor "com.everdreamexpodemo" to "com.xaelist.everdreamexpodemo" for type "main"
+2026-05-12T18:22:36.077Z expo:config-plugins:android:package Error updating "C:\Users\xaeli\Documents\GitHub\EDI\EverDream\ed.app.new\expo\android\app\BUCK" for type "main"
+2026-05-12T18:22:36.077Z expo:config-plugins:android:package Found package "null" for type "release"
+android.dangerous: withAndroidExpoPlugins Ô×£ withPlugins Ô×£ withStaticPlugin Ô×£ withAndroidIcons Ô×£ withDangerousMod
+Prebuild failed
+TypeError: [android.dangerous]: withAndroidDangerousBaseMod: url.startsWith is not a function
+TypeError: [android.dangerous]: withAndroidDangerousBaseMod: url.startsWith is not a function
+    at Object.downloadOrUseCachedImage (C:\Users\xaeli\Documents\GitHub\EDI\EverDream\ed.app.new\expo\node_modules\@expo\image-utils\build\Download.js:30:13)
+    at ensureImageOptionsAsync (C:\Users\xaeli\Documents\GitHub\EDI\EverDream\ed.app.new\expo\node_modules\@expo\image-utils\build\Image.js:173:29)
+    at generateImageAsync (C:\Users\xaeli\Documents\GitHub\EDI\EverDream\ed.app.new\expo\node_modules\@expo\image-utils\build\Image.js:222:24)
+    at generateIconAsync (C:\Users\xaeli\Documents\GitHub\EDI\EverDream\ed.app.new\expo\node_modules\@expo\prebuild-config\build\plugins\icons\withAndroidIcons.js:360:54)
+    at C:\Users\xaeli\Documents\GitHub\EDI\EverDream\ed.app.new\expo\node_modules\@expo\prebuild-config\build\plugins\icons\withAndroidIcons.js:278:27
+    at C:\Users\xaeli\Documents\GitHub\EDI\EverDream\ed.app.new\expo\node_modules\@expo\prebuild-config\build\plugins\icons\withAndroidIcons.js:337:60
+    at Array.map (<anonymous>)
+    at iterateDpiValues (C:\Users\xaeli\Documents\GitHub\EDI\EverDream\ed.app.new\expo\node_modules\@expo\prebuild-config\build\plugins\icons\withAndroidIcons.js:337:47)
+    at generateMultiLayerImageAsync (C:\Users\xaeli\Documents\GitHub\EDI\EverDream\ed.app.new\expo\node_modules\@expo\prebuild-config\build\plugins\icons\withAndroidIcons.js:274:9)
+    at configureLegacyIconAsync (C:\Users\xaeli\Documents\GitHub\EDI\EverDream\ed.app.new\expo\node_modules\@expo\prebuild-config\build\plugins\icons\withAndroidIcons.js:173:10)

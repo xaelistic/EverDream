@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Moon,
   Mic,
@@ -46,6 +46,26 @@ const DreamJournalApp = () => {
   const [audioFiles, setAudioFiles] = useState([]);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [pendingTranscription, setPendingTranscription] = useState(null);
+  const [captureMode, setCaptureMode] = useState<'text' | 'audio' | 'video'>('text');
+  const [isVideoRecording, setIsVideoRecording] = useState(false);
+  const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+  const [videoChunks, setVideoChunks] = useState<Blob[]>([]);
+  const [recordedVideoUrl, setRecordedVideoUrl] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [reflectionMood, setReflectionMood] = useState('');
+  const [reflectionEnergy, setReflectionEnergy] = useState(50);
+  const reflectionQuote = useMemo(() => {
+    const quotes = [
+      { text: 'Dreams are the touchstones of our character.', source: 'Henry David Thoreau' },
+      { text: 'The best bridge between despair and hope is a good night’s sleep.', source: 'E. Joseph Cossman' },
+      { text: 'Morning is wonderful. Its only drawback is that it comes at such an inconvenient time of day.', source: 'Glen Cook' },
+      { text: 'A dream you dream alone is only a dream. A dream you dream together is reality.', source: 'John Lennon' },
+      { text: 'Sleep is the best meditation.', source: 'Dalai Lama' },
+    ];
+    const index = Math.floor(Date.now() / 86400000) % quotes.length;
+    return quotes[index];
+  }, []);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [achievements, setAchievements] = useState([]);
@@ -68,6 +88,14 @@ const DreamJournalApp = () => {
     anonymousAnalytics: false,
     thirdPartySharing: false
   });
+
+  const reflectionSleepData = useMemo(() => {
+    if (wearableData.length > 0) {
+      return wearableData[0];
+    }
+    const lastDream = dreams.find((d) => !d.isSample && d.sleepData);
+    return lastDream?.sleepData || null;
+  }, [wearableData, dreams]);
   const [hasAcceptedTerms, setHasAcceptedTerms] = useState(false);
 
   const detailDream = useMemo(() => {
@@ -377,8 +405,8 @@ Respond ONLY with valid JSON, no markdown.`
     }
   };
 
-  // Voice recording
-  const startVoiceRecording = () => {
+  // Speech transcription helper
+  const startSpeechRecording = () => {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
       alert('Voice recognition not supported. Please use Chrome or Edge browser.');
       return;
@@ -386,13 +414,11 @@ Respond ONLY with valid JSON, no markdown.`
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
-    
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = 'en-US';
 
     recognition.onstart = () => setIsRecording(true);
-    
     recognition.onresult = (event) => {
       let transcript = '';
       for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -410,15 +436,105 @@ Respond ONLY with valid JSON, no markdown.`
     recognition.onend = () => setIsRecording(false);
 
     recognition.start();
-    window.currentRecognition = recognition;
+    (window as any).currentRecognition = recognition;
   };
 
-  const stopVoiceRecording = () => {
-    if (window.currentRecognition) {
-      window.currentRecognition.stop();
+  const stopSpeechRecording = () => {
+    const anyWindow = window as any;
+    if (anyWindow.currentRecognition) {
+      anyWindow.currentRecognition.stop();
+      anyWindow.currentRecognition = null;
     }
     setIsRecording(false);
   };
+
+  const startVideoCapture = async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      alert('Video capture is not supported in this browser.');
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user' },
+        audio: true,
+      });
+
+      setVideoStream(stream);
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+
+      const recorder = new MediaRecorder(stream, {
+        mimeType: 'video/webm;codecs=vp8,opus',
+      });
+      const chunks: Blob[] = [];
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size) {
+          chunks.push(event.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: 'video/webm' });
+        const url = URL.createObjectURL(blob);
+        setRecordedVideoUrl(url);
+        setVideoChunks(chunks);
+        setIsVideoRecording(false);
+        stream.getTracks().forEach((track) => track.stop());
+        setVideoStream(null);
+        setMediaRecorder(null);
+      };
+
+      recorder.start();
+      setMediaRecorder(recorder);
+      setIsVideoRecording(true);
+      setVideoChunks([]);
+      setRecordedVideoUrl(null);
+      startSpeechRecording();
+    } catch (error) {
+      console.error('Video capture error:', error);
+      alert('Unable to access camera.');
+    }
+  };
+
+  const stopVideoCapture = () => {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.stop();
+    }
+
+    if (videoStream) {
+      videoStream.getTracks().forEach((track) => track.stop());
+      setVideoStream(null);
+    }
+
+    stopSpeechRecording();
+    setIsVideoRecording(false);
+    setMediaRecorder(null);
+  };
+
+  const clearVideoCapture = () => {
+    if (recordedVideoUrl) {
+      URL.revokeObjectURL(recordedVideoUrl);
+    }
+    stopVideoCapture();
+    setRecordedVideoUrl(null);
+    setVideoChunks([]);
+  };
+
+  useEffect(() => {
+    if (captureMode !== 'video' && videoStream) {
+      stopVideoCapture();
+    }
+  }, [captureMode]);
+
+  useEffect(() => {
+    return () => {
+      stopVideoCapture();
+      stopSpeechRecording();
+    };
+  }, []);
 
   // Handle audio import
   const handleAudioImport = async (event) => {
@@ -601,10 +717,11 @@ Respond ONLY with valid JSON, no markdown.`
   };
 
   const saveDream = async () => {
-    if (!currentEntry.trim()) return;
+    const captureText = currentEntry.trim() || (recordedVideoUrl ? 'Video capture saved from the last session.' : '');
+    if (!captureText) return;
 
     // Step 1: AI Analysis
-    const analysis = await analyzeDream(currentEntry);
+    const analysis = await analyzeDream(captureText);
     
     // Step 2: Generate Image (if enabled)
     let generatedImage = null;
@@ -631,6 +748,8 @@ Respond ONLY with valid JSON, no markdown.`
       watermark,
       assetMetadata: calculateAssetMetadata(analysis),
       sourceAudio: pendingTranscription?.audioFile || null,
+      videoCapture: recordedVideoUrl ? { url: recordedVideoUrl, capturedAt: new Date().toISOString() } : null,
+      captureMode,
       context: contextData
     };
 
@@ -641,6 +760,9 @@ Respond ONLY with valid JSON, no markdown.`
     
     setCurrentEntry('');
     setPendingTranscription(null);
+    setRecordedVideoUrl(null);
+    setVideoChunks([]);
+    setCaptureMode('text');
     setContextData({ mood: '', yesterdayEvents: '', sleepQuality: 3 });
     navigate('journal');
 
@@ -657,6 +779,11 @@ Respond ONLY with valid JSON, no markdown.`
   const cancelDream = () => {
     setCurrentEntry('');
     setPendingTranscription(null);
+    setRecordedVideoUrl(null);
+    setVideoChunks([]);
+    setCaptureMode('text');
+    stopVideoCapture();
+    stopSpeechRecording();
     navigate('home');
   };
 
@@ -1030,6 +1157,33 @@ Respond ONLY with valid JSON, no markdown.`
         </div>
       )}
 
+      {(isProcessing || isGeneratingImage) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/20 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-cream/95 p-6 shadow-2xl shadow-ink/10">
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <p className="text-sm uppercase tracking-[0.28em] text-muted">Saving dream</p>
+                <h3 className="text-xl font-semibold text-ink">{isProcessing ? 'Reconstructing your experience…' : 'Painting your dream visualization…'}</h3>
+              </div>
+              <div className="w-12 h-12 rounded-3xl bg-sage/10 flex items-center justify-center">
+                <div className="w-8 h-8 border-4 border-sage border-t-transparent rounded-full animate-spin" />
+              </div>
+            </div>
+            <div className="space-y-3 text-sm text-muted">
+              <p>{isProcessing ? 'Finding themes, tone, and symbols in your entry.' : 'Rendering the mood, color, and composition for your dream image.'}</p>
+              <div className="rounded-2xl border border-line bg-parchment/90 p-4">
+                <div className="text-xs uppercase tracking-[0.2em] text-muted mb-2">What we are doing</div>
+                <ul className="space-y-2">
+                  <li>• Identifying the story and emotion</li>
+                  <li>• Verifying what feels true to you</li>
+                  <li>• Preparing a visual companion if enabled</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="space-y-10 pb-6">
         {route.screen === 'home' && (
           <div className="space-y-6">
@@ -1051,14 +1205,24 @@ Respond ONLY with valid JSON, no markdown.`
                   <div className="text-[10px] uppercase tracking-wide text-muted">day streak</div>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => navigate('record')}
-                className="relative w-full bg-sage hover:bg-sageDark text-cream font-semibold py-3.5 rounded-2xl transition flex items-center justify-center gap-2 shadow-paper text-sm"
-              >
-                <Moon className="w-5 h-5" strokeWidth={1.75} />
-                I had a dream…
-              </button>
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={() => navigate('record')}
+                  className="relative w-full bg-sage hover:bg-sageDark text-cream font-semibold py-3.5 rounded-2xl transition flex items-center justify-center gap-2 shadow-paper text-sm"
+                >
+                  <Moon className="w-5 h-5" strokeWidth={1.75} />
+                  I had a dream…
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate('reflection')}
+                  className="relative w-full border border-line bg-parchment hover:bg-parchment/90 text-ink font-semibold py-3.5 rounded-2xl transition flex items-center justify-center gap-2 text-sm"
+                >
+                  <Moon className="w-5 h-5" strokeWidth={1.75} />
+                  Morning reflection
+                </button>
+              </div>
             </div>
 
             {/* Quick Stats */}
@@ -1108,6 +1272,111 @@ Respond ONLY with valid JSON, no markdown.`
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {route.screen === 'reflection' && (
+          <div className="space-y-6">
+            <button
+              type="button"
+              onClick={() => navigate('home')}
+              className="inline-flex items-center gap-2 text-sm font-medium text-muted hover:text-ink"
+            >
+              <ArrowLeft className="w-4 h-4" strokeWidth={1.75} /> Home
+            </button>
+
+            <div className="rounded-3xl border border-line bg-cream p-6 shadow-lift">
+              <p className="text-[11px] uppercase tracking-[0.2em] text-muted mb-2">Morning reflection</p>
+              <h2 className="font-serif text-2xl font-medium text-ink mb-3">Check in with your rest.</h2>
+              <p className="text-sm text-muted mb-6 max-w-xl">Review how your sleep felt, notice your mood, and decide whether you want to capture the dream from last night.</p>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="rounded-3xl border border-line bg-parchment p-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <p className="text-xs uppercase tracking-[0.2em] text-muted">Sleep summary</p>
+                    <span className="text-[11px] text-muted uppercase tracking-[0.18em]">{reflectionSleepData?.source ?? 'No sync'}</span>
+                  </div>
+                  {reflectionSleepData ? (
+                    <div className="space-y-3 text-sm text-ink">
+                      <div className="rounded-2xl bg-white/90 p-4 shadow-sm">
+                        <div className="text-xs uppercase tracking-[0.18em] text-muted">Duration</div>
+                        <div className="text-lg font-semibold">{Math.round((reflectionSleepData.sleepDuration || 0) / 60)}h {Math.round((reflectionSleepData.sleepDuration || 0) % 60)}m</div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div className="rounded-2xl bg-white/90 p-3">
+                          <div className="text-xs uppercase tracking-[0.18em] text-muted">Deep/REM</div>
+                          <div className="font-semibold">{reflectionSleepData.estimatedREM || 0}m REM</div>
+                        </div>
+                        <div className="rounded-2xl bg-white/90 p-3">
+                          <div className="text-xs uppercase tracking-[0.18em] text-muted">Quality</div>
+                          <div className="font-semibold">{reflectionSleepData.quality || reflectionSleepData.sleepQuality || 0}%</div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted">No wearable data found yet. You can still reflect and capture what you remember this morning.</p>
+                  )}
+                </div>
+
+                <div className="rounded-3xl border border-line bg-parchment p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-muted mb-3">Quote of the day</p>
+                  <p className="text-lg font-serif leading-relaxed text-ink">“{reflectionQuote.text}”</p>
+                  <p className="text-sm text-muted mt-4">— {reflectionQuote.source}</p>
+                </div>
+              </div>
+
+              <div className="rounded-3xl border border-line bg-parchment p-4 mt-6">
+                <p className="text-xs uppercase tracking-[0.2em] text-muted mb-3">How are you feeling?</p>
+                <div className="grid grid-cols-3 gap-2 mb-4">
+                  {['peaceful', 'anxious', 'excited', 'tired', 'curious', 'reflective'].map((mood) => (
+                    <button
+                      key={mood}
+                      type="button"
+                      onClick={() => setReflectionMood(mood)}
+                      className={`rounded-2xl border px-3 py-3 text-sm font-semibold transition ${
+                        reflectionMood === mood
+                          ? 'border-sage bg-sage text-cream'
+                          : 'border-line bg-white/80 text-ink hover:bg-parchment'
+                      }`}
+                    >
+                      {mood}
+                    </button>
+                  ))}
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between text-xs uppercase tracking-[0.18em] text-muted mb-2">
+                    <span>Energy</span>
+                    <span>{reflectionEnergy}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={reflectionEnergy}
+                    onChange={(e) => setReflectionEnergy(Number(e.target.value))}
+                    className="w-full accent-sage"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => navigate('record')}
+                  className="w-full bg-sage hover:bg-sageDark text-cream rounded-2xl py-3.5 font-semibold transition"
+                >
+                  Capture last night’s dream
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate('home')}
+                  className="w-full border border-line bg-parchment hover:bg-parchment/90 text-ink rounded-2xl py-3.5 font-semibold transition"
+                >
+                  Skip for now
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -1629,7 +1898,93 @@ Respond ONLY with valid JSON, no markdown.`
           </button>
         <div className="rounded-3xl border border-line bg-cream shadow-lift p-5 sm:p-6">
           <h2 className="font-serif text-2xl font-medium text-ink mb-1">Record last night</h2>
-          <p className="text-sm text-muted mb-6">Voice, audio import, or type — keep it gentle and honest.</p>
+          <p className="text-sm text-muted mb-6">Choose text, audio, or video capture — everything is optional and editable.</p>
+
+          <div className="mb-5 grid grid-cols-3 gap-2">
+            {(['text', 'audio', 'video'] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setCaptureMode(mode)}
+                className={`rounded-2xl border px-3 py-2 text-sm font-medium transition ${
+                  captureMode === mode
+                    ? 'border-sage bg-sage text-cream shadow-paper'
+                    : 'border-line bg-parchment text-ink hover:bg-parchment/90'
+                }`}
+              >
+                {mode === 'text' ? 'Text' : mode === 'audio' ? 'Audio' : 'Video'}
+              </button>
+            ))}
+          </div>
+
+          {captureMode === 'video' && (
+            <div className="mb-5 rounded-3xl border border-line bg-parchment/80 p-4">
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <div>
+                  <p className="text-sm font-semibold text-ink">Video capture</p>
+                  <p className="text-xs text-muted">Front camera + live transcription.</p>
+                </div>
+                <span className="text-[11px] uppercase tracking-[0.2em] text-muted">
+                  {isVideoRecording ? 'Recording…' : recordedVideoUrl ? 'Recorded' : 'Ready'}
+                </span>
+              </div>
+
+              {videoStream ? (
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  muted
+                  playsInline
+                  className="w-full aspect-video rounded-3xl bg-black object-cover"
+                />
+              ) : recordedVideoUrl ? (
+                <video
+                  controls
+                  src={recordedVideoUrl}
+                  className="w-full aspect-video rounded-3xl bg-black object-cover"
+                />
+              ) : (
+                <div className="rounded-3xl border border-dashed border-line bg-white/10 h-52 flex items-center justify-center text-sm text-muted">
+                  Front camera preview will appear here.
+                </div>
+              )}
+
+              <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={isVideoRecording ? stopVideoCapture : startVideoCapture}
+                  className={`w-full rounded-2xl py-3 text-sm font-semibold transition ${
+                    isVideoRecording
+                      ? 'bg-rose-600 text-cream hover:bg-rose-700'
+                      : 'bg-sage text-cream hover:bg-sageDark'
+                  }`}
+                >
+                  {isVideoRecording ? 'Stop recording' : 'Start video capture'}
+                </button>
+                {recordedVideoUrl && (
+                  <button
+                    type="button"
+                    onClick={clearVideoCapture}
+                    className="w-full rounded-2xl border border-line bg-parchment text-ink hover:bg-parchment/90 py-3 text-sm font-semibold"
+                  >
+                    Clear recorded clip
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {captureMode === 'audio' && (
+            <div className="mb-5 rounded-3xl border border-line bg-parchment/80 p-4 text-sm text-muted">
+              Record live audio or import an existing clip. Live transcription will appear while you speak.
+            </div>
+          )}
+
+          {captureMode === 'text' && (
+            <div className="mb-5 rounded-3xl border border-line bg-parchment/80 p-4 text-sm text-muted">
+              Type whatever comes to mind. Short phrases, images, or full scenes are all fine.
+            </div>
+          )}
 
           <div className="mb-4 space-y-3">
             <div>
@@ -1702,11 +2057,17 @@ Respond ONLY with valid JSON, no markdown.`
             disabled={isTranscribing || isGeneratingImage}
           />
 
+          {recordedVideoUrl && !currentEntry.trim() && (
+            <div className="mb-4 rounded-2xl border border-line bg-yellow-50/90 px-4 py-3 text-sm text-ink">
+              Video captured successfully. Add a note or save now to keep the entry with the clip.
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3 mb-4">
             {!isRecording ? (
               <button
                 type="button"
-                onClick={startVoiceRecording}
+                onClick={startSpeechRecording}
                 disabled={isTranscribing || isGeneratingImage}
                 className="border border-line bg-cream hover:bg-parchment disabled:opacity-45 py-3 rounded-xl flex items-center justify-center gap-2 transition text-sm font-medium text-ink"
               >
@@ -1716,7 +2077,7 @@ Respond ONLY with valid JSON, no markdown.`
             ) : (
               <button
                 type="button"
-                onClick={stopVoiceRecording}
+                onClick={stopSpeechRecording}
                 className="border border-rose-200 bg-rose-50 py-3 rounded-xl flex items-center justify-center gap-2 animate-pulse text-sm font-medium text-rose-900"
               >
                 <div className="w-2.5 h-2.5 bg-rose-600 rounded-full animate-pulse" />
@@ -1762,7 +2123,7 @@ Respond ONLY with valid JSON, no markdown.`
             <button
               type="button"
               onClick={saveDream}
-              disabled={!currentEntry.trim() || isProcessing || isTranscribing || isGeneratingImage}
+              disabled={!(currentEntry.trim() || recordedVideoUrl) || isProcessing || isTranscribing || isGeneratingImage}
               className="flex-1 bg-sage hover:bg-sageDark disabled:opacity-45 disabled:bg-muted py-3 rounded-xl font-semibold transition text-cream text-sm shadow-paper"
             >
               {isProcessing || isGeneratingImage ? (
