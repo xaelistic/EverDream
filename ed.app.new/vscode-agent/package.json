@@ -1,0 +1,50 @@
+{
+  "name": "everdream-vscode-agent",
+  "displayName": "EverDream Dream Asset Agent",
+  "description": "VS Code agent skeleton for Everdream dream nugget enrichment, asset generation, remix, and mint preparation.",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "main": "./dist/extension.js",
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -w -p ./",
+    "package": "vsce package"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:everdream.enrich",
+    "onCommand:everdream.generateAsset",
+    "onCommand:everdream.remixStyle",
+    "onCommand:everdream.mintPrep"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "everdream.enrich",
+        "title": "EverDream: Enrich Dream Nugget"
+      },
+      {
+        "command": "everdream.generateAsset",
+        "title": "EverDream: Generate Dream Asset"
+      },
+      {
+        "command": "everdream.remixStyle",
+        "title": "EverDream: Remix Dream Asset Style"
+      },
+      {
+        "command": "everdream.mintPrep",
+        "title": "EverDream: Prepare Dream Asset for Mint"
+      }
+    ]
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.0",
+    "@types/vscode": "^1.96.0",
+    "typescript": "^5.6.2",
+    "vscode": "^1.1.37"
+  }
+}
