@@ -1,21 +1,59 @@
 ```
-# Dependencies
+# Build artifacts
+BUILD_GUIDE.md
+*.mk
+*.rc
+*.bp
+*.java
+*.xml
+*.rs
+*.toml
+*.h
+
+# Dependencies and build directories
+node_modules/
+dist/
+build/
+target/
+venv/
+.venv/
+__pycache__/
+.mypy_cache/
+.pytest_cache/
+.gradle/
+
+# Android/AOSP specific
+out/
+bin/
+gen/
+intermediates/
+.externalNativeBuild/
+
+# Rust build artifacts (for Cargo)
+Cargo.lock
 target/
 
-# Compiled and build artifacts
-**/*.rs.bk
-**/Cargo.lock
-
-# Logs and temp files
-*.log
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
 *.tmp
 
-# Environment
+# System files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Coverage reports
+coverage/
+htmlcov/
+.coverage
+
+# Environment files
 .env
 .env.local
 *.env.*
-
-# Editors
-.vscode/
-.idea/
 ```
