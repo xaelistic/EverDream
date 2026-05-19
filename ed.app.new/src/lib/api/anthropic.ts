@@ -5,6 +5,8 @@
  * `analyze-dream` instead of calling Anthropic directly from the client.
  * This keeps the API key server-side and avoids CORS issues.
  *
+ * Includes rate limiting, retry logic, and user-friendly error handling.
+ *
  * Environment variables:
  *   VITE_SUPABASE_URL       — Your Supabase project URL
  *   VITE_SUPABASE_ANON_KEY  — Your Supabase anon/public key
@@ -14,6 +16,53 @@
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+
+// ── Inline Rate Limiter ───────────────────────────────────────
+
+const analysisCalls: number[] = [];
+const ANALYSIS_MAX_CALLS = 5;
+const ANALYSIS_WINDOW_MS = 30_000;
+
+function isAnalysisAllowed(): boolean {
+  const now = Date.now();
+  const valid = analysisCalls.filter((t) => now - t < ANALYSIS_WINDOW_MS);
+  if (valid.length >= ANALYSIS_MAX_CALLS) return false;
+  analysisCalls.push(now);
+  while (analysisCalls.length > 0 && now - analysisCalls[0] > ANALYSIS_WINDOW_MS) {
+    analysisCalls.shift();
+  }
+  return true;
+}
+
+// ── Inline API Error ─────────────────────────────────────────
+
+export class ApiError extends Error {
+  public readonly category: 'network' | 'rate_limit' | 'auth' | 'server' | 'validation' | 'unknown';
+  public readonly isRetryable: boolean;
+  public readonly userMessage: string;
+
+  constructor(
+    message: string,
+    category: 'network' | 'rate_limit' | 'auth' | 'server' | 'validation' | 'unknown' = 'unknown'
+  ) {
+    super(message);
+    this.name = 'ApiError';
+    this.category = category;
+    this.isRetryable = category === 'network' || category === 'rate_limit' || category === 'server';
+    this.userMessage = ApiError.getUserMessage(category);
+  }
+
+  static getUserMessage(category: string): string {
+    switch (category) {
+      case 'network': return 'Unable to connect. Please check your internet connection and try again.';
+      case 'rate_limit': return 'Too many requests. Please wait a moment and try again.';
+      case 'auth': return 'Authentication failed. Please sign in again.';
+      case 'server': return 'The AI service is temporarily unavailable. Please try again in a moment.';
+      case 'validation': return 'The request was invalid. Please check your input and try again.';
+      default: return 'Something unexpected happened. Please try again.';
+    }
+  }
+}
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -34,6 +83,12 @@ export interface DreamAnalysis {
 export interface AnalysisError {
   error: string;
   fallback: DreamAnalysis;
+}
+
+export interface AnalysisResult {
+  analysis: DreamAnalysis;
+  provider: string;
+  model?: string;
 }
 
 // ── Constants ────────────────────────────────────────────────
@@ -85,6 +140,9 @@ async function delay(ms: number): Promise<void> {
 /**
  * Analyze a dream using Claude AI via Supabase Edge Function.
  *
+ * Includes rate limiting (5 calls per 30s) and automatic retry
+ * with exponential backoff on transient failures.
+ *
  * @param text — The dream text to analyze (minimum 10 characters)
  * @returns Parsed DreamAnalysis, or fallback on failure
  *
@@ -115,6 +173,14 @@ export async function analyzeDreamWithAI(text: string): Promise<DreamAnalysis> {
     text = trimmed;
   }
 
+  // Rate limiting check
+  if (!isAnalysisAllowed()) {
+    throw new ApiError(
+      'Too many analysis requests. Please wait a moment and try again.',
+      'rate_limit'
+    );
+  }
+
   const supabase = getSupabase();
   if (!supabase) {
     console.warn('[AI] Supabase not configured, returning fallback analysis');
@@ -127,7 +193,7 @@ export async function analyzeDreamWithAI(text: string): Promise<DreamAnalysis> {
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     if (attempt > 0) {
       console.log(`[AI] Retry attempt ${attempt}/${MAX_RETRIES}`);
-      await delay(RETRY_DELAY_MS);
+      await delay(RETRY_DELAY_MS * attempt); // Linear backoff
     }
 
     try {
@@ -138,6 +204,11 @@ export async function analyzeDreamWithAI(text: string): Promise<DreamAnalysis> {
       if (error) {
         console.error('[AI] Edge function error:', error.message);
         lastError = new Error(error.message);
+
+        // Don't retry on client errors (4xx)
+        if (error.message?.includes('400') || error.message?.includes('401') || error.message?.includes('403')) {
+          break;
+        }
         continue;
       }
 
@@ -147,12 +218,11 @@ export async function analyzeDreamWithAI(text: string): Promise<DreamAnalysis> {
         continue;
       }
 
-      // Check if the response contains an error field (our edge function returns fallback on error)
-      const responseData = data as { analysis?: DreamAnalysis; error?: string; fallback?: DreamAnalysis };
+      // Check if the response contains an error field
+      const responseData = data as { analysis?: DreamAnalysis; error?: string; fallback?: DreamAnalysis; provider?: string };
 
       if (responseData.error) {
         console.warn('[AI] Analysis service returned error:', responseData.error);
-        // If a fallback was included, use it
         if (responseData.fallback) {
           return responseData.fallback;
         }

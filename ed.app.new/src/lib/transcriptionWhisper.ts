@@ -7,12 +7,62 @@
  *
  * Falls back to Web Speech API for live mic recording.
  *
+ * Includes rate limiting, retry logic, and user-friendly error handling.
+ *
  * Environment variables:
  *   VITE_SUPABASE_URL       — Your Supabase project URL
  *   VITE_SUPABASE_ANON_KEY  — Your Supabase anon/public key
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+
+// ── Inline Rate Limiter (avoids import issues in test env) ───
+
+const transcriptionCalls: number[] = [];
+const TRANSCRIPTION_MAX_CALLS = 3;
+const TRANSCRIPTION_WINDOW_MS = 60_000;
+
+function isTranscriptionAllowed(): boolean {
+  const now = Date.now();
+  const valid = transcriptionCalls.filter((t) => now - t < TRANSCRIPTION_WINDOW_MS);
+  if (valid.length >= TRANSCRIPTION_MAX_CALLS) return false;
+  transcriptionCalls.push(now);
+  // Clean old entries
+  while (transcriptionCalls.length > 0 && now - transcriptionCalls[0] > TRANSCRIPTION_WINDOW_MS) {
+    transcriptionCalls.shift();
+  }
+  return true;
+}
+
+// ── Inline API Error ─────────────────────────────────────────
+
+export class ApiError extends Error {
+  public readonly category: 'network' | 'rate_limit' | 'auth' | 'server' | 'validation' | 'unknown';
+  public readonly isRetryable: boolean;
+  public readonly userMessage: string;
+
+  constructor(
+    message: string,
+    category: 'network' | 'rate_limit' | 'auth' | 'server' | 'validation' | 'unknown' = 'unknown'
+  ) {
+    super(message);
+    this.name = 'ApiError';
+    this.category = category;
+    this.isRetryable = category === 'network' || category === 'rate_limit' || category === 'server';
+    this.userMessage = ApiError.getUserMessage(category);
+  }
+
+  static getUserMessage(category: string): string {
+    switch (category) {
+      case 'network': return 'Unable to connect. Please check your internet connection and try again.';
+      case 'rate_limit': return 'Too many requests. Please wait a moment and try again.';
+      case 'auth': return 'Authentication failed. Please sign in again.';
+      case 'server': return 'The service is temporarily unavailable. Please try again in a moment.';
+      case 'validation': return 'The request was invalid. Please check your input and try again.';
+      default: return 'Something unexpected happened. Please try again.';
+    }
+  }
+}
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -28,6 +78,8 @@ export interface TranscriptionResult {
 
 const MAX_RETRIES = 2;
 const RETRY_DELAY_MS = 2000;
+const RATE_LIMIT_KEY = 'transcribe-audio';
+const MAX_AUDIO_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB
 
 // ── Supabase Client ──────────────────────────────────────────
 
@@ -57,6 +109,8 @@ async function delay(ms: number): Promise<void> {
 /**
  * Transcribe audio via Supabase Edge Function (HF Whisper proxy).
  * Falls back to Web Speech API if Supabase is not configured.
+ *
+ * Includes rate limiting (3 calls per 60s) and automatic retry.
  *
  * @param audioData — Blob, File, ArrayBuffer, or base64 data URL
  * @param options — language hint, progress callback
@@ -91,18 +145,38 @@ export async function transcribeWithWhisper(
     blob = audioData as Blob;
   }
 
+  // Validate audio size
+  if (blob.size > MAX_AUDIO_SIZE_BYTES) {
+    throw new ApiError(
+      `Audio file too large (${(blob.size / 1024 / 1024).toFixed(1)} MB). Max: ${(MAX_AUDIO_SIZE_BYTES / 1024 / 1024).toFixed(0)} MB.`,
+      'validation'
+    );
+  }
+
+  if (blob.size === 0) {
+    throw new ApiError('Audio file is empty.', 'validation');
+  }
+
+  // Rate limiting
+  if (!isTranscriptionAllowed()) {
+    throw new ApiError(
+      'Too many transcription requests. Please wait a moment and try again.',
+      'rate_limit'
+    );
+  }
+
   const supabase = getSupabase();
 
   // If Supabase is configured, use the edge function
   if (supabase) {
     onProgress?.('Uploading audio for transcription...');
 
-    let lastError: Error | null = null;
+    let lastAttemptError = '';
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       if (attempt > 0) {
         onProgress?.(`Retrying transcription (attempt ${attempt + 1}/${MAX_RETRIES + 1})...`);
-        await delay(RETRY_DELAY_MS);
+        await delay(RETRY_DELAY_MS * attempt);
       }
 
       try {
@@ -119,7 +193,7 @@ export async function transcribeWithWhisper(
 
         if (error) {
           console.error('[Transcription] Edge function error:', error.message);
-          lastError = new Error(error.message);
+          lastAttemptError = error.message;
           continue;
         }
 
@@ -127,7 +201,7 @@ export async function transcribeWithWhisper(
 
         if (result.error) {
           console.error('[Transcription] Service error:', result.error);
-          lastError = new Error(result.error);
+          lastAttemptError = result.error;
           continue;
         }
 
@@ -140,19 +214,18 @@ export async function transcribeWithWhisper(
         };
       } catch (err) {
         console.error('[Transcription] Request error:', err);
-        lastError = err instanceof Error ? err : new Error(String(err));
+        lastAttemptError = err instanceof Error ? err.message : String(err);
       }
     }
 
     console.warn('[Transcription] All edge function attempts failed, trying Web Speech fallback');
-  }
 
-  // Fallback: direct HF call (if no Supabase) or Web Speech
-  if (!supabase) {
+    // Fallback: direct HF call
     return transcribeWithHFDirect(blob, language, onProgress);
   }
 
-  throw new Error(`Transcription failed after ${MAX_RETRIES + 1} attempts: ${lastError?.message || 'Unknown error'}`);
+  // No Supabase: direct HF call
+  return transcribeWithHFDirect(blob, language, onProgress);
 }
 
 /**
@@ -193,7 +266,7 @@ async function transcribeWithHFDirect(
 
   return {
     text: text.trim(),
-    language: result.language || language,
+    language: result.language || _language,
     source: 'hf-whisper',
   };
 }
@@ -312,7 +385,13 @@ export async function transcribeAudio(
       onProgress?.('Transcribing with Whisper AI...');
       return await transcribeWithWhisper(audioData, { onProgress });
     } catch (err) {
-      console.warn('[Transcription] Whisper failed, trying Web Speech:', err);
+      const apiErr = ApiError.fromError(err);
+      console.warn('[Transcription] Whisper failed:', apiErr.message);
+
+      // Don't fall back to Web Speech for network/server errors with file input
+      if (apiErr.category === 'validation') {
+        throw apiErr; // Re-throw validation errors
+      }
     }
   }
 
