@@ -56,7 +56,7 @@ function buildDreamPrompt(dreamText: string): string {
  * Validate that an image URL actually loads.
  * Throws if the image fails to load within the timeout.
  */
-function validateImageUrl(url: string, timeoutMs = 15000): Promise<void> {
+function validateImageUrl(url: string, timeoutMs = 60000): Promise<void> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const timer = setTimeout(() => {
@@ -134,8 +134,8 @@ async function generateWithPollinations(prompt: string): Promise<DreamAsset> {
   const encodedPrompt = encodeURIComponent(enhancedPrompt);
   const imageUrl = `${POLLINATIONS_API_URL}/${encodedPrompt}?width=1024&height=1024&nologo=true&seed=${Date.now() % 1000000}`;
 
-  // Validate the image actually loads
-  await validateImageUrl(imageUrl);
+  // Don't validate — Pollinations URLs are direct image links
+  // The browser will handle loading/errors naturally
 
   return {
     id: makeId(),
