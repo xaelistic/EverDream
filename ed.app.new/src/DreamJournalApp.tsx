@@ -40,7 +40,7 @@ import AdminDashboard from './components/admin/AdminDashboard';
 import { useSkinFull } from './contexts/SkinContext';
 import { trackScreenView, startSession, endSession, trackEvent } from './lib/analytics';
 import { initPerformanceMonitor, startAPICall, endAPICall } from './lib/performance';
-import { AppLoadingScreen } from './components/ui';
+import { AppLoadingScreen, ErrorBanner, LoadingOverlay } from './components/ui';
 
 const DreamJournalApp = () => {
   const { route, navigate } = useHashRoute();
@@ -95,6 +95,8 @@ const DreamJournalApp = () => {
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
   const [isAppLoading, setIsAppLoading] = useState(true);
   const [loadingMessage, setLoadingMessage] = useState('Loading your dreams...');
+  const [isLoadingDreams, setIsLoadingDreams] = useState(true);
+  const [dreamError, setDreamError] = useState<string | null>(null);
   const [showAssetInfo, setShowAssetInfo] = useState(false);
   const [capturedEmotions, setCapturedEmotions] = useState<EmotionCapture | null>(null);
   const [wearableData, setWearableData] = useState<WearableSleepRecord[]>([]);
@@ -264,7 +266,11 @@ const DreamJournalApp = () => {
     };
     loadData();
     // Signal loading complete after data is fetched
-    setTimeout(() => setIsAppLoading(false), 600);
+    const loadingTimer = setTimeout(() => {
+      setIsAppLoading(false);
+      setIsLoadingDreams(false);
+    }, 600);
+    return () => clearTimeout(loadingTimer);
   }, []);
 
   // Initialize analytics & performance monitoring
@@ -1578,6 +1584,19 @@ Respond ONLY with valid JSON, no markdown.`
 
         {route.screen === 'journal' && (
           <div className="space-y-4">
+            {/* Error Banner */}
+            {dreamError && (
+              <ErrorBanner
+                error={dreamError}
+                onDismiss={() => setDreamError(null)}
+                onRetry={() => {
+                  setDreamError(null);
+                  setIsLoadingDreams(true);
+                  window.location.reload();
+                }}
+              />
+            )}
+
             <div className="flex items-center gap-3 mb-4">
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted" strokeWidth={1.75} />
@@ -1605,7 +1624,11 @@ Respond ONLY with valid JSON, no markdown.`
 
             <h2 className="font-serif text-2xl font-medium text-ink mb-1">Dream journal</h2>
             <p className="text-sm text-muted mb-4">Browse everything you have captured.</p>
-            {filteredDreams.length === 0 ? (
+
+            {/* Loading State */}
+            {isLoadingDreams ? (
+              <LoadingOverlay message="Loading your dreams..." />
+            ) : filteredDreams.length === 0 ? (
               <EmptyState icon={Calendar} message="No dreams match your search" />
             ) : (
               <div className="space-y-3">

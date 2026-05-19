@@ -4,15 +4,17 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   variant?: 'primary' | 'ghost' | 'danger';
   size?: 'sm' | 'md' | 'lg';
   loading?: boolean;
+  fullWidth?: boolean;
+  icon?: React.ReactNode;
   children: React.ReactNode;
 }
 
 /**
  * EverDream Button component with primary, ghost, and danger variants.
- * Supports loading state with built-in spinner.
+ * Supports loading state with built-in spinner, icons, and full-width mode.
  *
  * @example
- * <Button variant="primary" size="md" loading={isSaving}>
+ * <Button variant="primary" size="md" loading={isSaving} icon={<Save size={16} />}>
  *   Save Dream
  * </Button>
  */
@@ -20,6 +22,8 @@ export function Button({
   variant = 'primary',
   size = 'md',
   loading = false,
+  fullWidth = false,
+  icon,
   disabled,
   children,
   className = '',
@@ -39,6 +43,7 @@ export function Button({
     textTransform: 'uppercase',
     transition: 'all 180ms ease-out',
     opacity: disabled ? 0.5 : 1,
+    width: fullWidth ? '100%' : undefined,
   };
 
   const sizeStyles: Record<string, React.CSSProperties> = {
@@ -72,7 +77,7 @@ export function Button({
       className={className}
       {...props}
     >
-      {loading && (
+      {loading ? (
         <span style={{
           width: '14px', height: '14px',
           border: '2px solid rgba(255,255,255,0.3)',
@@ -80,7 +85,11 @@ export function Button({
           borderRadius: '50%',
           animation: 'spin 0.6s linear infinite',
         }} />
-      )}
+      ) : icon ? (
+        <span style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}>
+          {icon}
+        </span>
+      ) : null}
       {children}
     </button>
   );
