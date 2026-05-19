@@ -124,7 +124,7 @@ async function delay(ms: number): Promise<void> {
 
 async function analyzeWithOpenRouter(text: string): Promise<ProviderResult> {
   const apiKey = Deno.env.get('OPENROUTER_API_KEY');
-  if (!apiKey) throw new Error('OPENROUTIC_API_KEY not set');
+  if (!apiKey) throw new Error('OPENROUTER_API_KEY not set');
 
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
