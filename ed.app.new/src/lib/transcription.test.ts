@@ -67,7 +67,7 @@ describe('Transcription Module', () => {
   });
 });
 
-describe('Anthropic API Module', () => {
+describe('Dream Analyzer Module', () => {
   describe('generateImagePrompt', () => {
     it('should generate a dreamlike prompt by default', () => {
       const prompt = generateImagePrompt('Flying over mountains');

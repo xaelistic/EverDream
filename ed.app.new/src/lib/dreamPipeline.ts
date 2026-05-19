@@ -1,21 +1,21 @@
 /**
- * Dream Analysis Pipeline — Free Tier
+ * Dream Analysis Pipeline — Multi-Provider
  *
  * Complete pipeline: Audio → Transcription → AI Analysis → Image → Parallax Video
  *
- * All steps use free APIs:
- * 1. Transcription: HF Whisper (free Inference API)
- * 2. Analysis: Claude via Anthropic API (requires key, but analysis is the core value)
- * 3. Image: Pollinations.ai (completely free, no key)
- * 4. Parallax Video: Canvas-based (free, client-side)
+ * All AI analysis goes through the Supabase Edge Function "analyze-dream"
+ * which handles provider fallback automatically:
+ *   OpenRouter (free) → Pollinations (free) → Gemini (free tier) → OpenAI (cheap) → Claude (last resort)
+ *
+ * Image generation: Pollinations.ai (free, unlimited) → HF SDXL fallback
  *
  * Environment variables:
- *   VITE_ANTHROPIC_API_KEY     — Claude API (for dream analysis)
- *   VITE_HF_INFERENCE_API_KEY  — HuggingFace (for Whisper transcription)
+ *   VITE_SUPABASE_URL       — Supabase project URL
+ *   VITE_SUPABASE_ANON_KEY  — Supabase anon/public key
  */
 
 import { transcribeAudio, type TranscriptionResult } from './transcriptionWhisper';
-import { analyzeDreamWithAI, type DreamAnalysis } from './api/anthropic';
+import { analyzeDream, type DreamAnalysis } from './dream-analyzer';
 import { generateDreamImage, type DreamAsset } from '../modules/sleep/dreamAssetGenerator';
 import { generateParallaxVideo } from './assets/pipeline';
 
@@ -150,7 +150,7 @@ export async function runDreamPipeline(
     report(STEP_NAMES.analyze, 'running', 'Analyzing dream symbols and themes...');
 
     try {
-      analysis = await analyzeDreamWithAI(dreamText);
+      analysis = await analyzeDream(dreamText);
       report(
         STEP_NAMES.analyze,
         'done',
