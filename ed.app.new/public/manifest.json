@@ -1,72 +1,42 @@
 {
-  "name": "Lucid — Dream Journal",
-  "short_name": "Lucid",
-  "description": "Your personal dream journal with AI analysis, dream visualization, and sleep tracking.",
+  "name": "EverDream — Dream Journal",
+  "short_name": "EverDream",
+  "description": "AI-powered dream journal with analysis, visualization, and NFT minting",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0f0f1a",
-  "theme_color": "#1a1a2e",
-  "orientation": "portrait",
+  "background_color": "#fffefb",
+  "theme_color": "#5ec4a8",
+  "orientation": "portrait-primary",
   "icons": [
-    {
-      "src": "/icons/icon-72.png",
-      "sizes": "72x72",
-      "type": "image/png",
-      "purpose": "maskable any"
-    },
-    {
-      "src": "/icons/icon-96.png",
-      "sizes": "96x96",
-      "type": "image/png",
-      "purpose": "maskable any"
-    },
-    {
-      "src": "/icons/icon-128.png",
-      "sizes": "128x128",
-      "type": "image/png",
-      "purpose": "maskable any"
-    },
-    {
-      "src": "/icons/icon-144.png",
-      "sizes": "144x144",
-      "type": "image/png",
-      "purpose": "maskable any"
-    },
-    {
-      "src": "/icons/icon-152.png",
-      "sizes": "152x152",
-      "type": "image/png",
-      "purpose": "maskable any"
-    },
     {
       "src": "/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "maskable any"
-    },
-    {
-      "src": "/icons/icon-384.png",
-      "sizes": "384x384",
-      "type": "image/png",
-      "purpose": "maskable any"
+      "purpose": "any maskable"
     },
     {
       "src": "/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "maskable any"
+      "purpose": "any maskable"
     }
   ],
-  "categories": ["health", "lifestyle", "productivity"],
+  "categories": ["lifestyle", "health"],
+  "screenshots": [],
   "shortcuts": [
     {
       "name": "Record Dream",
       "short_name": "Record",
       "description": "Record a new dream",
-      "url": "/?action=new-dream",
-      "icons": [{ "src": "/icons/record-96.png", "sizes": "96x96" }]
+      "url": "#/record",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Dream Journal",
+      "short_name": "Journal",
+      "description": "View your dream journal",
+      "url": "#/journal",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
     }
-  ],
-  "related_applications": [],
-  "prefer_related_applications": false
+  ]
 }
