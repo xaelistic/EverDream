@@ -46,7 +46,6 @@ import { getOrCreateWallet, createDreamNFT, mintNFT, saveNFT, type DreamNFT, typ
 import DreamVisualizer from './components/dreams/DreamVisualizer';
 import DreamCapture from './components/dreams/DreamCapture';
 import { analyzeDream, type DreamAnalysis } from './lib/dream-analyzer';
-import { generateDreamImage } from './modules/sleep/dreamAssetGenerator';
 
 const DreamJournalApp = () => {
   const { route, navigate } = useHashRoute();
