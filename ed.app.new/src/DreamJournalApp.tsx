@@ -172,6 +172,7 @@ const DreamJournalApp = () => {
     sleepQuality: 3
   });
   const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('Loading your dreams...');
   const [isAppLoading, setIsAppLoading] = useState(true);
   const [isLoadingDreams, setIsLoadingDreams] = useState(true);

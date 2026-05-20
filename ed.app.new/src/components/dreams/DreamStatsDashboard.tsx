@@ -166,9 +166,9 @@ export default function DreamStatsDashboard({ dreams, loading = false }: DreamSt
     );
   }
 
-  const weekChange = lastWeek === 0
-    ? thisWeek > 0 ? 100 : 0
-    : Math.round(((thisWeek - lastWeek) / lastWeek) * 100);
+  const weekChange = stats.lastWeek === 0
+    ? stats.thisWeek > 0 ? 100 : 0
+    : Math.round(((stats.thisWeek - stats.lastWeek) / stats.lastWeek) * 100);
 
   return (
     <div style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto' }}>

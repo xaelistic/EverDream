@@ -6,6 +6,7 @@ export type RouteScreen =
   | 'journal'
   | 'tracker'
   | 'record'
+  | 'capture'
   | 'dream'
   | 'insights'
   | 'wearables'

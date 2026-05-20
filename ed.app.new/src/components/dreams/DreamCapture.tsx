@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
-import { Sparkles, Wand2, Image, Brain, Mic, Type } from 'lucide-react';
-import { Button, Card, Spinner } from '../ui';
+import { Sparkles, Wand2, Image, Brain, Type } from 'lucide-react';
+import { Button, Card } from '../ui';
 import PipelineProgress from './PipelineProgress';
 import { analyzeDream } from '../../lib/dream-analyzer';
 import { generateDreamImage } from '../../modules/sleep/dreamAssetGenerator';
@@ -21,6 +21,14 @@ interface DreamCaptureProps {
   onCancel: () => void;
   /** Whether to auto-start analysis */
   autoStart?: boolean;
+}
+
+type StepStatus = 'pending' | 'running' | 'done' | 'error' | 'skipped';
+
+interface Step {
+  name: string;
+  status: StepStatus;
+  message: string;
 }
 
 /**
@@ -47,15 +55,15 @@ export default function DreamCapture({
 }: DreamCaptureProps) {
   const [text, setText] = useState(initialText);
   const [isRunning, setIsRunning] = useState(false);
-  const [steps, setSteps] = useState([
-    { name: 'Dream Analysis', status: 'pending' as const, message: '' },
-    { name: 'Image Generation', status: 'pending' as const, message: '' },
+  const [steps, setSteps] = useState<Step[]>([
+    { name: 'Dream Analysis', status: 'pending', message: '' },
+    { name: 'Image Generation', status: 'pending', message: '' },
   ]);
   const [analysisResult, setAnalysisResult] = useState<DreamAnalysis | null>(null);
   const [imageResult, setImageResult] = useState<DreamAsset | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const updateStep = useCallback((name: string, update: { status?: string; message?: string }) => {
+  const updateStep = useCallback((name: string, update: { status?: StepStatus; message?: string }) => {
     setSteps(prev => prev.map(s => s.name === name ? { ...s, ...update } : s));
   }, []);
 
@@ -92,19 +100,20 @@ export default function DreamCapture({
 
     // Step 2: Image Generation
     updateStep('Image Generation', { status: 'running', message: 'Creating your dream visualization...' });
+    let generatedImage: DreamAsset | null = null;
     try {
       const imagePrompt = analysis.narrative || analysis.nugget || text;
-      const asset = await generateDreamImage(imagePrompt);
-      setImageResult(asset);
-      updateStep('ImageGeneration', { status: 'done', message: `Image ready (${asset.source})` });
+      generatedImage = await generateDreamImage(imagePrompt);
+      setImageResult(generatedImage);
+      updateStep('Image Generation', { status: 'done', message: `Image ready (${generatedImage.source})` });
     } catch (err) {
       // Image generation is non-critical — continue without it
       updateStep('Image Generation', { status: 'error', message: 'Image generation skipped (non-critical)' });
     }
 
     setIsRunning(false);
-    onComplete({ analysis, image: imageResult }, text.trim());
-  }, [text, onComplete, updateStep, imageResult]);
+    onComplete({ analysis, image: generatedImage }, text.trim());
+  }, [text, onComplete, updateStep]);
 
   // Auto-start if enabled and text is provided
   React.useEffect(() => {
