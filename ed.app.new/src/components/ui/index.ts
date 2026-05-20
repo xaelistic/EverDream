@@ -30,6 +30,9 @@ export type { AppLoadingScreenProps } from './AppLoadingScreen';
 export { ErrorBanner, InlineError } from './ErrorBanner';
 export type { ErrorBannerProps } from './ErrorBanner';
 
+export { EmptyState } from './EmptyState';
+export type { EmptyStateProps } from './EmptyState';
+
 // Inject global keyframes once
 if (typeof document !== 'undefined') {
   const id = 'everdream-ui-keyframes';

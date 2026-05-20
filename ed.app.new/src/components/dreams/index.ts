@@ -26,3 +26,12 @@ export { default as DreamCapture } from './DreamCapture';
 export type { DreamCaptureResult } from './DreamCapture';
 export { default as PipelineProgress } from './PipelineProgress';
 export type { PipelineStep } from './PipelineProgress';
+
+export { DreamCard } from './DreamCard';
+export type { DreamCardProps } from './DreamCard';
+
+export { InsightCard } from './InsightCard';
+export type { InsightCardProps } from './InsightCard';
+
+export { PrivacyToggle } from './PrivacyToggle';
+export type { PrivacyToggleProps } from './PrivacyToggle';
