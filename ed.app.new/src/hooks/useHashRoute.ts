@@ -37,6 +37,7 @@ function parseHash(): AppRoute {
     'journal',
     'tracker',
     'record',
+    'capture',
     'insights',
     'wearables',
     'privacy',

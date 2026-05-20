@@ -43,6 +43,9 @@ import { trackScreenView, startSession, endSession, trackEvent } from './lib/ana
 import { initPerformanceMonitor, startAPICall, endAPICall } from './lib/performance';
 import { AppLoadingScreen, ErrorBanner, LoadingOverlay } from './components/ui';
 import { getOrCreateWallet, createDreamNFT, mintNFT, saveNFT, type DreamNFT, type WalletIdentity } from './lib/nft';
+import DreamVisualizer from './components/dreams/DreamVisualizer';
+import DreamCapture from './components/dreams/DreamCapture';
+import { analyzeDream, type DreamAnalysis } from './lib/dream-analyzer';
 
 const DreamJournalApp = () => {
   const { route, navigate } = useHashRoute();
@@ -2482,20 +2485,21 @@ Respond ONLY with valid JSON, no markdown.`
             </button>
           <div className="rounded-3xl border border-line bg-cream shadow-lift overflow-hidden">
           <div className="space-y-4 p-5 sm:p-6">
-            {/* Generated Image */}
-            {detailDream.generatedImage && (
-              <div className="relative mb-4 rounded-2xl overflow-hidden border border-line">
-                <img 
-                  src={detailDream.generatedImage.url} 
-                  alt="Dream visualization"
-                  className="w-full h-56 object-cover"
-                />
-                <div className="absolute top-2 right-2 bg-ink/70 text-cream px-2 py-1 rounded-md flex items-center gap-1 text-[11px] font-medium uppercase tracking-wide">
-                  <Sparkles className="w-3 h-3" />
-                  AI sketch
-                </div>
-              </div>
-            )}
+            {/* Dream Visualizer — "Visualize Dream" button + image display */}
+            <DreamVisualizer
+              dreamId={detailDream.id}
+              dreamText={detailDream.narrative || detailDream.content}
+              dreamTitle={detailDream.nugget}
+              existingImageUrl={detailDream.generatedImage?.url}
+              onImageGenerated={(asset) => {
+                // Update the dream's generatedImage in-place
+                if (!detailDream.generatedImage) {
+                  detailDream.generatedImage = { url: asset.url, prompt: asset.prompt, style: asset.style, generatedAt: asset.generatedAt, source: asset.source };
+                } else {
+                  detailDream.generatedImage.url = asset.url;
+                }
+              }}
+            />
 
             <div className="flex items-start justify-between">
               <div>
@@ -2514,6 +2518,28 @@ Respond ONLY with valid JSON, no markdown.`
                   })}
                 </div>
               </div>
+              {/* Valence Indicator */}
+              {detailDream.moodValence !== undefined && (
+                <div className="flex flex-col items-center gap-1 rounded-2xl border border-line bg-parchment px-3 py-2">
+                  <span className="text-[10px] uppercase tracking-wide text-muted">Valence</span>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-16 h-2 bg-line rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{
+                          width: `${((detailDream.moodValence + 1) / 2) * 100}%`,
+                          background: detailDream.moodValence >= 0
+                            ? `linear-gradient(90deg, #5ec4a8, #4a9e86)`
+                            : `linear-gradient(90deg, #e88fa0, #c86070)`,
+                        }}
+                      />
+                    </div>
+                    <span className="text-xs font-semibold text-ink">
+                      {detailDream.moodValence >= 0 ? '+' : ''}{detailDream.moodValence.toFixed(1)}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div>
@@ -2750,6 +2776,56 @@ Respond ONLY with valid JSON, no markdown.`
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Dream Capture — full pipeline flow */}
+      {route.screen === 'capture' && (
+        <div className="space-y-5">
+          <button
+            type="button"
+            onClick={() => navigate('record')}
+            className="inline-flex items-center gap-2 text-sm font-medium text-muted hover:text-ink"
+          >
+            <ArrowLeft className="w-4 h-4" strokeWidth={1.75} /> Back to record
+          </button>
+          <DreamCapture
+            onComplete={(result, text) => {
+              // Save the dream with analysis and image
+              const dreamId = Date.now().toString();
+              const newDream = {
+                id: dreamId,
+                date: new Date().toISOString(),
+                content: text,
+                category: result.analysis.category,
+                themes: result.analysis.themes,
+                emotion: result.analysis.emotion,
+                symbols: result.analysis.symbols,
+                narrative: result.analysis.narrative || text,
+                nugget: result.analysis.nugget || text.substring(0, 100),
+                interpretation: result.analysis.interpretation || {
+                  symbols: {},
+                  meaning: 'Analysis unavailable',
+                  commonPattern: '',
+                },
+                generatedImage: result.image ? {
+                  url: result.image.url,
+                  prompt: result.image.prompt,
+                  style: result.image.style,
+                  generatedAt: result.image.generatedAt,
+                  source: result.image.source,
+                } : null,
+                moodValence: result.analysis.valence ?? null,
+                captureMode: 'text' as const,
+                isSample: false,
+              };
+              const updatedDreams = [newDream, ...dreams.filter(d => !d.isSample)];
+              setDreams(updatedDreams);
+              saveDreamsToStorage(updatedDreams);
+              navigate('dream', dreamId);
+            }}
+            onCancel={() => navigate('record')}
+          />
         </div>
       )}
 
