@@ -180,19 +180,17 @@ async function analyzeWithGemini(text: string): Promise<ProviderResult> {
   const apiKey = Deno.env.get('GEMINI_API_KEY');
   if (!apiKey) throw new Error('GEMINI_API_KEY not set');
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{ text: ANALYSIS_PROMPT.replace('{DREAM_TEXT}', text) }],
-        }],
-        generationConfig: { maxOutputTokens: 2000 },
-      }),
-    }
-  );
+  const geminiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=' + apiKey;
+  const response = await fetch(geminiUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{
+        parts: [{ text: ANALYSIS_PROMPT.replace('{DREAM_TEXT}', text) }],
+      }],
+      generationConfig: { maxOutputTokens: 2000 },
+    }),
+  });
 
   if (!response.ok) {
     throw new Error(`Gemini returned ${response.status}`);
