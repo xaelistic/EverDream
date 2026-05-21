@@ -319,3 +319,81 @@ $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER set_dreams_expires_at BEFORE INSERT ON dreams FOR EACH ROW EXECUTE FUNCTION set_expires_at();
 CREATE TRIGGER set_sleep_sessions_expires_at BEFORE INSERT ON sleep_sessions FOR EACH ROW EXECUTE FUNCTION set_expires_at();
+
+-- ============================================================
+-- NFTs
+-- ============================================================
+CREATE TABLE IF NOT EXISTS nfts (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  dream_id UUID REFERENCES dreams(id) ON DELETE SET NULL,
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  owner_address TEXT NOT NULL,
+  creator_address TEXT NOT NULL,
+  name TEXT NOT NULL DEFAULT 'Untitled Dream',
+  description TEXT,
+  image_url TEXT,
+  animation_url TEXT,
+  external_url TEXT,
+  metadata JSONB,
+  attributes JSONB[],
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'minted', 'failed')),
+  tx_hash TEXT,
+  contract_address TEXT,
+  token_id TEXT,
+  parent_nft_ids TEXT[] DEFAULT '{}',
+  royalty_splits JSONB,
+  license TEXT DEFAULT 'copyleft',
+  allow_remix BOOLEAN DEFAULT true,
+  minted_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_nfts_user_id ON nfts(user_id);
+CREATE INDEX IF NOT EXISTS idx_nfts_dream_id ON nfts(dream_id);
+CREATE INDEX IF NOT EXISTS idx_nfts_status ON nfts(status);
+
+-- ============================================================
+-- DREAM ASSETS
+-- ============================================================
+CREATE TABLE IF NOT EXISTS dream_assets (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  dream_id UUID REFERENCES dreams(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  asset_type TEXT NOT NULL,
+  prompt TEXT,
+  url TEXT,
+  source TEXT,
+  style TEXT DEFAULT 'dreamlike',
+  metadata JSONB,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+  error TEXT,
+  attempts INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  completed_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_dream_assets_dream_id ON dream_assets(dream_id);
+CREATE INDEX IF NOT EXISTS idx_dream_assets_user_id ON dream_assets(user_id);
+CREATE INDEX IF NOT EXISTS idx_dream_assets_status ON dream_assets(status);
+
+-- ============================================================
+-- ROW LEVEL SECURITY: NFTs & Dream Assets
+-- ============================================================
+ALTER TABLE nfts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE dream_assets ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view own nfts" ON nfts FOR SELECT USING (user_id = (SELECT id FROM profiles WHERE auth_user_id = auth.uid()));
+CREATE POLICY "Users can insert own nfts" ON nfts FOR INSERT WITH CHECK (user_id = (SELECT id FROM profiles WHERE auth_user_id = auth.uid()));
+CREATE POLICY "Users can update own nfts" ON nfts FOR UPDATE USING (user_id = (SELECT id FROM profiles WHERE auth_user_id = auth.uid()));
+CREATE POLICY "Users can delete own nfts" ON nfts FOR DELETE USING (user_id = (SELECT id FROM profiles WHERE auth_user_id = auth.uid()));
+
+CREATE POLICY "Users can view own dream_assets" ON dream_assets FOR SELECT USING (user_id = (SELECT id FROM profiles WHERE auth_user_id = auth.uid()));
+CREATE POLICY "Users can insert own dream_assets" ON dream_assets FOR INSERT WITH CHECK (user_id = (SELECT id FROM profiles WHERE auth_user_id = auth.uid()));
+CREATE POLICY "Users can update own dream_assets" ON dream_assets FOR UPDATE USING (user_id = (SELECT id FROM profiles WHERE auth_user_id = auth.uid()));
+CREATE POLICY "Users can delete own dream_assets" ON dream_assets FOR DELETE USING (user_id = (SELECT id FROM profiles WHERE auth_user_id = auth.uid()));
+
+-- ============================================================
+-- TRIGGER: Auto-update updated_at for nfts
+-- ============================================================
+CREATE TRIGGER update_nfts_updated_at BEFORE UPDATE ON nfts FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

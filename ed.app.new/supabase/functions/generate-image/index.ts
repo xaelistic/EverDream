@@ -1,18 +1,16 @@
 /**
- * Supabase Edge Function: generate-image
+ * Supabase Edge Function: generate-image v2
  *
  * Proxies Pollinations.ai for free dream image generation.
- * Also supports HuggingFace Stable Diffusion as a fallback.
- * No API key needed for Pollinations; HF key is optional.
- *
- * Environment variables (set via `supabase secrets set`):
- *   HF_INFERENCE_API_KEY — Optional, for HuggingFace fallback
+ * Returns the actual image bytes to avoid CORS issues in the browser.
+ * Falls back to returning the URL if image fetching fails.
  *
  * Request body:
  *   { prompt: string, style?: string, width?: number, height?: number }
  *
- * Response:
- *   { imageUrl: string, source: string, prompt: string }
+ * Response (success):
+ *   Binary image data with appropriate Content-Type header
+ *   OR JSON: { imageUrl: string, source: string, prompt: string }
  *
  * Error responses:
  *   400 — Missing or invalid prompt
@@ -29,19 +27,12 @@ interface GenerateImageRequest {
   style?: string;
   width?: number;
   height?: number;
-}
-
-interface GenerateImageResponse {
-  imageUrl: string;
-  source: string;
-  prompt: string;
+  format?: 'binary' | 'json';
 }
 
 // ── Constants ────────────────────────────────────────────────
 
 const POLLINATIONS_BASE_URL = 'https://image.pollinations.ai/prompt';
-const HF_SD_URL =
-  'https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0';
 
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -62,6 +53,11 @@ const DEFAULT_HEIGHT = 1024;
 
 // ── Helpers ──────────────────────────────────────────────────
 
+function buildEnhancedPrompt(prompt: string, style: string): string {
+  const styleDesc = STYLE_MAP[style] || STYLE_MAP.dreamlike;
+  return `${prompt.trim()}, ${styleDesc}, 4k, high quality`;
+}
+
 function jsonResponse(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
@@ -73,78 +69,44 @@ function errorResponse(message: string, status: number): Response {
   return jsonResponse({ error: message }, status);
 }
 
-function buildEnhancedPrompt(prompt: string, style: string): string {
-  const styleDesc = STYLE_MAP[style] || STYLE_MAP.dreamlike;
-  return `${prompt.trim()}, ${styleDesc}, 4k, high quality`;
-}
-
-// ── Image Providers ──────────────────────────────────────────
+// ── Image Generation ─────────────────────────────────────────
 
 async function generateWithPollinations(
   prompt: string,
   width: number,
   height: number,
-): Promise<GenerateImageResponse> {
+  format: 'binary' | 'json',
+): Promise<Response> {
   const enhancedPrompt = buildEnhancedPrompt(prompt, 'dreamlike');
   const encodedPrompt = encodeURIComponent(enhancedPrompt);
   const seed = Date.now() % 1_000_000;
   const imageUrl = `${POLLINATIONS_BASE_URL}/${encodedPrompt}?width=${width}&height=${height}&nologo=true&seed=${seed}`;
 
-  // Pollinations URLs are direct image links — no HEAD validation needed
-  // The browser will handle loading/errors naturally
-  return {
-    imageUrl,
-    source: 'pollinations',
-    prompt: enhancedPrompt,
-  };
-}
-
-async function generateWithHuggingFace(prompt: string): Promise<GenerateImageResponse> {
-  const enhancedPrompt = buildEnhancedPrompt(prompt, 'dreamlike');
-  const hfApiKey = Deno.env.get('HF_INFERENCE_API_KEY');
-
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (hfApiKey) {
-    headers['Authorization'] = `Bearer ${hfApiKey}`;
+  if (format === 'json') {
+    return jsonResponse({
+      imageUrl,
+      source: 'pollinations',
+      prompt: enhancedPrompt,
+    });
   }
 
-  const response = await fetch(HF_SD_URL, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      inputs: enhancedPrompt,
-      parameters: {
-        negative_prompt: 'blurry, low quality, distorted, ugly',
-        num_inference_steps: 20,
-        guidance_scale: 7.5,
-      },
-    }),
+  // Fetch the actual image bytes to proxy them (avoids CORS)
+  const imageResponse = await fetch(imageUrl);
+  if (!imageResponse.ok) {
+    throw new Error(`Pollinations returned ${imageResponse.status}`);
+  }
+
+  const imageBlob = await imageResponse.blob();
+  const contentType = imageBlob.type || 'image/jpeg';
+
+  return new Response(imageBlob, {
+    status: 200,
+    headers: {
+      'Content-Type': contentType,
+      'Cache-Control': 'public, max-age=86400',
+      ...CORS_HEADERS,
+    },
   });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`HuggingFace returned ${response.status}: ${errorText}`);
-  }
-
-  const blob = await response.blob();
-  const base64 = await blobToBase64(blob);
-  const imageUrl = `data:image/png;base64,${base64}`;
-
-  return {
-    imageUrl,
-    source: 'huggingface',
-    prompt: enhancedPrompt,
-  };
-}
-
-async function blobToBase64(blob: Blob): Promise<string> {
-  const arrayBuffer = await blob.arrayBuffer();
-  const bytes = new Uint8Array(arrayBuffer);
-  let binary = '';
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
 }
 
 // ── Handler ──────────────────────────────────────────────────
@@ -169,7 +131,13 @@ serve(async (req: Request): Promise<Response> => {
       return errorResponse('Invalid JSON body', 400);
     }
 
-    const { prompt, style = 'dreamlike', width = DEFAULT_WIDTH, height = DEFAULT_HEIGHT } = body;
+    const {
+      prompt,
+      style = 'dreamlike',
+      width = DEFAULT_WIDTH,
+      height = DEFAULT_HEIGHT,
+      format = 'json',
+    } = body;
 
     // Validate input
     if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
@@ -180,29 +148,19 @@ serve(async (req: Request): Promise<Response> => {
       return errorResponse('Prompt too long. Maximum 2000 characters.', 400);
     }
 
-    // Try Pollinations first (free, no auth)
+    // Generate image via Pollinations
     try {
-      console.log('[generate-image] Trying Pollinations.ai...');
-      const result = await generateWithPollinations(prompt, width, height);
-      console.log('[generate-image] Pollinations succeeded');
-      return jsonResponse(result);
+      console.log('[generate-image] Generating via Pollinations...');
+      const result = await generateWithPollinations(prompt, width, height, format);
+      console.log('[generate-image] Success');
+      return result;
     } catch (err) {
       console.warn('[generate-image] Pollinations failed:', err);
     }
 
-    // Fallback: HuggingFace
-    try {
-      console.log('[generate-image] Trying HuggingFace...');
-      const result = await generateWithHuggingFace(prompt);
-      console.log('[generate-image] HuggingFace succeeded');
-      return jsonResponse(result);
-    } catch (err) {
-      console.warn('[generate-image] HuggingFace failed:', err);
-    }
-
     // All providers failed
     return errorResponse(
-      'All image generation providers are currently unavailable. Please try again later.',
+      'Image generation is currently unavailable. Please try again later.',
       502,
     );
   } catch (err) {
