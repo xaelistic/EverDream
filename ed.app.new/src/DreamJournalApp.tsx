@@ -97,6 +97,14 @@ const DreamJournalApp = () => {
   // Auth state
   const { user, loading: authLoading } = useAuth();
   const [showAuthModal, setShowAuthModal] = useState(false);
+
+  // Expose auth modal opener to Shell component via window
+  useEffect(() => {
+    (window as any).openAuthModal = () => setShowAuthModal(true);
+    return () => {
+      delete (window as any).openAuthModal;
+    };
+  }, []);
   
   const reflectionSleepData = useMemo(() => {
     if (wearableData.length > 0) {
