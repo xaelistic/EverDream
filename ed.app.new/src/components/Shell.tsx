@@ -6,8 +6,11 @@ import {
   Moon,
   Settings,
   Sparkles,
+  LogIn,
+  User,
 } from 'lucide-react';
 import type { RouteScreen } from '../hooks/useHashRoute';
+import { useAuth } from '../hooks/useAuth';
 
 type ShellProps = {
   active: RouteScreen;
@@ -33,6 +36,8 @@ function isNavActive(active: RouteScreen, screen: RouteScreen): boolean {
 }
 
 export default function Shell({ active, onNavigate, onOpenSettings, children }: ShellProps) {
+  const { user } = useAuth();
+  
   return (
     <div className="min-h-screen bg-paper flex flex-col font-sans text-ink">
       <header className="sticky top-0 z-40 border-b border-line bg-cream/95 backdrop-blur-md">
@@ -50,14 +55,34 @@ export default function Shell({ active, onNavigate, onOpenSettings, children }: 
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onOpenSettings}
-            className="p-2.5 rounded-full border border-line bg-cream hover:bg-parchment transition-colors shrink-0"
-            aria-label="Settings"
-          >
-            <Settings className="w-5 h-5 text-muted" strokeWidth={1.5} />
-          </button>
+          <div className="flex items-center gap-2">
+            {user ? (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-sage/10 border border-sage/20">
+                <User className="w-4 h-4 text-sageDark" strokeWidth={1.75} />
+                <span className="text-xs font-medium text-sageDark truncate max-w-[120px]">
+                  {user.email?.split('@')[0]}
+                </span>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => (window as any).openAuthModal?.()}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-line bg-cream hover:bg-parchment transition-colors shrink-0"
+                aria-label="Sign in"
+              >
+                <LogIn className="w-4 h-4 text-muted" strokeWidth={1.75} />
+                <span className="text-xs font-medium text-muted">Sign In</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onOpenSettings}
+              className="p-2.5 rounded-full border border-line bg-cream hover:bg-parchment transition-colors shrink-0"
+              aria-label="Settings"
+            >
+              <Settings className="w-5 h-5 text-muted" strokeWidth={1.5} />
+            </button>
+          </div>
         </div>
       </header>
 

@@ -20,10 +20,15 @@ import {
   Watch,
   ArrowLeft,
   ChevronRight,
+  LogIn,
+  UserPlus,
 } from 'lucide-react';
 import Shell from './components/Shell';
 import { useHashRoute } from './hooks/useHashRoute';
+import { useAuth } from './hooks/useAuth';
+import AuthModal from './components/AuthModal';
 import { getCategoryBadgeClass, getEmotionEmoji } from './utils/dreamPresentation';
+import { saveDream, getUserDreams, saveSettings, getUserSettings, saveSleepLog, getUserSleepLogs } from './lib/supabase-data';
 
 const DreamJournalApp = () => {
   const { route, navigate } = useHashRoute();
@@ -89,6 +94,18 @@ const DreamJournalApp = () => {
     thirdPartySharing: false
   });
 
+  // Auth state
+  const { user, loading: authLoading } = useAuth();
+  const [showAuthModal, setShowAuthModal] = useState(false);
+
+  // Expose auth modal opener to Shell component via window
+  useEffect(() => {
+    (window as any).openAuthModal = () => setShowAuthModal(true);
+    return () => {
+      delete (window as any).openAuthModal;
+    };
+  }, []);
+  
   const reflectionSleepData = useMemo(() => {
     if (wearableData.length > 0) {
       return wearableData[0];
@@ -165,9 +182,10 @@ const DreamJournalApp = () => {
     isSample: true
   };
 
-  // Load data
+  // Load data from Supabase when user is authenticated
   useEffect(() => {
     const loadData = async () => {
+      // Always load local data first (for offline support and sample data)
       try {
         const stored = await window.storage.get('dreams');
         if (stored?.value) {
@@ -230,6 +248,50 @@ const DreamJournalApp = () => {
     };
     loadData();
   }, []);
+
+  // Load from Supabase when user authenticates
+  useEffect(() => {
+    if (!user) return;
+    
+    const loadFromSupabase = async () => {
+      // Load dreams
+      const supabaseDreams = await getUserDreams();
+      if (supabaseDreams.length > 0) {
+        setDreams(supabaseDreams.map(d => ({ ...d, date: d.created_at })));
+      }
+      
+      // Load settings
+      const supabaseSettings = await getUserSettings();
+      if (supabaseSettings) {
+        setSettings(prev => ({
+          ...prev,
+          alarmTime: supabaseSettings.alarm_time || prev.alarmTime,
+          alarmEnabled: supabaseSettings.alarm_enabled ?? prev.alarmEnabled,
+          musicPreference: supabaseSettings.music_preference || prev.musicPreference,
+          circadianGoal: supabaseSettings.circadian_goal || prev.circadianGoal,
+          notificationsEnabled: supabaseSettings.notifications_enabled ?? prev.notificationsEnabled,
+          wearableSync: supabaseSettings.wearable_sync ?? prev.wearableSync,
+          imageGeneration: supabaseSettings.image_generation ?? prev.imageGeneration,
+        }));
+      }
+      
+      // Load sleep logs
+      const sleepLogs = await getUserSleepLogs();
+      if (sleepLogs.length > 0) {
+        setWearableData(sleepLogs.map(log => ({
+          bedtime: log.bedtime,
+          wakeTime: log.wake_time,
+          sleepDuration: log.sleep_duration,
+          estimatedREM: log.estimated_rem,
+          movementScore: log.movement_score,
+          quality: log.quality,
+          source: log.source,
+        })));
+      }
+    };
+    
+    loadFromSupabase();
+  }, [user]);
 
   // Save dreams
   const saveDreamsToStorage = async (dreamsToSave) => {
@@ -755,7 +817,29 @@ Respond ONLY with valid JSON, no markdown.`
 
     const updatedDreams = [newDream, ...dreams.filter(d => !d.isSample)];
     setDreams(updatedDreams);
+    
+    // Save to localStorage (for offline support)
     await saveDreamsToStorage(updatedDreams);
+    
+    // Save to Supabase if user is authenticated
+    if (user) {
+      await saveDream({
+        content: newDream.content,
+        category: newDream.category,
+        themes: newDream.themes,
+        emotion: newDream.emotion,
+        symbols: newDream.symbols,
+        narrative: newDream.narrative,
+        nugget: newDream.nugget,
+        interpretation: newDream.interpretation,
+        sleep_data: newDream.sleepData,
+        generated_image: newDream.generatedImage,
+        watermark: newDream.watermark,
+        asset_metadata: newDream.assetMetadata,
+        context: newDream.context,
+      });
+    }
+    
     await checkAchievements(updatedDreams);
     
     setCurrentEntry('');
@@ -966,10 +1050,24 @@ Respond ONLY with valid JSON, no markdown.`
   };
 
   const saveSettingsToStorage = async (settingsToSave) => {
+    // Save to localStorage
     try {
       await window.storage.set('settings', JSON.stringify(settingsToSave));
     } catch (error) {
       console.error('Settings storage error:', error);
+    }
+    
+    // Save to Supabase if authenticated
+    if (user) {
+      await saveSettings({
+        alarm_time: settingsToSave.alarmTime,
+        alarm_enabled: settingsToSave.alarmEnabled,
+        music_preference: settingsToSave.musicPreference,
+        circadian_goal: settingsToSave.circadianGoal,
+        notifications_enabled: settingsToSave.notificationsEnabled,
+        wearable_sync: settingsToSave.wearableSync,
+        image_generation: settingsToSave.imageGeneration,
+      });
     }
   };
 
@@ -2866,6 +2964,9 @@ Respond ONLY with valid JSON, no markdown.`
           )}
         </Modal>
       )}
+
+      {/* Auth Modal */}
+      <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
     </Shell>
   );
 };

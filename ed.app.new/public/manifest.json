@@ -1,0 +1,27 @@
+{
+  "name": "EverDream Journal",
+  "short_name": "EverDream",
+  "description": "Document your dreams, analyze patterns, and explore your subconscious mind",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fdf6e3",
+  "theme_color": "#87a87d",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["lifestyle", "health"],
+  "screenshots": [],
+  "prefer_related_applications": false
+}
