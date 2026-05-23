@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dream Journal V2 - Interactive Mockups</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #1a1a2e 100%);
+            min-height: 100vh;
+            color: #fff;
+            overflow-x: hidden;
+        }
+
+        .mockup-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            background: linear-gradient(135deg, #667eea, #764ba2, #f093fb);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 50px;
+            font-size: 1.1rem;
+        }
+
+        .screens-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 40px;
+            margin-bottom: 60px;
+        }
+
+        .screen-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 24px;
+            overflow: hidden;
+            backdrop-filter: blur(20px);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .screen-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 20px 60px rgba(102, 126, 234, 0.3);
+        }
+
+        .screen-header {
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .screen-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .screen-description {
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .screen-preview {
+            height: 600px;
+            position: relative;
+            background: linear-gradient(135deg, #2d1b4e 0%, #1a1a2e 100%);
+            overflow: hidden;
+        }
+
+        /* Screen 1: Camera View */
+        .camera-view {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            background: linear-gradient(135deg, #1a1a2e 0%, #2d1b4e 100%);
+        }
+
+        .camera-feed {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle at center, #3d2d5e 0%, #1a1a2e 100%);
+        }
+
+        .camera-placeholder {
+            text-align: center;
+            opacity: 0.5;
+        }
+
+        .camera-placeholder svg {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 15px;
+            fill: rgba(255, 255, 255, 0.3);
+        }
+
+        .top-controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            z-index: 10;
+        }
+
+        .control-btn {
+            background: rgba(255, 255, 255, 0.15);
+            border: none;
+            padding: 10px 16px;
+            border-radius: 20px;
+            color: #fff;
+            font-size: 0.85rem;
+            backdrop-filter: blur(10px);
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .control-btn:hover {
+            background: rgba(255, 255, 255, 0.25);
+        }
+
+        .prompt-text {
+            position: absolute;
+            bottom: 180px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 1.1rem;
+            color: rgba(255, 255, 255, 0.8);
+            animation: fadeInOut 3s ease forwards;
+        }
+
+        @keyframes fadeInOut {
+            0%, 100% { opacity: 0; }
+            20%, 80% { opacity: 0.8; }
+        }
+
+        .bottom-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 220px;
+            background: linear-gradient(to top, rgba(102, 126, 234, 0.3), transparent);
+            backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .record-button {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea, #f093fb);
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            animation: pulse 2s infinite;
+            transition: transform 0.2s ease;
+        }
+
+        .record-button:hover {
+            transform: scale(1.05);
+        }
+
+        .record-button.recording {
+            animation: pulseRecording 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(240, 147, 251, 0.4); }
+            50% { box-shadow: 0 0 0 20px rgba(240, 147, 251, 0); }
+        }
+
+        @keyframes pulseRecording {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.08); }
+        }
+
+        .record-icon {
+            width: 24px;
+            height: 24px;
+            fill: #fff;
+        }
+
+        .timer {
+            margin-top: 15px;
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #fff;
+            background: rgba(255, 255, 255, 0.15);
+            padding: 8px 20px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+        }
+
+        .bottom-actions {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .action-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            padding: 12px 20px;
+            border-radius: 16px;
+            color: #fff;
+            font-size: 0.9rem;
+            backdrop-filter: blur(10px);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .action-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .action-btn.primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+        }
+
+        /* Screen 2: Processing */
+        .processing-view {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+            background: rgba(0, 0, 0, 0.7);
+        }
+
+        .processing-card {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 24px;
+            padding: 40px;
+            width: 100%;
+            max-width: 320px;
+            backdrop-filter: blur(20px);
+            text-align: center;
+        }
+
+        .processing-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 30px;
+            background: linear-gradient(135deg, #667eea, #f093fb);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .thumbnail-preview {
+            width: 100%;
+            aspect-ratio: 16/9;
+            background: linear-gradient(135deg, #3d2d5e, #1a1a2e);
+            border-radius: 16px;
+            margin-bottom: 25px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            filter: blur(8px);
+        }
+
+        .progress-steps {
+            text-align: left;
+            margin-top: 25px;
+        }
+
+        .progress-step {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+            font-size: 0.95rem;
+        }
+
+        .step-icon {
+            width: 24px;
+            height: 24px;
+            margin-right: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .step-icon.check {
+            color: #10b981;
+        }
+
+        .step-icon.spinner {
+            color: #667eea;
+            animation: spin 1s linear infinite;
+        }
+
+        .step-icon.pending {
+            color: rgba(255, 255, 255, 0.3);
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .processing-message {
+            margin-top: 20px;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.9rem;
+        }
+
+        /* Screen 3: Review */
+        .review-view {
+            width: 100%;
+            height: 100%;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .review-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .back-btn {
+            background: none;
+            border: none;
+            color: #fff;
+            font-size: 1rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .save-draft-btn {
+            background: rgba(255, 255, 255, 0.15);
+            border: none;
+            padding: 8px 16px;
+            border-radius: 12px;
+            color: #fff;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+
+        .video-preview-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .video-thumbnail {
+            width: 100%;
+            aspect-ratio: 16/9;
+            background: linear-gradient(135deg, #3d2d5e, #1a1a2e);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            cursor: pointer;
+        }
+
+        .play-button {
+            width: 60px;
+            height: 60px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(10px);
+            transition: transform 0.2s ease, background 0.2s ease;
+        }
+
+        .play-button:hover {
+            transform: scale(1.1);
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .play-icon {
+            width: 24px;
+            height: 24px;
+            fill: #fff;
+            margin-left: 4px;
+        }
+
+        .transcript-section, .emotion-section {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .section-title {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .transcript-text {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 15px;
+            font-size: 0.95rem;
+            line-height: 1.6;
+            color: rgba(255, 255, 255, 0.9);
+            margin-bottom: 12px;
+        }
+
+        .edit-btn {
+            background: none;
+            border: none;
+            color: #667eea;
+            font-size: 0.9rem;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .emotion-bar {
+            margin-bottom: 12px;
+        }
+
+        .emotion-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+            font-size: 0.9rem;
+        }
+
+        .emotion-track {
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .emotion-fill {
+            height: 100%;
+            border-radius: 4px;
+            background: linear-gradient(90deg, #667eea, #f093fb);
+        }
+
+        .review-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .review-btn {
+            flex: 1;
+            padding: 14px;
+            border-radius: 16px;
+            border: none;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+
+        .review-btn:hover {
+            transform: scale(1.02);
+        }
+
+        .review-btn.secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+        }
+
+        .review-btn.primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: #fff;
+        }
+
+        /* Flow Diagram */
+        .flow-section {
+            margin-top: 60px;
+            padding: 40px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 24px;
+            backdrop-filter: blur(20px);
+        }
+
+        .flow-title {
+            font-size: 1.8rem;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .flow-diagram {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .flow-step {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.2), rgba(118, 75, 162, 0.2));
+            border: 1px solid rgba(102, 126, 234, 0.3);
+            padding: 20px 40px;
+            border-radius: 16px;
+            font-weight: 600;
+            text-align: center;
+            min-width: 280px;
+        }
+
+        .flow-arrow {
+            font-size: 1.5rem;
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        /* Specs Section */
+        .specs-section {
+            margin-top: 60px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+        }
+
+        .spec-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 30px;
+            backdrop-filter: blur(20px);
+        }
+
+        .spec-title {
+            font-size: 1.3rem;
+            margin-bottom: 20px;
+            color: #667eea;
+        }
+
+        .color-swatch {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .swatch {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .spec-list {
+            list-style: none;
+        }
+
+        .spec-list li {
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            font-size: 0.95rem;
+        }
+
+        .spec-list li:last-child {
+            border-bottom: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="mockup-container">
+        <h1>🌙 Dream Journal V2</h1>
+        <p class="subtitle">Interactive Mockups - Video Capture UX Flow</p>
+
+        <div class="screens-grid">
+            <!-- Screen 1: Camera View -->
+            <div class="screen-card">
+                <div class="screen-header">
+                    <h2 class="screen-title">Screen 1: Full-Screen Camera</h2>
+                    <p class="screen-description">Direct camera launch with recording controls</p>
+                </div>
+                <div class="screen-preview">
+                    <div class="camera-view">
+                        <div class="camera-feed">
+                            <div class="camera-placeholder">
+                                <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5.5-2.5l7.51-3.49L17.5 6.5 9.99 9.99 6.5 17.5zm5.5-6.6c.61 0 1.1.49 1.1 1.1s-.49 1.1-1.1 1.1-1.1-.49-1.1-1.1.49-1.1 1.1-1.1z"/></svg>
+                                <p>Camera Feed Preview</p>
+                            </div>
+                        </div>
+                        
+                        <div class="top-controls">
+                            <button class="control-btn">⚡ Flash: Auto</button>
+                            <button class="control-btn">🔄 Switch</button>
+                        </div>
+
+                        <div class="prompt-text">Tell me about your dream...</div>
+
+                        <div class="bottom-overlay">
+                            <div class="record-button" id="recordBtn1">
+                                <svg class="record-icon" viewBox="0 0 24 24">
+                                    <circle cx="12" cy="12" r="8"/>
+                                </svg>
+                            </div>
+                            <div class="timer">00:00</div>
+                        </div>
+
+                        <div class="bottom-actions">
+                            <button class="action-btn">🖼️ Gallery</button>
+                            <button class="action-btn">✕ Cancel</button>
+                            <button class="action-btn primary">✓ Done</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Screen 2: Processing -->
+            <div class="screen-card">
+                <div class="screen-header">
+                    <h2 class="screen-title">Screen 2: AI Processing</h2>
+                    <p class="screen-description">Real-time progress through analysis pipeline</p>
+                </div>
+                <div class="screen-preview">
+                    <div class="processing-view">
+                        <div class="processing-card">
+                            <h3 class="processing-title">✨ Processing...</h3>
+                            
+                            <div class="thumbnail-preview">
+                                <span style="opacity: 0.5;">Video Frame</span>
+                            </div>
+
+                            <div class="progress-steps">
+                                <div class="progress-step">
+                                    <div class="step-icon check">✓</div>
+                                    <span>Speech-to-Text</span>
+                                </div>
+                                <div class="progress-step">
+                                    <div class="step-icon spinner">⟳</div>
+                                    <span>Facial Analysis</span>
+                                </div>
+                                <div class="progress-step">
+                                    <div class="step-icon pending">⏳</div>
+                                    <span>AI Dream Analysis</span>
+                                </div>
+                            </div>
+
+                            <p class="processing-message">Analyzing your expressions...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Screen 3: Review -->
+            <div class="screen-card">
+                <div class="screen-header">
+                    <h2 class="screen-title">Screen 3: Review & Edit</h2>
+                    <p class="screen-description">Preview, edit transcript, view emotions</p>
+                </div>
+                <div class="screen-preview">
+                    <div class="review-view">
+                        <div class="review-header">
+                            <button class="back-btn">← Back</button>
+                            <button class="save-draft-btn">Save Draft</button>
+                        </div>
+
+                        <div class="video-preview-card">
+                            <div class="video-thumbnail">
+                                <div class="play-button">
+                                    <svg class="play-icon" viewBox="0 0 24 24">
+                                        <path d="M8 5v14l11-7z"/>
+                                    </svg>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="transcript-section">
+                            <h4 class="section-title">📝 Transcript</h4>
+                            <div class="transcript-text">
+                                "I was flying over a city made of crystal. The sky was purple and I felt completely free..."
+                            </div>
+                            <button class="edit-btn">✏️ Edit Text</button>
+                        </div>
+
+                        <div class="emotion-section">
+                            <h4 class="section-title">😊 Emotional Analysis</h4>
+                            
+                            <div class="emotion-bar">
+                                <div class="emotion-label">
+                                    <span>Wonder</span>
+                                    <span>80%</span>
+                                </div>
+                                <div class="emotion-track">
+                                    <div class="emotion-fill" style="width: 80%;"></div>
+                                </div>
+                            </div>
+
+                            <div class="emotion-bar">
+                                <div class="emotion-label">
+                                    <span>Calm</span>
+                                    <span>50%</span>
+                                </div>
+                                <div class="emotion-track">
+                                    <div class="emotion-fill" style="width: 50%;"></div>
+                                </div>
+                            </div>
+
+                            <div class="emotion-bar">
+                                <div class="emotion-label">
+                                    <span>Anxiety</span>
+                                    <span>20%</span>
+                                </div>
+                                <div class="emotion-track">
+                                    <div class="emotion-fill" style="width: 20%;"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="review-actions">
+                            <button class="review-btn secondary">🔄 Regenerate</button>
+                            <button class="review-btn primary">💾 Save Dream</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Flow Diagram -->
+        <div class="flow-section">
+            <h2 class="flow-title">🔄 User Flow</h2>
+            <div class="flow-diagram">
+                <div class="flow-step">🏠 Home Screen</div>
+                <div class="flow-arrow">↓</div>
+                <div class="flow-step">➕ Tap FAB Button</div>
+                <div class="flow-arrow">↓</div>
+                <div class="flow-step">📹 Select Video Capture</div>
+                <div class="flow-arrow">↓</div>
+                <div class="flow-step" style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.4), rgba(240, 147, 251, 0.4)); border-color: rgba(240, 147, 251, 0.5);">🎥 FULL SCREEN CAMERA</div>
+                <div class="flow-arrow">↓</div>
+                <div class="flow-step">⏹️ Stop Recording</div>
+                <div class="flow-arrow">↓</div>
+                <div class="flow-step">⚙️ AI Processing (STT + Face + Analysis)</div>
+                <div class="flow-arrow">↓</div>
+                <div class="flow-step">👀 Review & Edit</div>
+                <div class="flow-arrow">↓</div>
+                <div class="flow-step">✅ Save to Journal</div>
+                <div class="flow-arrow">↓</div>
+                <div class="flow-step">📊 Dream Card with Metrics (C/E/N)</div>
+            </div>
+        </div>
+
+        <!-- Design Specs -->
+        <div class="specs-section">
+            <div class="spec-card">
+                <h3 class="spec-title">🎨 Color Palette</h3>
+                <div class="color-swatch">
+                    <div class="swatch" style="background: linear-gradient(135deg, #667eea, #764ba2);"></div>
+                    <span>Primary Gradient</span>
+                </div>
+                <div class="color-swatch">
+                    <div class="swatch" style="background: linear-gradient(135deg, #4facfe, #00f2fe);"></div>
+                    <span>Secondary Gradient</span>
+                </div>
+                <div class="color-swatch">
+                    <div class="swatch" style="background: #f093fb;"></div>
+                    <span>Accent Pink (#f093fb)</span>
+                </div>
+                <div class="color-swatch">
+                    <div class="swatch" style="background: #764ba2;"></div>
+                    <span>Accent Purple (#764ba2)</span>
+                </div>
+                <div class="color-swatch">
+                    <div class="swatch" style="background: #667eea;"></div>
+                    <span>Accent Blue (#667eea)</span>
+                </div>
+            </div>
+
+            <div class="spec-card">
+                <h3 class="spec-title">📐 Typography</h3>
+                <ul class="spec-list">
+                    <li><strong>Headings:</strong> Inter, 24-32px, weight 600-700</li>
+                    <li><strong>Body:</strong> Inter, 16px, weight 400</li>
+                    <li><strong>Labels:</strong> Inter, 14px, weight 500, uppercase</li>
+                    <li><strong>Metrics:</strong> Inter, 12px, weight 700</li>
+                </ul>
+            </div>
+
+            <div class="spec-card">
+                <h3 class="spec-title">✨ Animations</h3>
+                <ul class="spec-list">
+                    <li>Button Press: scale(0.95) 150ms</li>
+                    <li>Card Hover: translateY(-4px) 200ms</li>
+                    <li>Sheen Effect: 2s infinite sweep</li>
+                    <li>Pulse Recording: 1s infinite</li>
+                    <li>Fade In: 300ms ease</li>
+                </ul>
+            </div>
+
+            <div class="spec-card">
+                <h3 class="spec-title">📱 Key Features</h3>
+                <ul class="spec-list">
+                    <li>✓ Full-screen immersive camera</li>
+                    <li>✓ Real-time facial expression analysis</li>
+                    <li>✓ Auto speech-to-text transcription</li>
+                    <li>✓ Step-by-step processing feedback</li>
+                    <li>✓ Editable transcript before save</li>
+                    <li>✓ Emotion visualization bars</li>
+                    <li>✓ C/E/N metrics (Complexity, Emotional Intensity, Novelty)</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Simple interaction for demo purposes
+        document.getElementById('recordBtn1').addEventListener('click', function() {
+            this.classList.toggle('recording');
+            const icon = this.querySelector('.record-icon');
+            if (this.classList.contains('recording')) {
+                icon.innerHTML = '<rect x="6" y="6" width="12" height="12" rx="2"/>';
+            } else {
+                icon.innerHTML = '<circle cx="12" cy="12" r="8"/>';
+            }
+        });
+    </script>
+</body>
+</html>
