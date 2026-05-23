@@ -781,7 +781,7 @@ export async function fetchPolarSleep(auth: WearableAuth, startDate: string, end
     if (data.nightly_recovery || data.sleep_results) {
       const sleepList = data.nightly_recovery || data.sleep_results || [];
 
-      for (const entry of sleep_list || [entry]) {
+      for (const entry of sleepList) {
         const remMinutes = entry.rem_sleep ? Math.round(entry.rem_sleep / 60) : 0;
         const deepMinutes = entry.deep_sleep ? Math.round(entry.deep_sleep / 60) : 0;
         const lightMinutes = entry.light_sleep ? Math.round(entry.light_sleep / 60) : 0;
