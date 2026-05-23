@@ -382,52 +382,25 @@ Respond with ONLY the prompt, no explanation.`
     };
   };
 
-  // Calculate V2 dream metrics: Complexity, Emotional Intensity, Novelty
-  const calculateDreamMetrics = (dreamData) => {
-    // Complexity: based on narrative length, sentence variety, and symbol count
-    const wordCount = dreamData.narrative.split(/\s+/).length;
-    const sentenceCount = dreamData.narrative.split(/[.!?]+/).filter(s => s.trim()).length;
-    const avgSentenceLength = wordCount / Math.max(sentenceCount, 1);
-    const symbolCount = dreamData.symbols?.length || 0;
-    const themeCount = dreamData.themes?.length || 0;
-    
-    // Complexity score (0-1): longer narratives with varied sentences and many symbols/themes
-    const lengthScore = Math.min(wordCount / 300, 1);
-    const varietyScore = Math.min(avgSentenceLength / 25, 1);
-    const richnessScore = Math.min((symbolCount + themeCount) / 10, 1);
-    const complexityScore = (lengthScore * 0.4 + varietyScore * 0.3 + richnessScore * 0.3);
-    
-    // Emotional Intensity: based on emotion strength and emotional language
-    const emotionStrengths = {
-      'joy': 0.8, 'peaceful': 0.5, 'neutral': 0.3, 'anxiety': 0.7,
-      'fear': 0.9, 'sadness': 0.7, 'excitement': 0.85, 'confusion': 0.6,
-      'wonder': 0.75, 'terror': 0.95, 'love': 0.8, 'anger': 0.75
-    };
-    const baseEmotionScore = emotionStrengths[dreamData.emotion?.toLowerCase()] || 0.5;
-    
-    // Check for intensifying words in narrative
-    const intensifiers = ['extremely', 'incredibly', 'overwhelming', 'intense', 'powerful', 'deeply', 'utterly', 'completely'];
-    const hasIntensifier = intensifiers.some(word => dreamData.narrative.toLowerCase().includes(word));
-    const emotionalIntensityScore = Math.min(baseEmotionScore * (hasIntensifier ? 1.3 : 1), 1);
-    
-    // Novelty: how unique/unusual the dream content is
+  // Calculate asset metadata
+  const calculateAssetMetadata = (dreamData) => {
+    // Rarity based on theme uniqueness
     const allThemes = dreams.flatMap(d => d.themes || []);
-    const allSymbols = dreams.flatMap(d => d.symbols || []);
+    const themeFrequency = dreamData.themes.reduce((sum, theme) => {
+      const frequency = allThemes.filter(t => t === theme).length;
+      return sum + (1 / (frequency + 1));
+    }, 0) / dreamData.themes.length;
     
-    const novelThemes = dreamData.themes?.filter(t => !allThemes.includes(t)).length || 0;
-    const novelSymbols = dreamData.symbols?.filter(s => !allSymbols.includes(s)).length || 0;
+    const rarityScore = Math.min(themeFrequency, 1);
     
-    const noveltyScore = Math.min((novelThemes / 3 + novelSymbols / 5) * 0.7 + (1 - Math.min(wordCount / 500, 1)) * 0.3, 1);
+    // Uniqueness based on narrative complexity
+    const uniquenessScore = Math.min(dreamData.narrative.length / 1000, 1);
     
     return {
-      complexity: Number(complexityScore.toFixed(2)),
-      emotionalIntensity: Number(emotionalIntensityScore.toFixed(2)),
-      novelty: Number(noveltyScore.toFixed(2)),
-      // Keep legacy fields for backwards compatibility
-      rarityScore: Number(noveltyScore.toFixed(2)),
-      uniquenessScore: Number(complexityScore.toFixed(2)),
-      culturalContext: 'global',
-      potentialValue: noveltyScore > 0.7 ? 'high' : noveltyScore > 0.4 ? 'medium' : 'developing'
+      rarityScore: Number(rarityScore.toFixed(2)),
+      uniquenessScore: Number(uniquenessScore.toFixed(2)),
+      culturalContext: 'global', // Would be determined by user location
+      potentialValue: rarityScore > 0.7 ? 'high' : rarityScore > 0.4 ? 'medium' : 'developing'
     };
   };
 
@@ -835,7 +808,7 @@ Respond ONLY with valid JSON, no markdown.`
       sleepData,
       generatedImage,
       watermark,
-      assetMetadata: calculateDreamMetrics(analysis),
+      assetMetadata: calculateAssetMetadata(analysis),
       sourceAudio: pendingTranscription?.audioFile || null,
       videoCapture: recordedVideoUrl ? { url: recordedVideoUrl, capturedAt: new Date().toISOString() } : null,
       captureMode,
@@ -2318,65 +2291,29 @@ Respond ONLY with valid JSON, no markdown.`
               <p className="text-sm leading-relaxed text-muted">{detailDream.narrative}</p>
             </div>
 
-            {/* V2 Dream Metrics */}
+            {/* Keepsake metadata */}
             {detailDream.assetMetadata && (
-              <div className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl p-5">
-                <h3 className="font-semibold mb-4 flex items-center gap-2 text-sm text-white">
-                  <Activity className="w-4 h-4 text-purple-400" strokeWidth={1.75} />
-                  Dream Metrics
+              <div className="rounded-2xl border border-line bg-parchment/80 p-4">
+                <h3 className="font-semibold mb-3 flex items-center gap-2 text-sm text-ink">
+                  <Shield className="w-4 h-4 text-sage" strokeWidth={1.75} />
+                  Reflection metadata
                 </h3>
-                <div className="space-y-3">
-                  {/* Complexity */}
+                <div className="grid grid-cols-2 gap-3 text-sm">
                   <div>
-                    <div className="flex justify-between items-center mb-1.5">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Complexity</span>
-                      <span className="text-sm font-bold text-blue-300">{detailDream.assetMetadata.complexity}</span>
-                    </div>
-                    <div className="h-2 bg-slate-700/50 rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-gradient-to-r from-blue-500 to-cyan-400 rounded-full transition-all duration-500"
-                        style={{ width: `${detailDream.assetMetadata.complexity * 100}%` }}
-                      />
-                    </div>
+                    <div className="text-xs uppercase tracking-wide text-muted">Pattern depth</div>
+                    <div className="font-semibold text-ink">{detailDream.assetMetadata.rarityScore}</div>
                   </div>
-                  
-                  {/* Emotional Intensity */}
                   <div>
-                    <div className="flex justify-between items-center mb-1.5">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Emotional Intensity</span>
-                      <span className="text-sm font-bold text-pink-300">{detailDream.assetMetadata.emotionalIntensity}</span>
-                    </div>
-                    <div className="h-2 bg-slate-700/50 rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-gradient-to-r from-pink-500 to-rose-400 rounded-full transition-all duration-500"
-                        style={{ width: `${detailDream.assetMetadata.emotionalIntensity * 100}%` }}
-                      />
-                    </div>
+                    <div className="text-xs uppercase tracking-wide text-muted">Uniqueness</div>
+                    <div className="font-semibold text-ink">{detailDream.assetMetadata.uniquenessScore}</div>
                   </div>
-                  
-                  {/* Novelty */}
                   <div>
-                    <div className="flex justify-between items-center mb-1.5">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Novelty</span>
-                      <span className="text-sm font-bold text-amber-300">{detailDream.assetMetadata.novelty}</span>
-                    </div>
-                    <div className="h-2 bg-slate-700/50 rounded-full overflow-hidden">
-                      <div 
-                        className="h-full bg-gradient-to-r from-amber-500 to-orange-400 rounded-full transition-all duration-500"
-                        style={{ width: `${detailDream.assetMetadata.novelty * 100}%` }}
-                      />
-                    </div>
+                    <div className="text-xs uppercase tracking-wide text-muted">Potential value</div>
+                    <div className="font-semibold capitalize text-ink">{detailDream.assetMetadata.potentialValue}</div>
                   </div>
-                </div>
-                
-                {/* Summary Badge */}
-                <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between">
-                  <span className="text-xs text-slate-400">Overall Score</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs px-2 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-400/30">
-                      {detailDream.assetMetadata.potentialValue}
-                    </span>
-                    <span className="text-xs text-slate-500">✓ Watermarked</span>
+                  <div>
+                    <div className="text-xs uppercase tracking-wide text-muted">Watermark</div>
+                    <div className="font-semibold text-sageDark">Verified</div>
                   </div>
                 </div>
               </div>
@@ -2510,99 +2447,93 @@ Respond ONLY with valid JSON, no markdown.`
 
       </div>
 
-      {/* Asset Info Modal - V2 Design */}
+      {/* Asset Info Modal */}
       {showAssetInfo && selectedDream && (
         <Modal onClose={() => setShowAssetInfo(false)}>
-          <div className="space-y-5">
-            <h2 className="text-2xl font-bold text-gradient">Dream Asset Details</h2>
+          <div className="space-y-4">
+            <h2 className="text-xl font-semibold">Dream Asset Details</h2>
             
             {selectedDream.generatedImage && (
-              <div className="relative group overflow-hidden rounded-3xl">
-                <img 
-                  src={selectedDream.generatedImage.url} 
-                  alt="Dream visualization"
-                  className="w-full h-56 object-cover transition-transform duration-500 group-hover:scale-105"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-              </div>
+              <img 
+                src={selectedDream.generatedImage.url} 
+                alt="Dream visualization"
+                className="w-full h-48 object-cover rounded-xl"
+              />
             )}
 
-            {/* V2 Metrics Display */}
-            {selectedDream.assetMetadata && (
-              <div className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl p-5">
-                <h3 className="font-semibold mb-4 flex items-center gap-2 text-white">
-                  <Activity className="w-4 h-4 text-purple-400" strokeWidth={1.75} />
-                  Dream Metrics
-                </h3>
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="text-center p-3 rounded-2xl bg-blue-500/10 border border-blue-400/20">
-                    <div className="text-xs text-blue-300 uppercase tracking-wide mb-1">Complexity</div>
-                    <div className="text-2xl font-bold text-blue-400">{selectedDream.assetMetadata.complexity}</div>
-                  </div>
-                  <div className="text-center p-3 rounded-2xl bg-pink-500/10 border border-pink-400/20">
-                    <div className="text-xs text-pink-300 uppercase tracking-wide mb-1">Intensity</div>
-                    <div className="text-2xl font-bold text-pink-400">{selectedDream.assetMetadata.emotionalIntensity}</div>
-                  </div>
-                  <div className="text-center p-3 rounded-2xl bg-amber-500/10 border border-amber-400/20">
-                    <div className="text-xs text-amber-300 uppercase tracking-wide mb-1">Novelty</div>
-                    <div className="text-2xl font-bold text-amber-400">{selectedDream.assetMetadata.novelty}</div>
-                  </div>
+            <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg p-4">
+              <h3 className="font-semibold mb-3">Asset Metadata</h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-purple-200">Asset ID:</span>
+                  <span className="font-mono text-xs">{selectedDream.id}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-purple-200">Created:</span>
+                  <span>{new Date(selectedDream.date).toLocaleDateString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-purple-200">Rarity Score:</span>
+                  <span className="font-bold">{selectedDream.assetMetadata?.rarityScore}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-purple-200">Uniqueness:</span>
+                  <span className="font-bold">{selectedDream.assetMetadata?.uniquenessScore}</span>
                 </div>
               </div>
-            )}
+            </div>
 
-            {/* Watermark Info */}
+            {/* NFT Component Breakdown */}
+            <div className="bg-blue-600 bg-opacity-20 rounded-lg p-4">
+              <h3 className="font-semibold mb-3 flex items-center gap-2">
+                <Shield className="w-4 h-4" />
+                NFT Component Breakdown
+              </h3>
+              <div className="space-y-3">
+                {getNFTComponents(selectedDream).map((component, i) => (
+                  <div key={component.id} className="bg-blue-700 bg-opacity-30 rounded p-3">
+                    <div className="flex items-start justify-between mb-1">
+                      <div>
+                        <div className="text-sm font-semibold text-blue-200">{component.component}</div>
+                        <div className="text-xs text-blue-300">{component.type}</div>
+                      </div>
+                      {component.readyForMinting && (
+                        <span className="text-xs bg-green-500 px-2 py-0.5 rounded">Ready</span>
+                      )}
+                    </div>
+                    <div className="text-xs space-y-1 mt-2">
+                      <div className="text-blue-200">{component.description}</div>
+                      <div className="flex justify-between text-blue-300">
+                        <span>Size: {component.size}</span>
+                        <span>License: {component.license}</span>
+                      </div>
+                      <div className="text-green-300 font-semibold">Ownership: {component.ownership}</div>
+                      {component.note && (
+                        <div className="text-yellow-300 text-xs mt-1">ℹ️ {component.note}</div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 text-xs text-blue-200 bg-blue-700 bg-opacity-30 p-2 rounded">
+                💡 Each component can be minted separately or bundled into a single NFT. You control the composition.
+              </div>
+            </div>
+
             {selectedDream.watermark && (
-              <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-4">
-                <h3 className="font-semibold mb-2 flex items-center gap-2 text-cyan-300">
-                  <Shield className="w-4 h-4" strokeWidth={1.75} />
+              <div className="bg-cyan-600 bg-opacity-20 rounded-lg p-4">
+                <h3 className="font-semibold mb-2 flex items-center gap-2">
+                  <Shield className="w-4 h-4" />
                   Cryptographic Watermark
                 </h3>
-                <div className="text-xs space-y-1 text-cyan-200/80 font-mono">
-                  <div>Signature: {selectedDream.watermark.signature.substring(0, 40)}...</div>
+                <div className="text-xs space-y-1 font-mono">
+                  <div>Signature: {selectedDream.watermark.signature}</div>
+                  <div>Timestamp: {new Date(selectedDream.watermark.timestamp).toLocaleString()}</div>
                   <div>Rights: {selectedDream.watermark.rights.license.toUpperCase()}</div>
                   <div>Revocable: {selectedDream.watermark.rights.revocable ? 'Yes' : 'No'}</div>
                 </div>
               </div>
             )}
-
-            {/* Your Rights */}
-            <div className="rounded-2xl border border-green-500/20 bg-green-500/10 p-4">
-              <h3 className="font-semibold mb-3 text-green-300">Your Rights</h3>
-              <div className="text-sm space-y-2 text-green-200">
-                <div className="flex items-center gap-2">
-                  <span className="text-green-400">✓</span> Full ownership retained (100%)
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-green-400">✓</span> Licensed, never sold
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-green-400">✓</span> Revocable at any time
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-green-400">✓</span> Choose your license
-                </div>
-              </div>
-            </div>
-
-            <button
-              onClick={() => {
-                const data = JSON.stringify(selectedDream, null, 2);
-                const blob = new Blob([data], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `dream-asset-${selectedDream.id}.json`;
-                a.click();
-              }}
-              className="w-full btn-primary flex items-center justify-center gap-2"
-            >
-              <Download className="w-4 h-4" />
-              Download Asset Metadata
-            </button>
-          </div>
-        </Modal>
-      )}
 
             <div className="bg-green-600 bg-opacity-20 rounded-lg p-4">
               <h3 className="font-semibold mb-2">Your Rights</h3>
