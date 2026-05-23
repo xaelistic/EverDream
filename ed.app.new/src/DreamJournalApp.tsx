@@ -1309,81 +1309,72 @@ Respond ONLY with valid JSON, no markdown.`
         </div>
       )}
 
-      <div className="space-y-10 pb-6">
+      <div className="space-y-8 pb-6">
         {route.screen === 'home' && (
           <div className="space-y-6">
-            {/* Hero */}
-            <div className="rounded-3xl border border-line bg-cream p-6 shadow-lift relative overflow-hidden">
-              <div className="absolute -right-10 -top-10 h-36 w-36 rounded-full bg-moon/35 blur-2xl pointer-events-none" />
-              <div className="relative flex items-start justify-between gap-4 mb-5">
-                <div>
-                  <p className="text-[11px] uppercase tracking-[0.2em] text-muted mb-2">Today</p>
-                  <h2 className="font-serif text-2xl sm:text-[1.65rem] font-medium text-ink leading-tight">
-                    A quiet moment for <em className="text-duskDeep not-italic">your dreams</em>
+            {/* Hero - Opalescent Card */}
+            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-500/20 via-purple-500/10 to-pink-500/20 backdrop-blur-xl border border-white/15 p-6 shadow-2xl">
+              {/* Animated sheen overlay */}
+              <div className="absolute inset-0 bg-gradient-to-br from-indigo-400/5 via-transparent to-pink-400/5 animate-pulse pointer-events-none" />
+              
+              <div className="relative flex items-start justify-between gap-4 mb-6">
+                <div className="flex-1">
+                  <p className="text-[10px] uppercase tracking-[0.25em] text-slate-400 mb-3 font-semibold">Today</p>
+                  <h2 className="font-serif text-2xl sm:text-[1.75rem] font-medium text-slate-100 leading-tight">
+                    A quiet moment for <em className="text-purple-300 not-italic">your dreams</em>
                   </h2>
-                  <p className="text-sm text-muted mt-2 max-w-[260px] leading-relaxed">
+                  <p className="text-sm text-slate-400 mt-3 max-w-[280px] leading-relaxed">
                     Capture what surfaced overnight — your journal stays private on this device.
                   </p>
                 </div>
-                <div className="text-right shrink-0 rounded-2xl border border-line bg-parchment px-4 py-3 shadow-paper">
-                  <div className="text-2xl font-serif font-semibold text-ink">{insights?.currentStreak || 0}</div>
-                  <div className="text-[10px] uppercase tracking-wide text-muted">day streak</div>
+                <div className="shrink-0 rounded-2xl bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-xl border border-white/20 px-5 py-4 shadow-xl">
+                  <div className="text-3xl font-serif font-bold text-slate-100">{insights?.currentStreak || 0}</div>
+                  <div className="text-[9px] uppercase tracking-[0.15em] text-slate-400 mt-1">day streak</div>
                 </div>
               </div>
-              <div className="space-y-3">
+              
+              <div className="relative space-y-3">
                 <button
                   type="button"
                   onClick={() => navigate('record')}
-                  className="relative w-full bg-sage hover:bg-sageDark text-cream font-semibold py-3.5 rounded-2xl transition flex items-center justify-center gap-2 shadow-paper text-sm"
+                  className="group relative w-full bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:from-indigo-500 hover:via-purple-500 hover:to-pink-500 text-white font-semibold py-4 rounded-2xl transition-all duration-300 flex items-center justify-center gap-2.5 shadow-xl shadow-purple-500/20 hover:shadow-purple-500/30 hover:scale-[1.02] active:scale-[0.98] text-sm overflow-hidden"
                 >
+                  <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/15 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
                   <Moon className="w-5 h-5" strokeWidth={1.75} />
                   I had a dream…
                 </button>
+                
                 <button
                   type="button"
                   onClick={() => navigate('reflection')}
-                  className="relative w-full border border-line bg-parchment hover:bg-parchment/90 text-ink font-semibold py-3.5 rounded-2xl transition flex items-center justify-center gap-2 text-sm"
+                  className="group relative w-full bg-white/10 backdrop-blur-xl hover:bg-white/15 text-slate-100 font-semibold py-4 rounded-2xl transition-all duration-300 flex items-center justify-center gap-2.5 border border-white/20 hover:border-white/30 hover:scale-[1.02] active:scale-[0.98] text-sm"
                 >
-                  <Moon className="w-5 h-5" strokeWidth={1.75} />
+                  <Sparkles className="w-5 h-5" strokeWidth={1.75} />
                   Morning reflection
                 </button>
               </div>
             </div>
 
-            {/* Quick Stats */}
+            {/* Quick Stats - Glass Cards */}
             {insights && (
               <div className="grid grid-cols-3 gap-3">
                 <StatCard icon={Moon} value={insights.totalDreams} label="Entries" />
-                <StatCard icon={Shield} value={`${insights.avgRarity}`} label="Avg depth" />
+                <StatCard icon={Activity} value={`${insights.avgRarity}`} label="Avg depth" />
                 <StatCard icon={Zap} value={`${insights.totalAssetValue}`} label="Glow index" />
               </div>
             )}
 
-            {/* Gentle capabilities */}
-            <div className="rounded-2xl border border-line bg-parchment/70 p-5">
-              <h3 className="font-semibold mb-3 flex items-center gap-2 text-sm text-ink">
-                <Cpu className="w-4 h-4 text-sageDark" strokeWidth={1.75} />
-                Designed for reflection first
-              </h3>
-              <ul className="text-sm text-muted space-y-2 leading-relaxed">
-                <li>Optional AI interpretation & soft imagery — always yours to disable.</li>
-                <li>Wearable-friendly sleep context when you want it.</li>
-                <li>Local storage, exports, and GDPR-minded controls.</li>
-              </ul>
-            </div>
-
             {/* Recent Dreams */}
             <div>
-              <h3 className="font-serif text-lg font-medium text-ink mb-3 flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-dusk" strokeWidth={1.5} />
+              <h3 className="font-serif text-lg font-medium text-slate-100 mb-4 flex items-center gap-2.5">
+                <Sparkles className="w-5 h-5 text-purple-400" strokeWidth={1.5} />
                 Recent in your journal
               </h3>
               {filteredDreams.length === 0 ? (
-                <div className="text-center py-12 text-muted border border-dashed border-line rounded-3xl bg-parchment/40">
-                  <Moon className="w-14 h-14 mx-auto mb-4 opacity-35 text-duskDeep" strokeWidth={1.25} />
-                  <p className="text-ink font-medium">Nothing here yet</p>
-                  <p className="text-sm mt-2 max-w-xs mx-auto leading-relaxed">When you wake with images still vivid, tap Record — even one sentence counts.</p>
-                </div>
+                <EmptyState 
+                  icon={Moon} 
+                  message="Nothing here yet — tap Record when you wake with images still vivid." 
+                />
               ) : (
                 <div className="space-y-3">
                   {filteredDreams.slice(0, 3).map(dream => (
@@ -3049,109 +3040,154 @@ const StatCard = ({ icon: Icon, value, label }) => (
   </div>
 );
 
-const DreamNuggetCard = ({ dream, getCategoryBadgeClass, getEmotionEmoji, onClick }) => (
+const DreamNuggetCard = ({ dream, getCategoryBadgeClass, getEmotionEmoji, onClick }) => {
+  const metricValue = dream.assetMetadata?.complexity || dream.assetMetadata?.rarityScore || 0;
+  
+  return (
   <div 
     onClick={onClick}
     role="button"
     tabIndex={0}
     onKeyDown={(e) => { if (e.key === 'Enter') onClick(); }}
-    className="rounded-2xl border border-line bg-cream p-4 shadow-paper cursor-pointer hover:border-dusk/30 hover:bg-parchment/40 transition"
+    className="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-white/10 via-white/5 to-white/10 backdrop-blur-xl border border-white/15 p-5 shadow-xl cursor-pointer hover:border-purple-400/30 hover:bg-white/15 hover:shadow-2xl hover:shadow-purple-500/10 transition-all duration-500"
   >
-    <div className="flex items-start justify-between mb-2">
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-muted uppercase tracking-wide">
-          {new Date(dream.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-        </span>
-        <span className="text-lg">{getEmotionEmoji(dream.emotion)}</span>
-      </div>
-      <span className={`${getCategoryBadgeClass(dream.category)} px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wide`}>
-        {dream.category}
-      </span>
-    </div>
-    <p className="text-ink italic text-sm leading-relaxed font-serif">
-      "{dream.nugget}"
-    </p>
-    {dream.assetMetadata && (
-      <div className="mt-2 flex items-center gap-2 text-xs text-muted">
-        <Shield className="w-3 h-3 text-sage" strokeWidth={1.75} />
-        <span>Depth {dream.assetMetadata.rarityScore}</span>
-      </div>
-    )}
-    {dream.isSample && (
-      <div className="mt-3 text-xs text-muted bg-parchment border border-line rounded-xl px-3 py-2">
-        Sample entry — tap Record to add your own.
-      </div>
-    )}
-  </div>
-);
-
-const DreamCard = ({ dream, getCategoryBadgeClass, getEmotionEmoji, onShare: _onShare, onClick }) => (
-  <div 
-    role="button"
-    tabIndex={0}
-    onClick={onClick}
-    onKeyDown={(e) => { if (e.key === 'Enter') onClick(); }}
-    className="rounded-2xl overflow-hidden border border-line bg-cream shadow-paper transition hover:border-dusk/25 cursor-pointer text-left"
-  >
-    {dream.generatedImage && (
-      <img 
-        src={dream.generatedImage.url} 
-        alt="Dream visualization"
-        className="w-full h-44 object-cover"
-      />
-    )}
-    <div className="p-4">
+    {/* Opalescent sheen effect */}
+    <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/0 via-purple-500/0 to-pink-500/0 group-hover:from-indigo-500/5 group-hover:via-purple-500/5 group-hover:to-pink-500/5 transition-all duration-700 pointer-events-none" />
+    
+    <div className="relative">
       <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <div className="text-xs text-muted uppercase tracking-wide">
-            {new Date(dream.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-          </div>
-          <span className="text-xl">{getEmotionEmoji(dream.emotion)}</span>
+        <div className="flex items-center gap-2.5">
+          <span className="text-xs text-slate-400 uppercase tracking-wider font-medium">
+            {new Date(dream.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+          </span>
+          <span className="text-2xl filter drop-shadow-lg">{getEmotionEmoji(dream.emotion)}</span>
         </div>
-        <span className={`${getCategoryBadgeClass(dream.category)} px-2.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide`}>
+        <span className={`${getCategoryBadgeClass(dream.category)} px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm`}>
           {dream.category}
         </span>
       </div>
       
-      <div className="mb-3">
-        <p className="text-sm font-serif font-medium text-ink mb-2 italic leading-snug">"{dream.nugget}"</p>
+      <p className="text-slate-100 italic text-sm leading-relaxed font-serif line-clamp-3">
+        "{dream.nugget}"
+      </p>
+      
+      {dream.assetMetadata && (
+        <div className="mt-4 flex items-center gap-3 text-xs">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-500/10 border border-blue-400/20">
+            <Activity className="w-3 h-3 text-blue-400" strokeWidth={2} />
+            <span className="text-blue-300 font-semibold">C: {metricValue}</span>
+          </div>
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-pink-500/10 border border-pink-400/20">
+            <Heart className="w-3 h-3 text-pink-400" strokeWidth={2} />
+            <span className="text-pink-300 font-semibold">E: {dream.assetMetadata.emotionalIntensity || metricValue}</span>
+          </div>
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-400/20">
+            <Sparkles className="w-3 h-3 text-amber-400" strokeWidth={2} />
+            <span className="text-amber-300 font-semibold">N: {dream.assetMetadata.novelty || metricValue}</span>
+          </div>
+        </div>
+      )}
+      
+      {dream.isSample && (
+        <div className="mt-4 text-xs text-slate-500 bg-white/5 border border-white/10 rounded-2xl px-4 py-2.5">
+          Sample entry — tap Record to add your own.
+        </div>
+      )}
+    </div>
+  </div>
+  );
+};
+
+const DreamCard = ({ dream, getCategoryBadgeClass, getEmotionEmoji, onShare: _onShare, onClick }) => {
+  const complexity = dream.assetMetadata?.complexity || dream.assetMetadata?.rarityScore || 0;
+  const emotionalIntensity = dream.assetMetadata?.emotionalIntensity || 0;
+  const novelty = dream.assetMetadata?.novelty || 0;
+  
+  return (
+  <div 
+    role="button"
+    tabIndex={0}
+    onClick={onClick}
+    onKeyDown={(e) => { if (e.key === 'Enter') onClick(); }}
+    className="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-white/10 via-white/5 to-white/10 backdrop-blur-xl border border-white/15 shadow-xl transition-all duration-500 hover:border-purple-400/30 hover:bg-white/15 hover:shadow-2xl hover:shadow-purple-500/10 cursor-pointer text-left"
+  >
+    {/* Opalescent sheen overlay */}
+    <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/0 via-purple-500/0 to-pink-500/0 group-hover:from-indigo-500/5 group-hover:via-purple-500/5 group-hover:to-pink-500/5 transition-all duration-700 pointer-events-none" />
+    
+    {dream.generatedImage && (
+      <div className="relative h-48 overflow-hidden">
+        <img 
+          src={dream.generatedImage.url} 
+          alt="Dream visualization"
+          className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-700"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-transparent to-transparent" />
+      </div>
+    )}
+    
+    <div className="p-5">
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex items-center gap-2.5">
+          <span className="text-xs text-slate-400 uppercase tracking-wider font-medium">
+            {new Date(dream.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+          </span>
+          <span className="text-2xl filter drop-shadow-lg">{getEmotionEmoji(dream.emotion)}</span>
+        </div>
+        <span className={`${getCategoryBadgeClass(dream.category)} px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider backdrop-blur-sm`}>
+          {dream.category}
+        </span>
       </div>
       
-      <div className="flex gap-2 flex-wrap mb-2">
+      <div className="mb-4">
+        <p className="text-slate-100 text-sm font-serif font-medium italic leading-snug line-clamp-2">"{dream.nugget}"</p>
+      </div>
+      
+      <div className="flex gap-2 flex-wrap mb-4">
         {dream.themes?.slice(0, 4).map((theme, i) => (
-          <span key={i} className="text-[11px] text-muted bg-parchment border border-line px-2 py-0.5 rounded-full">
+          <span key={i} className="text-[10px] text-slate-300 bg-white/5 border border-white/10 px-2.5 py-1 rounded-full backdrop-blur-sm">
             {theme}
           </span>
         ))}
       </div>
 
       {dream.assetMetadata && (
-        <div className="flex items-center justify-between text-xs text-muted border-t border-line pt-3 mt-1">
-          <span className="flex items-center gap-1">
-            <Shield className="w-3 h-3 text-sage" strokeWidth={1.75} />
-            Depth {dream.assetMetadata.rarityScore}
-          </span>
-          <span className="font-mono text-[10px]">#{dream.id.substring(0, 8)}</span>
+        <div className="flex items-center justify-between pt-4 mt-2 border-t border-white/10">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/10 border border-blue-400/20">
+              <Activity className="w-3 h-3 text-blue-400" strokeWidth={2} />
+              <span className="text-[10px] text-blue-300 font-semibold">{complexity}</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-pink-500/10 border border-pink-400/20">
+              <Heart className="w-3 h-3 text-pink-400" strokeWidth={2} />
+              <span className="text-[10px] text-pink-300 font-semibold">{emotionalIntensity}</span>
+            </div>
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-400/20">
+              <Sparkles className="w-3 h-3 text-amber-400" strokeWidth={2} />
+              <span className="text-[10px] text-amber-300 font-semibold">{novelty}</span>
+            </div>
+          </div>
+          <span className="text-[9px] text-slate-500 font-mono">#{dream.id.substring(0, 6)}</span>
         </div>
       )}
     </div>
   </div>
-);
+  );
+};
 
 const InsightCard = ({ title, icon: Icon, items }) => (
-  <div className="rounded-2xl border border-line bg-cream p-4 shadow-paper">
-    <h3 className="font-semibold mb-3 flex items-center gap-2 text-sm text-ink">
-      <Icon className="w-5 h-5 text-duskDeep" strokeWidth={1.5} />
+  <div className="rounded-3xl border border-white/15 bg-white/5 backdrop-blur-xl p-5 shadow-xl">
+    <h3 className="font-semibold mb-4 flex items-center gap-2.5 text-sm text-slate-100">
+      <Icon className="w-5 h-5 text-purple-400" strokeWidth={1.75} />
       {title}
     </h3>
-    <div className="space-y-2 text-sm">
+    <div className="space-y-2.5 text-sm">
       {items.map((item, i) => (
-        <div key={i} className="flex justify-between items-center gap-3">
-          <span className="text-muted capitalize">{item.label}</span>
+        <div key={i} className="flex justify-between items-center gap-3 py-1.5 border-b border-white/5 last:border-0">
+          <span className="text-slate-400 capitalize">{item.label}</span>
           {item.badge ? (
-            <span className="bg-parchment border border-line px-2 py-1 rounded-lg text-xs font-semibold text-ink">{item.value}</span>
+            <span className="bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-400/30 px-3 py-1.5 rounded-full text-xs font-bold text-purple-200">{item.value}</span>
           ) : (
-            <span className="font-semibold text-ink">{item.value}</span>
+            <span className="font-bold text-slate-100">{item.value}</span>
           )}
         </div>
       ))}
@@ -3160,19 +3196,19 @@ const InsightCard = ({ title, icon: Icon, items }) => (
 );
 
 const EmptyState = ({ icon: Icon, message }) => (
-  <div className="text-center py-14 text-muted border border-dashed border-line rounded-3xl bg-parchment/35">
-    <Icon className="w-14 h-14 mx-auto mb-4 opacity-35 text-duskDeep" strokeWidth={1.25} />
-    <p className="text-ink font-medium">{message}</p>
+  <div className="text-center py-16 px-6 text-slate-400 border border-dashed border-white/10 rounded-3xl bg-white/5 backdrop-blur-xl">
+    <Icon className="w-16 h-16 mx-auto mb-5 opacity-30 text-purple-400" strokeWidth={1.25} />
+    <p className="text-slate-300 font-medium text-base">{message}</p>
   </div>
 );
 
 const Modal = ({ children, onClose }) => (
-  <div className="fixed inset-0 bg-ink/40 backdrop-blur-[2px] flex items-end sm:items-center justify-center z-[60] p-4">
-    <div className="bg-cream w-full sm:max-w-md rounded-3xl border border-line p-6 max-h-[90vh] overflow-y-auto relative shadow-lift">
+  <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-end sm:items-center justify-center z-[60] p-4 animate-fade-in">
+    <div className="bg-gradient-to-br from-slate-800 via-slate-900 to-slate-800 w-full sm:max-w-md rounded-3xl border border-white/15 p-6 max-h-[90vh] overflow-y-auto relative shadow-2xl animate-slide-up">
       <button 
         type="button"
         onClick={onClose}
-        className="absolute top-4 right-4 text-muted hover:text-ink z-10 p-1 rounded-full hover:bg-parchment transition"
+        className="absolute top-4 right-4 text-slate-400 hover:text-slate-100 z-10 p-2 rounded-full hover:bg-white/10 transition-all"
         aria-label="Close"
       >
         <X className="w-5 h-5" strokeWidth={1.75} />
