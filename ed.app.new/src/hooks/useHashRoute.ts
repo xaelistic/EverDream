@@ -7,6 +7,7 @@ export type RouteScreen =
   | 'record'
   | 'dream'
   | 'insights'
+  | 'dashboard'
   | 'wearables'
   | 'privacy'
   | 'achievements'
@@ -34,6 +35,7 @@ function parseHash(): AppRoute {
     'journal',
     'record',
     'insights',
+    'dashboard',
     'wearables',
     'privacy',
     'achievements',
