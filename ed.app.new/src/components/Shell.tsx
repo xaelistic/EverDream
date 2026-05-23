@@ -8,6 +8,7 @@ import {
   Sparkles,
   LogIn,
   User,
+  Zap,
 } from 'lucide-react';
 import type { RouteScreen } from '../hooks/useHashRoute';
 import { useAuth } from '../hooks/useAuth';
@@ -39,27 +40,30 @@ export default function Shell({ active, onNavigate, onOpenSettings, children }: 
   const { user } = useAuth();
   
   return (
-    <div className="min-h-screen bg-paper flex flex-col font-sans text-ink">
-      <header className="sticky top-0 z-40 border-b border-line bg-cream/95 backdrop-blur-md">
+    <div className="min-h-screen flex flex-col font-sans">
+      {/* Modern Header - Glass Morphism */}
+      <header className="sticky top-0 z-40 border-b border-white/10 bg-slate-900/80 backdrop-blur-xl">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="w-9 h-9 rounded-full bg-parchment border border-line flex items-center justify-center shadow-paper shrink-0">
-              <Moon className="w-4 h-4 text-duskDeep" strokeWidth={1.75} />
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-purple-500/30 shrink-0">
+              <Moon className="w-5 h-5 text-white" strokeWidth={1.5} />
             </div>
             <div className="min-w-0">
-              <p className="font-serif text-lg font-medium tracking-tight text-ink truncate">
-                EverDream Journal
+              <p className="font-semibold text-lg text-white truncate">
+                EverDream
               </p>
-              <p className="text-[11px] text-muted uppercase tracking-[0.14em] truncate">
-                Dreams · Sleep · Calm reflection
+              <p className="text-[10px] text-slate-400 uppercase tracking-widest truncate">
+                Dream Journal
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             {user ? (
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-sage/10 border border-sage/20">
-                <User className="w-4 h-4 text-sageDark" strokeWidth={1.75} />
-                <span className="text-xs font-medium text-sageDark truncate max-w-[120px]">
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 border border-white/20 backdrop-blur-sm">
+                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-cyan-400 to-blue-500 flex items-center justify-center">
+                  <User className="w-3.5 h-3.5 text-white" strokeWidth={2} />
+                </div>
+                <span className="text-xs font-medium text-white truncate max-w-[100px]">
                   {user.email?.split('@')[0]}
                 </span>
               </div>
@@ -67,29 +71,31 @@ export default function Shell({ active, onNavigate, onOpenSettings, children }: 
               <button
                 type="button"
                 onClick={() => (window as any).openAuthModal?.()}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-line bg-cream hover:bg-parchment transition-colors shrink-0"
+                className="flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-sm font-medium hover:from-indigo-700 hover:to-purple-700 transition-all shadow-lg shadow-purple-500/30 shrink-0"
                 aria-label="Sign in"
               >
-                <LogIn className="w-4 h-4 text-muted" strokeWidth={1.75} />
-                <span className="text-xs font-medium text-muted">Sign In</span>
+                <LogIn className="w-4 h-4" strokeWidth={2} />
+                Sign In
               </button>
             )}
             <button
               type="button"
               onClick={onOpenSettings}
-              className="p-2.5 rounded-full border border-line bg-cream hover:bg-parchment transition-colors shrink-0"
+              className="p-2.5 rounded-2xl bg-white/10 border border-white/10 hover:bg-white/20 transition-all shrink-0"
               aria-label="Settings"
             >
-              <Settings className="w-5 h-5 text-muted" strokeWidth={1.5} />
+              <Settings className="w-5 h-5 text-slate-300" strokeWidth={1.5} />
             </button>
           </div>
         </div>
       </header>
 
-      <main className="flex-1 w-full max-w-lg mx-auto px-4 py-5 pb-28">{children}</main>
+      {/* Main Content Area */}
+      <main className="flex-1 w-full max-w-lg mx-auto px-4 py-6 pb-32">{children}</main>
 
-      <nav className="fixed bottom-0 inset-x-0 z-40 border-t border-line bg-cream/98 backdrop-blur-md pb-[env(safe-area-inset-bottom,0px)]">
-        <div className="max-w-lg mx-auto px-2 pt-2 pb-3 flex justify-around items-end">
+      {/* Modern Bottom Navigation */}
+      <nav className="fixed bottom-0 inset-x-0 z-40 border-t border-white/10 bg-slate-900/95 backdrop-blur-xl pb-[env(safe-area-inset-bottom,0px)]">
+        <div className="max-w-lg mx-auto px-2 pt-3 pb-4 flex justify-around items-center">
           {navItems.map(({ screen, label, icon: Icon }) => {
             const on = isNavActive(active, screen);
             const isRecord = screen === 'record';
@@ -98,25 +104,28 @@ export default function Shell({ active, onNavigate, onOpenSettings, children }: 
                 key={screen}
                 type="button"
                 onClick={() => onNavigate(screen)}
-                className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-xl transition-colors min-w-[56px] ${
-                  on ? 'text-sageDark' : 'text-muted hover:text-ink'
+                className={`flex flex-col items-center gap-1 px-2 py-1.5 rounded-2xl transition-all duration-300 min-w-[64px] relative ${
+                  on ? 'text-white' : 'text-slate-500 hover:text-slate-300'
                 }`}
               >
+                {on && (
+                  <span className="absolute inset-0 bg-gradient-to-r from-indigo-600/20 to-purple-600/20 rounded-2xl animate-fade-in" />
+                )}
                 <span
-                  className={`flex items-center justify-center rounded-full transition-all ${
+                  className={`relative flex items-center justify-center rounded-2xl transition-all duration-300 ${
                     isRecord
                       ? on
-                        ? 'w-12 h-12 -mt-4 bg-sage text-cream shadow-lift border border-sageDark/20'
-                        : 'w-11 h-11 -mt-3 bg-parchment border border-line text-ink shadow-paper'
-                      : 'w-9 h-9'
+                        ? 'w-14 h-14 -mt-6 bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 shadow-xl shadow-purple-500/40 scale-110'
+                        : 'w-12 h-12 -mt-4 bg-white/10 border border-white/20'
+                      : 'w-10 h-10'
                   }`}
                 >
                   <Icon
-                    className={isRecord ? 'w-5 h-5' : 'w-[18px] h-[18px]'}
-                    strokeWidth={1.75}
+                    className={isRecord ? 'w-6 h-6' : 'w-5 h-5'}
+                    strokeWidth={on ? 2.5 : 1.75}
                   />
                 </span>
-                <span className="text-[10px] font-medium uppercase tracking-wide">{label}</span>
+                <span className="relative text-[9px] font-semibold uppercase tracking-wider">{label}</span>
               </button>
             );
           })}
