@@ -22,11 +22,13 @@ import {
   ChevronRight,
   LogIn,
   UserPlus,
+  Camera,
 } from 'lucide-react';
 import Shell from './components/Shell';
 import { useHashRoute } from './hooks/useHashRoute';
 import { useAuth } from './hooks/useAuth';
 import AuthModal from './components/AuthModal';
+import VideoCaptureFlow from './components/VideoCaptureFlow';
 import { getCategoryBadgeClass, getEmotionEmoji } from './utils/dreamPresentation';
 import { saveDream, getUserDreams, saveSettings, getUserSettings, saveSleepLog, getUserSleepLogs } from './lib/supabase-data';
 
@@ -53,6 +55,7 @@ const DreamJournalApp = () => {
   const [pendingTranscription, setPendingTranscription] = useState(null);
   const [captureMode, setCaptureMode] = useState<'text' | 'audio' | 'video'>('text');
   const [isVideoRecording, setIsVideoRecording] = useState(false);
+  const [showVideoCaptureFlow, setShowVideoCaptureFlow] = useState(false);
   const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [videoChunks, setVideoChunks] = useState<Blob[]>([]);
@@ -805,21 +808,32 @@ Respond ONLY with valid JSON, no markdown.`
     return insights.length > 0 ? insights : null;
   };
 
-  const saveDream = async () => {
-    const captureText = currentEntry.trim() || (recordedVideoUrl ? 'Video capture saved from the last session.' : '');
+  const saveDream = async (dreamDataFromVideo?: any) => {
+    const captureText = dreamDataFromVideo?.content || currentEntry.trim() || (recordedVideoUrl ? 'Video capture saved from the last session.' : '');
     if (!captureText) return;
 
-    // Step 1: AI Analysis
-    const analysis = await analyzeDream(captureText);
+    // Use video data if provided, otherwise do AI analysis
+    let analysis = dreamDataFromVideo;
+    if (!analysis) {
+      // Step 1: AI Analysis
+      analysis = await analyzeDream(captureText);
+    }
     
     // Step 2: Generate Image (if enabled)
     let generatedImage = null;
-    if (settings.imageGeneration) {
+    if (settings.imageGeneration && !dreamDataFromVideo?.thumbnail) {
       generatedImage = await generateDreamImage(analysis);
+    } else if (dreamDataFromVideo?.thumbnail) {
+      generatedImage = {
+        url: dreamDataFromVideo.thumbnail,
+        prompt: 'AI-generated from video capture',
+        style: 'dreamlike',
+        generatedAt: new Date().toISOString()
+      };
     }
     
     const dreamId = Date.now().toString();
-    const userId = 'user_' + Math.random().toString(36).substr(2, 9);
+    const userId = user?.id || 'user_' + Math.random().toString(36).substr(2, 9);
     
     // Step 3: Create watermark
     const watermark = createWatermark(userId, dreamId);
@@ -830,16 +844,25 @@ Respond ONLY with valid JSON, no markdown.`
     const newDream = {
       id: dreamId,
       date: new Date().toISOString(),
-      content: currentEntry,
+      content: dreamDataFromVideo?.content || currentEntry,
       ...analysis,
+      ...(dreamDataFromVideo?.metrics && {
+        assetMetadata: {
+          rarityScore: dreamDataFromVideo.metrics.complexity / 10,
+          uniquenessScore: dreamDataFromVideo.metrics.novelty / 10,
+          culturalContext: 'video_capture',
+          potentialValue: 'high'
+        }
+      }),
       sleepData,
       generatedImage,
       watermark,
-      assetMetadata: calculateDreamMetrics(analysis),
-      sourceAudio: pendingTranscription?.audioFile || null,
-      videoCapture: recordedVideoUrl ? { url: recordedVideoUrl, capturedAt: new Date().toISOString() } : null,
-      captureMode,
-      context: contextData
+      assetMetadata: dreamDataFromVideo?.metrics ? calculateDreamMetrics(analysis) : calculateDreamMetrics(analysis),
+      sourceAudio: pendingTranscription?.audioFile || dreamDataFromVideo?.rawAudio || null,
+      videoCapture: recordedVideoUrl || dreamDataFromVideo?.thumbnail ? { url: dreamDataFromVideo?.thumbnail || recordedVideoUrl, capturedAt: new Date().toISOString() } : null,
+      captureMode: dreamDataFromVideo?.type || captureMode,
+      context: contextData,
+      tags: dreamDataFromVideo?.tags || []
     };
 
     const updatedDreams = [newDream, ...dreams.filter(d => !d.isSample)];
@@ -881,7 +904,7 @@ Respond ONLY with valid JSON, no markdown.`
     setShowAchievement({
       id: 'asset_created',
       title: 'Journal entry saved',
-      description: `Pattern depth ${newDream.assetMetadata.rarityScore}`,
+      description: `Complexity: ${newDream.assetMetadata?.rarityScore ? (newDream.assetMetadata.rarityScore * 10).toFixed(1) : 'N/A'}`,
       icon: '💎'
     });
     setTimeout(() => setShowAchievement(null), 3000);
@@ -2021,9 +2044,9 @@ Respond ONLY with valid JSON, no markdown.`
               <button
                 key={mode}
                 type="button"
-                onClick={() => setCaptureMode(mode)}
+                onClick={() => mode === 'video' ? setShowVideoCaptureFlow(true) : setCaptureMode(mode)}
                 className={`rounded-2xl border px-3 py-2 text-sm font-medium transition ${
-                  captureMode === mode
+                  captureMode === mode && mode !== 'video'
                     ? 'border-sage bg-sage text-cream shadow-paper'
                     : 'border-line bg-parchment text-ink hover:bg-parchment/90'
                 }`}
@@ -3027,6 +3050,17 @@ Respond ONLY with valid JSON, no markdown.`
 
       {/* Auth Modal */}
       <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
+      
+      {/* Video Capture Flow - Full Screen Overlay */}
+      {showVideoCaptureFlow && (
+        <VideoCaptureFlow 
+          onClose={() => setShowVideoCaptureFlow(false)}
+          onSave={(dreamData) => {
+            handleSaveDream({ ...dreamData });
+            setShowVideoCaptureFlow(false);
+          }}
+        />
+      )}
     </Shell>
   );
 };
