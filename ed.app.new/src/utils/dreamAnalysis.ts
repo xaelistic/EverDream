@@ -3,6 +3,7 @@
  * 
  * This module provides:
  * - C/E/N (Clarity/Emotion/Nightmare) metric calculation from dream content
+ * - Advanced XP scoring with Complexity, Intensity, Uniqueness factors
  * - Facial expression analysis integration for emotion detection
  * - AI-powered dream quality scoring
  * - Pattern recognition for recurring themes
@@ -20,6 +21,50 @@ export interface DreamMetrics {
   emotion: number;
   /** Nightmare score: 0-100 (likelihood of being a nightmare) */
   nightmare: number;
+}
+
+/**
+ * Advanced XP Scoring System - Hybrid Model
+ * Combines simple C/E/N display with detailed backend scoring
+ * 
+ * C = Complexity (narrative richness, token diversity)
+ * E = Emotional Intensity (valence × arousal × facial alignment)
+ * N = Novelty/Uniqueness (rare themes, unique tokens, named entities)
+ * 
+ * Additional factors:
+ * - Sleep Richness (REM/deep sleep ratio)
+ * - User Resonance (self-reported significance)
+ * - Social Factor (sharing potential)
+ */
+export interface XPScoreBreakdown {
+  /** C_Raw: Sleep richness factor (0.2-1.2) based on REM/deep sleep */
+  c_raw: number;
+  /** R_User: User resonance score (0-1) */
+  r_user: number;
+  /** I_Semantic: Semantic intensity from token analysis */
+  i_semantic: number;
+  /** S_Valence: Valence multiplier (0.6-1.5) */
+  s_valence: number;
+  /** D_Density: Dream density factor (default 1) */
+  d_density: number;
+  /** M_Sustain: Memory sustain factor (default 1) */
+  m_sustain: number;
+  /** T_Social: Social sharing score (0.5-2) */
+  t_social: number;
+  /** Raw token count */
+  token_count: number;
+  /** Unique token count */
+  unique_token_count: number;
+  /** Named entity count */
+  named_entity_count: number;
+  /** Final XP score (0-500+) */
+  xp_score: number;
+  /** CEN breakdown for UI display */
+  cen_metrics: {
+    complexity: number;
+    intensity: number;
+    novelty: number;
+  };
 }
 
 export interface DetailedMetrics extends DreamMetrics {
@@ -43,6 +88,181 @@ export interface DetailedMetrics extends DreamMetrics {
   };
   /** Confidence score for the metrics (0-1) */
   confidence: number;
+  /** Advanced XP scoring breakdown */
+  xpBreakdown?: XPScoreBreakdown;
+}
+
+/**
+ * Sleep session data for richness calculation
+ */
+export interface SleepSessionData {
+  total_sleep_minutes: number;
+  rem_minutes: number;
+  deep_minutes: number;
+  light_minutes: number;
+  awake_minutes: number;
+}
+
+/**
+ * Common dream themes for semantic analysis
+ */
+const THEME_DICTIONARY = [
+  'water', 'flying', 'chased', 'fire', 'forest', 'ocean', 'home', 'door',
+  'mirror', 'train', 'station', 'mother', 'father', 'child', 'animal',
+  'moon', 'shadow', 'city', 'garden', 'school', 'bridge', 'river',
+  'light', 'stairs', 'storm', 'falling', 'teeth', 'naked', 'late',
+  'exam', 'baby', 'snake', 'spider', 'death', 'wedding', 'funeral',
+];
+
+/**
+ * Calculate sleep richness from sleep session data
+ * Based on REM and deep sleep ratios
+ */
+export function calculateSleepRichness(session: SleepSessionData | null): number {
+  if (!session || session.total_sleep_minutes === 0) {
+    return 0.55; // Default neutral value
+  }
+
+  const totalSleep = Math.max(session.total_sleep_minutes, 1);
+  const remRatio = session.rem_minutes / totalSleep;
+  const deepRatio = session.deep_minutes / totalSleep;
+  
+  // REM sleep strongly correlates with dream vividness
+  // Deep sleep contributes to memory consolidation
+  return clamp(remRatio * 0.8 + deepRatio * 0.5 + 0.25, 0.2, 1.2);
+}
+
+/**
+ * Tokenize narrative text for analysis
+ */
+export function tokenizeNarrative(narrative: string): string[] {
+  return narrative
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .split(/\s+/)
+    .map(token => token.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Infer named entity count from capitalization patterns
+ */
+export function inferNamedEntityCount(narrative: string): number {
+  const matches = narrative.match(/\b[A-Z][a-z]{2,}\b/g) ?? [];
+  return new Set(matches).size;
+}
+
+/**
+ * Suggest themes from narrative text
+ */
+export function suggestThemesFromNarrative(narrative: string): string[] {
+  const lower = narrative.toLowerCase();
+  const matchedThemes = THEME_DICTIONARY.filter(theme => lower.includes(theme));
+
+  if (matchedThemes.length >= 3) {
+    return matchedThemes.slice(0, 3);
+  }
+
+  const tokens = tokenizeNarrative(narrative)
+    .map(token => token.toLowerCase())
+    .filter(token => token.length >= 5);
+    
+  const tokenCounts = tokens.reduce<Record<string, number>>((acc, token) => {
+    acc[token] = (acc[token] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  const frequentTokens = Object.entries(tokenCounts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([token]) => token)
+    .filter(token => !matchedThemes.includes(token));
+
+  return [...matchedThemes, ...frequentTokens].slice(0, 3);
+}
+
+/**
+ * Calculate semantic intensity from dream content
+ */
+export function calculateSemanticIntensity(
+  dreamText: string,
+  themeCount: number
+): { tokenCount: number; uniqueTokenCount: number; namedEntityCount: number; intensity: number } {
+  const tokens = tokenizeNarrative(dreamText);
+  const uniqueTokenCount = new Set(tokens.map(t => t.toLowerCase())).size;
+  const namedEntityCount = inferNamedEntityCount(dreamText);
+  
+  const base = tokens.length / 140 + uniqueTokenCount / 240 + namedEntityCount * 0.08 + themeCount * 0.05;
+  
+  return {
+    tokenCount: tokens.length,
+    uniqueTokenCount,
+    namedEntityCount,
+    intensity: clamp(0.2 + base, 0.15, 1.35),
+  };
+}
+
+/**
+ * Calculate valence multiplier from emotional state
+ */
+export function calculateValenceMultiplier(valence: number, arousal: number): number {
+  const valenceWeight = Math.abs(valence) / 10;
+  const arousalWeight = arousal / 20;
+  return clamp(0.8 + valenceWeight + arousalWeight, 0.6, 1.5);
+}
+
+/**
+ * Calculate advanced XP score with full breakdown
+ * This is the hybrid scoring system combining old reference formula with C/E/N display
+ */
+export interface XPScoringInputs {
+  dreamText: string;
+  sleepSession?: SleepSessionData | null;
+  resonanceScore: number; // User-rated significance (0-1)
+  valence: number; // -10 to 10
+  arousal: number; // 0-20
+  themeCount: number;
+  tSocialScore?: number; // Social factor (default 1)
+}
+
+export function calculateXPScore(inputs: XPScoringInputs): XPScoreBreakdown {
+  const c_raw = calculateSleepRichness(inputs.sleepSession ?? null);
+  const r_user = clamp(inputs.resonanceScore, 0, 1);
+  const semantic = calculateSemanticIntensity(inputs.dreamText, inputs.themeCount);
+  const s_valence = calculateValenceMultiplier(inputs.valence, inputs.arousal);
+  const d_density = 1;
+  const m_sustain = 1;
+  const t_social = clamp(inputs.tSocialScore ?? 1, 0.5, 2);
+  
+  // XP formula: multiplicative model with all factors
+  const xp_score = Number(((c_raw * r_user * semantic.intensity) * s_valence * d_density * m_sustain * t_social * 100).toFixed(2));
+  
+  // Derive C/E/N (Complexity/Intensity/Novelty) for UI display
+  const cen_metrics = {
+    complexity: Math.round(clamp((semantic.tokenCount / 200 + semantic.uniqueTokenCount / 100) * 50, 0, 100)),
+    intensity: Math.round(clamp(s_valence * 60 + (inputs.arousal / 20) * 40, 0, 100)),
+    novelty: Math.round(clamp((semantic.namedEntityCount / 10 + semantic.uniqueTokenCount / 50) * 50, 0, 100)),
+  };
+
+  return {
+    c_raw: Number(c_raw.toFixed(3)),
+    r_user: Number(r_user.toFixed(3)),
+    i_semantic: Number(semantic.intensity.toFixed(3)),
+    s_valence: Number(s_valence.toFixed(3)),
+    d_density,
+    m_sustain,
+    t_social: Number(t_social.toFixed(3)),
+    token_count: semantic.tokenCount,
+    unique_token_count: semantic.uniqueTokenCount,
+    named_entity_count: semantic.namedEntityCount,
+    xp_score,
+    cen_metrics,
+  };
+}
+
+/**
+ * Utility function to clamp values
+ */
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
 
 /**
@@ -270,6 +490,16 @@ export function calculateDreamMetrics(
   
   confidence = Math.min(1, confidence);
   
+  // Calculate XP breakdown if we have enough data
+  const themeCount = analysis?.themes?.length ?? suggestThemesFromNarrative(dreamText).length;
+  const xpBreakdown = calculateXPScore({
+    dreamText,
+    resonanceScore: confidence, // Use confidence as proxy for user resonance
+    valence: analysis?.valence !== undefined ? analysis.valence * 10 : 0,
+    arousal: analysis?.arousal !== undefined ? analysis.arousal * 2 : 10,
+    themeCount,
+  });
+  
   return {
     clarity: Math.round(clarity * 10) / 10,
     emotion: Math.round(emotion * 10) / 10,
@@ -290,6 +520,7 @@ export function calculateDreamMetrics(
       negativeEmotions: Math.round(negativeEmotionScore),
     },
     confidence: Math.round(confidence * 100) / 100,
+    xpBreakdown,
   };
 }
 
@@ -379,10 +610,64 @@ export function generateMetricInsight(metrics: DreamMetrics): string {
   return insights.join('. ') + '.';
 }
 
+/**
+ * Get XP insight from advanced scoring
+ */
+export function generateXPInsight(xpBreakdown: XPScoreBreakdown): string {
+  const insights: string[] = [];
+  
+  if (xpBreakdown.cen_metrics.complexity >= 70) {
+    insights.push('Highly complex narrative with rich detail');
+  } else if (xpBreakdown.cen_metrics.complexity <= 30) {
+    insights.push('Simple, straightforward dream narrative');
+  }
+  
+  if (xpBreakdown.cen_metrics.intensity >= 70) {
+    insights.push('Intense emotional experience');
+  }
+  
+  if (xpBreakdown.cen_metrics.novelty >= 70) {
+    insights.push('Unique and original dream content');
+  }
+  
+  if (xpBreakdown.xp_score >= 300) {
+    insights.push(`Exceptional dream worth ${xpBreakdown.xp_score} XP!`);
+  }
+  
+  if (insights.length === 0) {
+    insights.push('Standard dream experience');
+  }
+  
+  return insights.join('. ') + '.';
+}
+
+/**
+ * Merge JSON objects safely
+ */
+export function mergeJsonObject(base: unknown, patch: Record<string, unknown>): Record<string, unknown> {
+  if (!base || typeof base !== 'object' || Array.isArray(base)) {
+    return patch;
+  }
+  
+  return {
+    ...base,
+    ...patch,
+  };
+}
+
 export default {
   calculateDreamMetrics,
   quickEstimateMetrics,
   getDreamQualityScore,
   classifyDreamType,
   generateMetricInsight,
+  generateXPInsight,
+  calculateXPScore,
+  calculateSleepRichness,
+  tokenizeNarrative,
+  inferNamedEntityCount,
+  suggestThemesFromNarrative,
+  calculateSemanticIntensity,
+  calculateValenceMultiplier,
+  mergeJsonObject,
 };
