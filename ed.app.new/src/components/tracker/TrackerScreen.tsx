@@ -5,6 +5,8 @@ import type { DreamLike, TrackerSettings, WearableSleepLike } from '../../module
 import { MonthlySleepReport } from './MonthlySleepReport';
 import { SleepDayDetail } from './SleepDayDetail';
 import { WeeklySleepView } from './WeeklySleepView';
+import { EmotionalThemesChart } from './EmotionalThemesChart';
+import { InsightsPanel } from './InsightsPanel';
 
 type TrackerScreenProps = {
   dreams: DreamLike[];
@@ -21,6 +23,12 @@ export function TrackerScreen({
 }: TrackerScreenProps) {
   const [showMonthly, setShowMonthly] = useState(false);
   const tracker = useSleepTracker({ dreams, settings, wearableData });
+
+  const handleLogDream = (dateKey: string) => {
+    // In a real app, this would navigate to dream logging or open a modal
+    console.log('Log dream for date:', dateKey);
+    alert(`Would you like to log a dream or experience for ${dateKey}?`);
+  };
 
   return (
     <div className="space-y-6">
@@ -46,7 +54,14 @@ export function TrackerScreen({
         days={tracker.weekDays}
         selectedDate={tracker.selectedDate}
         onSelectDate={tracker.setSelectedDate}
+        onLogDream={handleLogDream}
       />
+
+      {/* Emotional themes spider diagram */}
+      <EmotionalThemesChart dreams={dreams} summaries={tracker.summaries} />
+
+      {/* Ongoing insights and user typing */}
+      <InsightsPanel dreams={dreams} summaries={tracker.summaries} />
 
       <div className="flex gap-2 rounded-2xl border border-line bg-parchment p-1">
         <button
