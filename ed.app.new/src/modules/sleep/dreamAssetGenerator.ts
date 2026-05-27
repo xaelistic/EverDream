@@ -245,4 +245,42 @@ async function generateFallbackImage(prompt: string): Promise<DreamAsset> {
 
 /**
  * Main image generation function — tries Supabase Edge Function first,
- * then falls back to direct Poll
+ * then falls back to direct Pollinations, then HuggingFace, and finally
+ * a generated SVG placeholder if all else fails.
+ * 
+ * @param prompt - The dream text or description to visualize
+ * @returns Promise resolving to DreamAsset with image URL and metadata
+ */
+export async function generateDreamImage(prompt: string): Promise<DreamAsset> {
+  try {
+    // Try Supabase Edge Function first (handles CORS)
+    return await generateWithEdgeFunction(prompt);
+  } catch (edgeError) {
+    console.warn('[AssetGen] Edge function failed:', edgeError);
+  }
+
+  try {
+    // Fallback: Direct Pollinations (may have CORS issues in some browsers)
+    return await generateWithPollinations(prompt);
+  } catch (pollinationsError) {
+    console.warn('[AssetGen] Pollinations failed:', pollinationsError);
+  }
+
+  try {
+    // Second fallback: HuggingFace
+    return await generateWithHuggingFace(prompt);
+  } catch (hfError) {
+    console.warn('[AssetGen] HuggingFace failed:', hfError);
+  }
+
+  // Final fallback: SVG placeholder
+  console.warn('[AssetGen] All providers failed, using SVG placeholder');
+  return await generateFallbackImage(prompt);
+}
+
+/**
+ * Generate multiple dream assets (for future batch processing)
+ */
+export async function generateDreamAssets(prompts: string[]): Promise<DreamAsset[]> {
+  return Promise.all(prompts.map(prompt => generateDreamImage(prompt)));
+}
