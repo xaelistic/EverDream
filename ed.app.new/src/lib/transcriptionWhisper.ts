@@ -167,13 +167,18 @@ export async function transcribeWithWhisper(
 ): Promise<TranscriptionResult> {
   const { language = 'en', onProgress } = options;
 
+  console.log('[Transcription] Starting transcription with Whisper...');
+  console.log('[Transcription] Input type:', typeof audioData, audioData instanceof Blob ? 'Blob' : audioData instanceof File ? 'File' : audioData instanceof ArrayBuffer ? 'ArrayBuffer' : 'string');
+  
   // Convert input to Blob
   let blob: Blob;
   if (typeof audioData === 'string') {
     if (audioData.startsWith('data:')) {
+      console.log('[Transcription] Converting data URL to blob...');
       const response = await fetch(audioData);
       blob = await response.blob();
     } else {
+      console.log('[Transcription] Converting base64 string to blob...');
       const binaryString = atob(audioData);
       const bytes = new Uint8Array(binaryString.length);
       for (let i = 0; i < binaryString.length; i++) {
@@ -182,13 +187,17 @@ export async function transcribeWithWhisper(
       blob = new Blob([bytes], { type: 'audio/wav' });
     }
   } else if (audioData instanceof ArrayBuffer) {
+    console.log('[Transcription] Converting ArrayBuffer to blob...');
     blob = new Blob([audioData], { type: 'audio/wav' });
   } else {
     blob = audioData as Blob;
   }
 
+  console.log('[Transcription] Blob created:', blob.size, 'bytes, type:', blob.type);
+
   // Validate audio size
   if (blob.size > MAX_AUDIO_SIZE_BYTES) {
+    console.error('[Transcription] Audio file too large:', blob.size, 'bytes');
     throw new ApiError(
       `Audio file too large (${(blob.size / 1024 / 1024).toFixed(1)} MB). Max: ${(MAX_AUDIO_SIZE_BYTES / 1024 / 1024).toFixed(0)} MB.`,
       'validation'
@@ -196,6 +205,7 @@ export async function transcribeWithWhisper(
   }
 
   if (blob.size === 0) {
+    console.error('[Transcription] Audio file is empty');
     throw new ApiError('Audio file is empty.', 'validation');
   }
 
@@ -223,8 +233,11 @@ export async function transcribeWithWhisper(
 
       try {
         // Convert blob to ArrayBuffer for the edge function
+        console.log('[Transcription] Converting blob to ArrayBuffer...');
         const arrayBuffer = await blob.arrayBuffer();
+        console.log('[Transcription] ArrayBuffer size:', arrayBuffer.byteLength, 'bytes');
 
+        console.log('[Transcription] Invoking Supabase edge function...');
         const { data, error } = await supabase.functions.invoke('transcribe-audio', {
           body: arrayBuffer,
           headers: {
@@ -239,6 +252,7 @@ export async function transcribeWithWhisper(
           continue;
         }
 
+        console.log('[Transcription] Edge function response received');
         const result = data as { text?: string; language?: string; error?: string };
 
         if (result.error) {
@@ -247,6 +261,7 @@ export async function transcribeWithWhisper(
           continue;
         }
 
+        console.log('[Transcription] Transcription successful, text length:', result.text?.length || 0);
         onProgress?.('Transcription complete!');
 
         return {

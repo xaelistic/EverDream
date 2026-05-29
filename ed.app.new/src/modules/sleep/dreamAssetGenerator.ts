@@ -83,25 +83,31 @@ function validateImageUrl(url: string, timeoutMs = 60000): Promise<void> {
  * Falls back to direct Pollinations if Supabase is not configured.
  */
 async function generateWithEdgeFunction(prompt: string, style: string = 'dreamlike'): Promise<DreamAsset> {
+  console.log('[AssetGen] Generating image via Edge Function with prompt:', prompt.substring(0, 50));
   const supabase = getSupabase();
 
   if (supabase) {
     try {
+      console.log('[AssetGen] Invoking Supabase generate-image function...');
       const { data, error } = await supabase.functions.invoke('generate-image', {
         body: { prompt, style, width: 1024, height: 1024 },
       });
 
       if (error) {
-        console.warn('[AssetGen] Edge function error:', error.message);
+        console.error('[AssetGen] Edge function error:', error.message);
         throw new Error(error.message);
       }
 
+      console.log('[AssetGen] Edge function response received');
       const result = data as { imageUrl?: string; source?: string; prompt?: string; error?: string };
 
       if (result.error) {
+        console.error('[AssetGen] Image generation error from service:', result.error);
         throw new Error(result.error);
       }
 
+      console.log('[AssetGen] Image URL received:', result.imageUrl?.substring(0, 80));
+      
       if (result.imageUrl) {
         return {
           id: makeId(),
@@ -115,6 +121,8 @@ async function generateWithEdgeFunction(prompt: string, style: string = 'dreamli
             note: 'Generated via Supabase Edge Function',
           },
         };
+      } else {
+        console.warn('[AssetGen] No imageUrl in response, falling back');
       }
     } catch (err) {
       console.warn('[AssetGen] Edge function failed, falling back to direct:', err);

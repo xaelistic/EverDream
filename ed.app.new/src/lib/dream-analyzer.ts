@@ -98,22 +98,44 @@ function getSupabase(): SupabaseClient | null {
 // ── Analysis via Supabase Edge Function ──────────────────────
 
 async function analyzeViaEdgeFunction(text: string): Promise<DreamAnalysis> {
+  console.log('[DreamAnalyzer] Invoking Supabase analyze-dream edge function...');
   const supabase = getSupabase();
-  if (!supabase) throw new Error('Supabase not configured');
+  if (!supabase) {
+    console.warn('[DreamAnalyzer] Supabase not configured');
+    throw new Error('Supabase not configured');
+  }
 
   const { data, error } = await supabase.functions.invoke('analyze-dream', {
     body: { text },
   });
 
-  if (error) throw new Error(error.message);
-  if (!data) throw new Error('No response from analysis service');
+  if (error) {
+    console.error('[DreamAnalyzer] Edge function error:', error.message);
+    throw new Error(error.message);
+  }
+  
+  console.log('[DreamAnalyzer] Edge function response received');
+  if (!data) {
+    console.error('[DreamAnalyzer] No response data from edge function');
+    throw new Error('No response from analysis service');
+  }
 
   const responseData = data as { analysis?: DreamAnalysis; error?: string; fallback?: DreamAnalysis };
 
-  if (responseData.error && responseData.fallback) return responseData.fallback;
-  if (responseData.error) throw new Error(responseData.error);
-  if (responseData.analysis) return responseData.analysis;
+  if (responseData.error && responseData.fallback) {
+    console.warn('[DreamAnalyzer] Edge function returned fallback due to error:', responseData.error);
+    return responseData.fallback;
+  }
+  if (responseData.error) {
+    console.error('[DreamAnalyzer] Edge function returned error:', responseData.error);
+    throw new Error(responseData.error);
+  }
+  if (responseData.analysis) {
+    console.log('[DreamAnalyzer] Analysis successful, category:', responseData.analysis.category);
+    return responseData.analysis;
+  }
 
+  console.error('[DreamAnalyzer] Unexpected response format');
   throw new Error('Unexpected response format from analysis service');
 }
 

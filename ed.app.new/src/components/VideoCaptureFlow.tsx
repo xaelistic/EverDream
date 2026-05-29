@@ -216,15 +216,21 @@ export function VideoCaptureFlow({
     };
     
     recorder.onstop = async () => {
+      console.log('[VideoCapture] Recording stopped, processing video...');
+      console.log('[VideoCapture] Chunks collected:', chunksRef.current.length);
+      console.log('[VideoCapture] Total size:', chunksRef.current.reduce((acc, chunk) => acc + chunk.size, 0), 'bytes');
+      
       setIsProcessing(true);
       
       const videoBlob = new Blob(chunksRef.current, { type: recorder.mimeType });
+      console.log('[VideoCapture] Video blob created:', videoBlob.size, 'bytes, type:', videoBlob.type);
       
       let thumbnail: string | undefined;
       try {
         thumbnail = await getVideoThumbnail(videoBlob);
+        console.log('[VideoCapture] Thumbnail generated successfully');
       } catch (e) {
-        console.warn('Failed to generate thumbnail:', e);
+        console.warn('[VideoCapture] Failed to generate thumbnail:', e);
       }
       
       const data: VideoCaptureData = {
@@ -235,7 +241,21 @@ export function VideoCaptureFlow({
         hasAudio: audioEnabled,
       };
       
-      onComplete(data);
+      console.log('[VideoCapture] Calling onComplete with video data:', {
+        blobSize: videoBlob.size,
+        duration: data.duration,
+        hasThumbnail: !!thumbnail,
+        hasAudio: data.hasAudio,
+        timestamp: data.timestamp
+      });
+      
+      try {
+        onComplete(data);
+        console.log('[VideoCapture] onComplete executed successfully');
+      } catch (error) {
+        console.error('[VideoCapture] Error in onComplete callback:', error);
+      }
+      
       setIsProcessing(false);
     };
     

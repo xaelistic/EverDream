@@ -537,42 +537,53 @@ const DreamJournalApp = () => {
   };
 
   const startVideoCapture = async () => {
+    console.log('[VideoCapture] Starting video capture...');
     if (!navigator.mediaDevices?.getUserMedia) {
+      console.error('[VideoCapture] getUserMedia not supported');
       alert('Video capture is not supported in this browser.');
       return;
     }
 
     try {
+      console.log('[VideoCapture] Requesting camera/mic permissions...');
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'user' },
         audio: true,
       });
+      console.log('[VideoCapture] Stream obtained, tracks:', stream.getTracks().map(t => t.kind));
 
       setVideoStream(stream);
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        console.log('[VideoCapture] Video element attached');
       }
 
       const recorder = new MediaRecorder(stream, {
         mimeType: 'video/webm;codecs=vp8,opus',
       });
       const chunks: Blob[] = [];
+      console.log('[VideoCapture] MediaRecorder created with mime type:', recorder.mimeType);
 
       recorder.ondataavailable = (event) => {
+        console.log('[VideoCapture] Data available:', event.data.size, 'bytes');
         if (event.data.size) {
           chunks.push(event.data);
         }
       };
 
       recorder.onstop = () => {
+        console.log('[VideoCapture] Recorder stopped, total chunks:', chunks.length);
         const blob = new Blob(chunks, { type: 'video/webm' });
+        console.log('[VideoCapture] Video blob created:', blob.size, 'bytes');
         const url = URL.createObjectURL(blob);
+        console.log('[VideoCapture] Object URL created:', url.substring(0, 50));
         setRecordedVideoUrl(url);
         setVideoChunks(chunks);
         setIsVideoRecording(false);
         stream.getTracks().forEach((track) => track.stop());
         setVideoStream(null);
         setMediaRecorder(null);
+        console.log('[VideoCapture] Cleanup complete');
       };
 
       recorder.start();
@@ -580,9 +591,10 @@ const DreamJournalApp = () => {
       setIsVideoRecording(true);
       setVideoChunks([]);
       setRecordedVideoUrl(null);
+      console.log('[VideoCapture] Recording started');
       startSpeechRecording();
     } catch (error) {
-      console.error('Video capture error:', error);
+      console.error('[VideoCapture] Error:', error);
       alert('Unable to access camera.');
     }
   };
@@ -673,18 +685,24 @@ const DreamJournalApp = () => {
   };
 
   const transcribeAudio = async (audioData: any) => {
+    console.log('[DreamJournal] Starting audio transcription for:', audioData.name, 'size:', audioData.size);
     try {
       // Convert data URL to Blob for transcription
+      console.log('[DreamJournal] Fetching audio data...');
       const response = await fetch(audioData.data);
       const blob = await response.blob();
+      console.log('[DreamJournal] Audio blob created:', blob.size, 'bytes, type:', blob.type);
 
       // Try HF Whisper first (real transcription, free)
       try {
+        console.log('[DreamJournal] Attempting Whisper transcription...');
         const result = await transcribeAudio(blob, {
           language: 'en',
           onProgress: (status) => console.log('[Transcription]', status),
         });
 
+        console.log('[DreamJournal] Whisper result:', result.text?.length, 'chars, source:', result.source);
+        
         if (result.text && result.text.length > 5) {
           setPendingTranscription({
             text: result.text,
@@ -694,17 +712,22 @@ const DreamJournalApp = () => {
           setCurrentEntry(result.text);
           setIsTranscribing(false);
           return;
+        } else {
+          console.warn('[DreamJournal] Whisper returned empty or short text');
         }
       } catch (err) {
-        console.warn('[Transcription] Whisper failed:', err);
+        console.warn('[DreamJournal] Whisper failed:', err);
       }
 
       // Fallback: Web Speech API (browser-based, plays audio through mic)
       if (isSpeechRecognitionSupported()) {
         try {
+          console.log('[DreamJournal] Falling back to Web Speech API...');
           const file = new File([blob], audioData.name, { type: audioData.type });
           const result = await transcribeAudioFile(file);
 
+          console.log('[DreamJournal] Web Speech result:', result.text?.length, 'chars');
+          
           setPendingTranscription({
             text: result.text,
             audioFile: audioData.name,
@@ -714,11 +737,14 @@ const DreamJournalApp = () => {
           setIsTranscribing(false);
           return;
         } catch (err) {
-          console.warn('[Transcription] Web Speech failed:', err);
+          console.warn('[DreamJournal] Web Speech failed:', err);
         }
+      } else {
+        console.warn('[DreamJournal] Web Speech API not supported');
       }
 
       // Last resort: ask user to type manually
+      console.warn('[DreamJournal] All transcription methods failed');
       setPendingTranscription({
         text: '',
         audioFile: audioData.name,
@@ -728,7 +754,7 @@ const DreamJournalApp = () => {
       setIsTranscribing(false);
       alert('Could not transcribe audio automatically. Please type your dream manually.');
     } catch (error) {
-      console.error('Transcription error:', error);
+      console.error('[DreamJournal] Transcription error:', error);
       alert('Error transcribing audio. Please try again.');
       setIsTranscribing(false);
     }
@@ -831,29 +857,43 @@ const DreamJournalApp = () => {
   };
 
   const saveDream = async () => {
+    console.log('[SaveDream] Starting save process...');
+    console.log('[SaveDream] Current entry length:', currentEntry?.length);
+    console.log('[SaveDream] Recorded video URL:', recordedVideoUrl ? 'present' : 'none');
+    console.log('[SaveDream] Capture mode:', captureMode);
+    
     const captureText = currentEntry.trim() || (recordedVideoUrl ? 'Video capture saved from the last session.' : '');
-    if (!captureText) return;
+    if (!captureText && !recordedVideoUrl) {
+      console.warn('[SaveDream] No content to save');
+      return;
+    }
 
     // Step 1: AI Analysis
+    console.log('[SaveDream] Running dream analysis...');
     const analysis = await runDreamAnalysis(captureText);
+    console.log('[SaveDream] Analysis complete, themes:', analysis.themes?.length);
 
     // Step 2: Generate Image (if enabled) — FREE via Pollinations
     let generatedImage = null;
     if (settings.imageGeneration) {
+      console.log('[SaveDream] Generating dream image...');
       generatedImage = await generateDreamImageAsync(analysis);
+      console.log('[SaveDream] Image generated:', generatedImage?.url ? 'success' : 'failed');
     }
 
     // Step 3: Generate Parallax Video (if image available) — FREE client-side
     let parallaxVideoUrl = null;
     if (generatedImage?.url) {
       try {
+        console.log('[SaveDream] Generating parallax video...');
         parallaxVideoUrl = await generateParallaxVideo(
           generatedImage.url,
           generatedImage.url,
           { duration: 5, fps: 24, amplitude: 0.1, direction: 'circular' }
         );
+        console.log('[SaveDream] Parallax video:', parallaxVideoUrl ? 'success' : 'failed');
       } catch (err) {
-        console.warn('[Parallax] Video generation failed:', err);
+        console.warn('[SaveDream] Parallax video generation failed:', err);
       }
     }
 
@@ -866,6 +906,7 @@ const DreamJournalApp = () => {
     // Step 5: Generate sleep data
     const sleepData = generateMockSleepData();
     
+    console.log('[SaveDream] Creating dream object...');
     const newDream = {
       id: dreamId,
       date: new Date().toISOString(),
@@ -883,9 +924,16 @@ const DreamJournalApp = () => {
       context: contextData
     };
 
+    console.log('[SaveDream] Dream object created with videoCapture:', newDream.videoCapture ? 'yes' : 'no');
+    
     const updatedDreams = [newDream, ...dreams.filter(d => !d.isSample)];
+    console.log('[SaveDream] Updating dreams array, total count:', updatedDreams.length);
     setDreams(updatedDreams);
+    
+    console.log('[SaveDream] Saving to storage...');
     await saveDreamsToStorage(updatedDreams);
+    console.log('[SaveDream] Storage save complete');
+    
     await checkAchievements(updatedDreams);
     
     setCurrentEntry('');
@@ -894,6 +942,7 @@ const DreamJournalApp = () => {
     setCapturedEmotions(null);
     setCaptureMode('text');
     setContextData({ mood: '', yesterdayEvents: '', sleepQuality: 3 });
+    console.log('[SaveDream] Navigating to journal...');
     navigate('journal');
 
     // Show gentle confirmation
@@ -904,6 +953,7 @@ const DreamJournalApp = () => {
       icon: '💎'
     });
     setTimeout(() => setShowAchievement(null), 3000);
+    console.log('[SaveDream] Save complete!');
   };
 
   // Handle extracted dream entries from photo upload
