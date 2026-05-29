@@ -254,7 +254,7 @@ const DreamJournalApp = () => {
       source: 'simulated'
     },
     generatedImage: {
-      url: 'https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=800',
+      url: 'https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=800', // Static sample image for demo
       prompt: 'Surreal dreamscape of flying over a golden ocean at sunset with dolphins leaping into the sky',
       style: 'dreamlike',
       generatedAt: new Date(Date.now() - 86400000).toISOString()
@@ -400,8 +400,14 @@ const DreamJournalApp = () => {
     } catch (error) {
       endAPICall(perfCall, 0, String(error));
       console.error('Image generation error:', error);
+      // Generate a placeholder SVG as fallback instead of broken Unsplash URL
+      const prompt = dreamData.nugget || dreamData.content || 'dream';
+      const hash = prompt.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      const hue1 = hash % 360;
+      const hue2 = (hue1 + 40) % 360;
+      const svg = encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><defs><linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:hsl(${hue1},70%,50%);stop-opacity:1"/><stop offset="100%" style="stop-color:hsl(${hue2},70%,30%);stop-opacity:1"/></linearGradient></defs><rect width="800" height="600" fill="url(#grad)"/><text x="50%" y="50%" text-anchor="middle" fill="white" font-size="24" font-family="sans-serif" opacity="0.8">Dream Image</text></svg>`);
       return {
-        url: 'https://images.unsplash.com/photo-1518176258769-f227c798150e?w=800',
+        url: `data:image/svg+xml;charset=utf-8,${svg}`,
         prompt: dreamData.nugget || 'dream',
         style: 'dreamlike',
         generatedAt: new Date().toISOString(),

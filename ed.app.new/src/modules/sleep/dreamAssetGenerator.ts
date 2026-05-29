@@ -200,18 +200,32 @@ async function generateWithHuggingFace(prompt: string): Promise<DreamAsset> {
 }
 
 /**
- * Generate a fallback image using Unsplash
+ * Generate a fallback image using a placeholder SVG gradient.
+ * Unsplash source API was shut down in 2024, so we use a generated placeholder instead.
  */
 async function generateFallbackImage(prompt: string): Promise<DreamAsset> {
-  const query = encodeURIComponent(
-    prompt
-      .replace(/[^a-zA-Z0-9 ]/g, '')
-      .split(' ')
-      .slice(0, 6)
-      .join(',') || 'dreamscape'
-  );
-
-  const imageUrl = `https://source.unsplash.com/800x600/?${query},dream,ethereal`;
+  // Create a deterministic color based on prompt
+  const hash = prompt.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const hue1 = hash % 360;
+  const hue2 = (hue1 + 40) % 360;
+  
+  // Generate SVG gradient placeholder
+  const svg = encodeURIComponent(`
+    <svg xmlns="http://www.w3.org/2000/svg" width="800" height="600">
+      <defs>
+        <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:hsl(${hue1}, 70%, 50%);stop-opacity:1" />
+          <stop offset="100%" style="stop-color:hsl(${hue2}, 70%, 30%);stop-opacity:1" />
+        </linearGradient>
+      </defs>
+      <rect width="800" height="600" fill="url(#grad)"/>
+      <text x="50%" y="50%" text-anchor="middle" fill="white" font-size="24" font-family="sans-serif" opacity="0.8">
+        Dream Image
+      </text>
+    </svg>
+  `.trim().replace(/\n/g, ''));
+  
+  const imageUrl = `data:image/svg+xml;charset=utf-8,${svg}`;
 
   return {
     id: makeId(),
@@ -221,7 +235,8 @@ async function generateFallbackImage(prompt: string): Promise<DreamAsset> {
     style: 'dreamlike',
     generatedAt: new Date().toISOString(),
     metadata: {
-      provider: 'unsplash-fallback',
+      provider: 'svg-placeholder',
+      note: 'Generated placeholder - all providers failed',
     },
   };
 }
@@ -230,73 +245,42 @@ async function generateFallbackImage(prompt: string): Promise<DreamAsset> {
 
 /**
  * Main image generation function — tries Supabase Edge Function first,
- * then falls back to direct Pollinations, HuggingFace, and Unsplash.
- * Validates each image before returning so callers never get broken URLs.
- *
- * @param dreamText — The dream text to generate an image from
- * @param style — Visual style (default: 'dreamlike')
- * @returns A validated DreamAsset
+ * then falls back to direct Pollinations, then HuggingFace, and finally
+ * a generated SVG placeholder if all else fails.
+ * 
+ * @param prompt - The dream text or description to visualize
+ * @returns Promise resolving to DreamAsset with image URL and metadata
  */
-export async function generateDreamImage(dreamText: string, style: string = 'dreamlike'): Promise<DreamAsset> {
-  // Try Supabase Edge Function first (or direct Pollinations as fallback)
+export async function generateDreamImage(prompt: string): Promise<DreamAsset> {
   try {
-    console.log('[AssetGen] Generating image via edge function...');
-    const asset = await generateWithEdgeFunction(dreamText, style);
-    console.log('[AssetGen] Image generated successfully');
-    return asset;
-  } catch (error) {
-    console.warn('[AssetGen] Edge function/Pollinations failed:', error);
+    // Try Supabase Edge Function first (handles CORS)
+    return await generateWithEdgeFunction(prompt);
+  } catch (edgeError) {
+    console.warn('[AssetGen] Edge function failed:', edgeError);
   }
 
-  // Try HuggingFace as third option
   try {
-    console.log('[AssetGen] Generating image with HuggingFace...');
-    const asset = await generateWithHuggingFace(dreamText);
-    console.log('[AssetGen] HuggingFace image validated successfully');
-    return asset;
-  } catch (error) {
-    console.warn('[AssetGen] HuggingFace failed:', error);
+    // Fallback: Direct Pollinations (may have CORS issues in some browsers)
+    return await generateWithPollinations(prompt);
+  } catch (pollinationsError) {
+    console.warn('[AssetGen] Pollinations failed:', pollinationsError);
   }
 
-  // Fallback to Unsplash (no validation needed — it's a stock photo)
-  console.log('[AssetGen] Using Unsplash fallback...');
-  return generateFallbackImage(dreamText);
+  try {
+    // Second fallback: HuggingFace
+    return await generateWithHuggingFace(prompt);
+  } catch (hfError) {
+    console.warn('[AssetGen] HuggingFace failed:', hfError);
+  }
+
+  // Final fallback: SVG placeholder
+  console.warn('[AssetGen] All providers failed, using SVG placeholder');
+  return await generateFallbackImage(prompt);
 }
 
 /**
- * Generate multiple dream assets with validated URLs.
- *
- * @param dreamText — The dream text to generate images from
- * @param count — Number of assets to generate (default: 2)
- * @returns Array of validated DreamAssets
+ * Generate multiple dream assets (for future batch processing)
  */
-export async function generateDreamAssets(dreamText: string, count = 2): Promise<DreamAsset[]> {
-  const assets: DreamAsset[] = [];
-  const errors: string[] = [];
-
-  // Try to generate with different providers for variety
-  const generators = [
-    () => generateWithEdgeFunction(dreamText, 'dreamlike'),
-    () => generateFallbackImage(dreamText),
-  ];
-
-  for (const generator of generators) {
-    if (assets.length >= count) break;
-    try {
-      const asset = await generator();
-      assets.push(asset);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      errors.push(message);
-      console.warn('[AssetGen] Dream asset provider skipped:', message);
-    }
-  }
-
-  // If everything failed, return at least a fallback (Unsplash never throws)
-  if (assets.length === 0) {
-    console.warn('[AssetGen] All providers failed, using Unsplash fallback. Errors:', errors);
-    assets.push(await generateFallbackImage(dreamText));
-  }
-
-  return assets.slice(0, count);
+export async function generateDreamAssets(prompts: string[]): Promise<DreamAsset[]> {
+  return Promise.all(prompts.map(prompt => generateDreamImage(prompt)));
 }
