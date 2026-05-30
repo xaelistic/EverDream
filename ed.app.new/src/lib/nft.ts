@@ -58,6 +58,8 @@ export interface DreamNFT {
   allowRemix: boolean;
   /** Timestamp */
   createdAt: string;
+  /** Whether this is a simulated mint (not real blockchain tx) */
+  isSimulated: boolean;
 }
 
 export interface NFTMetadata {
@@ -106,6 +108,35 @@ export interface DreamCombination {
 
 const WALLET_STORAGE_KEY = 'ed_wallet_identity';
 const DEVICE_SEED_KEY = 'ed_device_seed';
+
+/**
+ * Simple encryption for localStorage data
+ * Uses XOR cipher with rotating key (NOT cryptographically secure - for obfuscation only)
+ * For production, use Web Crypto API with AES-GCM
+ */
+function simpleEncrypt(text: string): string {
+  const key = 'everdream-key-2024';
+  let result = '';
+  for (let i = 0; i < text.length; i++) {
+    const charCode = text.charCodeAt(i) ^ key.charCodeAt(i % key.length);
+    result += String.fromCharCode(charCode);
+  }
+  return btoa(result);
+}
+
+/**
+ * Decrypt data encrypted with simpleEncrypt
+ */
+function simpleDecrypt(encrypted: string): string {
+  const key = 'everdream-key-2024';
+  const decoded = atob(encrypted);
+  let result = '';
+  for (let i = 0; i < decoded.length; i++) {
+    const charCode = decoded.charCodeAt(i) ^ key.charCodeAt(i % key.length);
+    result += String.fromCharCode(charCode);
+  }
+  return result;
+}
 
 /**
  * Generate a deterministic device seed
@@ -369,6 +400,7 @@ export async function mintNFT(nft: DreamNFT): Promise<DreamNFT> {
       Math.floor(Math.random() * 16).toString(16)
     ).join(''),
     tokenId: fakeTokenId,
+    isSimulated: true,
   };
 }
 
