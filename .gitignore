@@ -1,4 +1,4 @@
-```gitignore
+```
 # Dependencies
 node_modules/
 
@@ -7,10 +7,154 @@ dist/
 build/
 target/
 
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.py.class
+.Python
+env/
+venv/
+.venv/
+.ENV
+.python-version
+.python_history
+*.pot
+*.pot.*
+*.mo
+*.log
+*.sql
+*.sqlite
+*.sqlite3
+*.db
+*.db.*
+*.pid
+*.seed
+*.pid.*
+*.so
+*.dylib
+*.dll
+*.exe
+*.out
+*.o
+*.obj
+*.a
+*.lib
+*.objdump
+*.bin
+*.hex
+*.elf
+*.axf
+*.uf2
+*.lst
+*.map
+*.sym
+*.lk
+*.lnk
+*.hex
+*.bin
+*.out
+*.pyc
+*.pyo
+*.pyd
+*.py.class
+.Python
+env/
+venv/
+.venv/
+.ENV
+.python-version
+.python_history
+*.pot
+*.pot.*
+*.mo
+*.log
+*.sql
+*.sqlite
+*.sqlite3
+*.db
+*.db.*
+*.pid
+*.seed
+*.pid.*
+*.so
+*.dylib
+*.dll
+*.exe
+*.out
+*.o
+*.obj
+*.a
+*.lib
+*.objdump
+*.bin
+*.hex
+*.elf
+*.axf
+*.uf2
+*.lst
+*.map
+*.sym
+*.lk
+*.lnk
+*.hex
+*.bin
+*.out
+
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+*.swo
+*.bak
+*.backup
+*.cache
+*.cached
+*.tmp
+*.temp
+*.temp.*
+
 # Environment variables
 .env
 .env.local
 .env.*
+!.env.example
+!.env.sample
+!.env.template
+!.env.default
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.tmp
+*.temp
+*.temp.*
+*.log
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 
 # IDE files
 .vscode/
@@ -36,6 +180,14 @@ venv/
 coverage/
 htmlcov/
 .coverage
+.coverage.*
+.cache
+.pytest_cache/
+.mypy_cache/
+.hypothesis/
+.tox/
+nox/
+site-packages/
 
 # Temporary files
 *.tmp
@@ -44,6 +196,11 @@ htmlcov/
 
 # OS generated files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
 
 # Testing
