@@ -134,7 +134,7 @@ export function FacialEmotionDetector({
           let maxScore = 0;
           const emotionMap: Record<string, number> = {};
 
-          expressions.forEach((score, emotion) => {
+          expressions.forEach((emotion, score) => {
             const rounded = Math.round(score * 100) / 100;
             emotionMap[emotion] = rounded;
             if (score > maxScore) {
