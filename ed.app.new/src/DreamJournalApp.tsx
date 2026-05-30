@@ -23,6 +23,7 @@ import {
   Camera,
   Check,
   Quote,
+  LineChart,
 } from 'lucide-react';
 import Shell from './components/Shell';
 import { TrackerScreen } from './components/tracker/TrackerScreen';
@@ -1846,7 +1847,7 @@ const DreamJournalApp = () => {
           </div>
         )}
 
-        {route.screen === 'insights' && (
+        {(route.screen === 'insights' || route.screen === 'dashboard') && (
           <div className="space-y-4">
             <h2 className="text-2xl font-bold mb-4">Your Dream Patterns</h2>
             {insights ? (
@@ -2559,6 +2560,7 @@ const DreamJournalApp = () => {
 
           <div className="space-y-2">
             {[
+              { label: 'Insights', sub: 'Patterns & correlations', screen: 'dashboard' as const, icon: Brain },
               { label: 'Import journal photos', sub: 'OCR from pictures', screen: 'import-photos' as const, icon: Camera },
               { label: 'Sleep & wearables', sub: 'Sessions and sync', screen: 'wearables' as const, icon: Watch },
               { label: 'Keepsakes', sub: 'Images & provenance', screen: 'assets' as const, icon: Shield },
