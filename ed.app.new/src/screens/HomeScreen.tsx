@@ -57,9 +57,6 @@ export function HomeScreen({
             <h2 className="font-serif text-2xl sm:text-[1.65rem] font-medium text-ink leading-tight">
               A quiet moment for <em className="text-duskDeep not-italic">your dreams</em>
             </h2>
-            <p className="text-sm text-muted mt-2 max-w-[260px] leading-relaxed">
-              Capture what surfaced overnight — your journal stays private on this device.
-            </p>
           </div>
           <div className="text-right shrink-0 rounded-2xl border border-line bg-parchment px-4 py-3 shadow-paper">
             <div className="text-2xl font-serif font-semibold text-ink">{insights?.currentStreak || 0}</div>

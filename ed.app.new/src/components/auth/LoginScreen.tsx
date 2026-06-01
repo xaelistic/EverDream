@@ -83,6 +83,9 @@ export default function LoginScreen() {
           <p style={{ color: '#9b96b0', fontSize: '0.8rem', margin: 0 }}>
             {isSignUp ? 'Create your dream journal' : 'Welcome back, dreamer'}
           </p>
+          <p style={{ color: '#7a758f', fontSize: '0.7rem', marginTop: '8px' }}>
+            ✨ Your journal stays private on this device
+          </p>
         </div>
 
         {/* Error Banner */}

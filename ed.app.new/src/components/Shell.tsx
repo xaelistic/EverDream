@@ -1,9 +1,7 @@
 import {
   BookOpen,
   CalendarDays,
-  Home,
   Menu,
-  Mic,
   Moon,
   Settings,
   Sparkles,
@@ -18,15 +16,20 @@ type ShellProps = {
   children: React.ReactNode;
 };
 
-const navItems: { screen: RouteScreen; label: string; icon: typeof Home }[] = [
-  { screen: 'home', label: 'Home', icon: Home },
+const navItems: { screen: RouteScreen; label: string; icon: typeof Moon }[] = [
   { screen: 'reflection', label: 'Reflect', icon: Moon },
   { screen: 'journal', label: 'Journal', icon: BookOpen },
   { screen: 'tracker', label: 'Tracker', icon: CalendarDays },
-  { screen: 'record', label: 'Record', icon: Mic },
-  { screen: 'insights', label: 'Insights', icon: Sparkles },
   { screen: 'more', label: 'More', icon: Menu },
 ];
+
+// Center Dream button toggles between home and record
+function getDreamButtonTarget(active: RouteScreen): RouteScreen {
+  if (active === 'home') {
+    return 'record';
+  }
+  return 'home';
+}
 
 function isNavActive(active: RouteScreen, screen: RouteScreen): boolean {
   if (screen === 'more') {
@@ -37,6 +40,7 @@ function isNavActive(active: RouteScreen, screen: RouteScreen): boolean {
 
 export default function Shell({ active, onNavigate, onOpenSettings, children }: ShellProps) {
   const { isPearl } = useSkinFull();
+  const dreamTarget = getDreamButtonTarget(active);
 
   return (
     <div className={`min-h-screen flex flex-col font-sans ${isPearl ? 'text-[var(--text-primary)]' : 'text-ink'}`}>
@@ -83,9 +87,9 @@ export default function Shell({ active, onNavigate, onOpenSettings, children }: 
 
       <nav className={`fixed bottom-0 inset-x-0 z-40 border-t backdrop-blur-md pb-[env(safe-area-inset-bottom,0px)] ${isPearl ? 'border-[var(--glass-border)] bg-[rgba(247,245,255,0.98)]' : 'border-line bg-cream/98'}`}>
         <div className="max-w-lg mx-auto px-2 pt-2 pb-3 flex justify-around items-end">
-          {navItems.map(({ screen, label, icon: Icon }) => {
+          {/* Left nav items: Reflect, Journal */}
+          {navItems.slice(0, 2).map(({ screen, label, icon: Icon }) => {
             const on = isNavActive(active, screen);
-            const isRecord = screen === 'record';
             return (
               <button
                 key={screen}
@@ -98,22 +102,59 @@ export default function Shell({ active, onNavigate, onOpenSettings, children }: 
                 }`}
               >
                 <span
-                  className={`flex items-center justify-center rounded-full transition-all ${
-                    isRecord
-                      ? on
-                        ? isPearl
-                          ? 'w-12 h-12 -mt-4 bg-[var(--aqua-deep)] text-white shadow-lift border border-[var(--aqua-deep)]/20'
-                          : 'w-12 h-12 -mt-4 bg-sage text-cream shadow-lift border border-sageDark/20'
-                        : isPearl
-                          ? 'w-11 h-11 -mt-3 bg-[var(--glass-bg)] border border-[var(--glass-border)] text-[var(--text-primary)] shadow-paper'
-                          : 'w-11 h-11 -mt-3 bg-parchment border border-line text-ink shadow-paper'
-                      : 'w-9 h-9'
-                  }`}
+                  className={`flex items-center justify-center rounded-full transition-all w-9 h-9`}
                 >
-                  <Icon
-                    className={isRecord ? 'w-5 h-5' : 'w-[18px] h-[18px]'}
-                    strokeWidth={1.75}
-                  />
+                  <Icon className="w-[18px] h-[18px]" strokeWidth={1.75} />
+                </span>
+                <span className="text-[10px] font-medium uppercase tracking-wide">{label}</span>
+              </button>
+            );
+          })}
+
+          {/* Center Dream button - larger, elevated, gradient background */}
+          <button
+            type="button"
+            onClick={() => onNavigate(dreamTarget)}
+            className={`flex flex-col items-center gap-0.5 px-1.5 py-1 rounded-xl transition-colors min-w-[64px] ${
+              active === 'home' || active === 'record'
+                ? isPearl ? 'text-[var(--aqua-deep)]' : 'text-sageDark'
+                : isPearl ? 'text-[var(--text-label)] hover:text-[var(--text-primary)]' : 'text-muted hover:text-ink'
+            }`}
+          >
+            <span
+              className={`flex items-center justify-center rounded-full transition-all shadow-lift ${
+                (active === 'home' || active === 'record')
+                  ? isPearl
+                    ? 'w-14 h-14 -mt-5 bg-gradient-to-br from-[var(--aqua-deep)] to-[var(--aqua)] text-white border border-[var(--aqua-deep)]/20'
+                    : 'w-14 h-14 -mt-5 bg-gradient-to-br from-sage to-sageDark text-cream border border-sageDark/20'
+                  : isPearl
+                    ? 'w-13 h-13 -mt-4 bg-gradient-to-br from-[var(--glass-bg)] to-white border border-[var(--glass-border)] text-[var(--text-primary)] shadow-paper'
+                    : 'w-13 h-13 -mt-4 bg-gradient-to-br from-parchment to-cream border border-line text-ink shadow-paper'
+              }`}
+            >
+              <Moon className="w-6 h-6" strokeWidth={1.75} />
+            </span>
+            <span className="text-[10px] font-medium uppercase tracking-wide">Dream</span>
+          </button>
+
+          {/* Right nav items: Tracker, More */}
+          {navItems.slice(2).map(({ screen, label, icon: Icon }) => {
+            const on = isNavActive(active, screen);
+            return (
+              <button
+                key={screen}
+                type="button"
+                onClick={() => onNavigate(screen)}
+                className={`flex flex-col items-center gap-0.5 px-1.5 py-1 rounded-xl transition-colors min-w-[44px] ${
+                  on
+                    ? isPearl ? 'text-[var(--aqua-deep)]' : 'text-sageDark'
+                    : isPearl ? 'text-[var(--text-label)] hover:text-[var(--text-primary)]' : 'text-muted hover:text-ink'
+                }`}
+              >
+                <span
+                  className={`flex items-center justify-center rounded-full transition-all w-9 h-9`}
+                >
+                  <Icon className="w-[18px] h-[18px]" strokeWidth={1.75} />
                 </span>
                 <span className="text-[10px] font-medium uppercase tracking-wide">{label}</span>
               </button>
