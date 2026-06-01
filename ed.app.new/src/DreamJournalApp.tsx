@@ -26,6 +26,8 @@ import {
 } from 'lucide-react';
 import Shell from './components/Shell';
 import { TrackerScreen } from './components/tracker/TrackerScreen';
+import { HomeScreen } from './screens/HomeScreen';
+import { ReflectionScreen } from './screens/ReflectionScreen';
 import { useHashRoute } from './hooks/useHashRoute';
 import { getCategoryBadgeClass, getEmotionEmoji } from './utils/dreamPresentation';
 import PhotoUploadFlow from './components/photo-upload/PhotoUploadFlow';
@@ -1488,207 +1490,31 @@ const DreamJournalApp = () => {
 
       <div className="space-y-10 pb-6">
         {route.screen === 'home' && (
-          <div className="space-y-6">
-            {/* Hero */}
-            <div className="rounded-3xl border border-line bg-cream p-6 shadow-lift relative overflow-hidden">
-              <div className="absolute -right-10 -top-10 h-36 w-36 rounded-full bg-moon/35 blur-2xl pointer-events-none" />
-              <div className="relative flex items-start justify-between gap-4 mb-5">
-                <div>
-                  <p className="text-[11px] uppercase tracking-[0.2em] text-muted mb-2">Today</p>
-                  <h2 className="font-serif text-2xl sm:text-[1.65rem] font-medium text-ink leading-tight">
-                    A quiet moment for <em className="text-duskDeep not-italic">your dreams</em>
-                  </h2>
-                  <p className="text-sm text-muted mt-2 max-w-[260px] leading-relaxed">
-                    Capture what surfaced overnight — your journal stays private on this device.
-                  </p>
-                </div>
-                <div className="text-right shrink-0 rounded-2xl border border-line bg-parchment px-4 py-3 shadow-paper">
-                  <div className="text-2xl font-serif font-semibold text-ink">{insights?.currentStreak || 0}</div>
-                  <div className="text-[10px] uppercase tracking-wide text-muted">day streak</div>
-                </div>
-              </div>
-              <div className="space-y-3">
-                <button
-                  type="button"
-                  onClick={() => navigate('record')}
-                  className="relative w-full bg-sage hover:bg-sageDark text-cream font-semibold py-3.5 rounded-2xl transition flex items-center justify-center gap-2 shadow-paper text-sm"
-                >
-                  <Moon className="w-5 h-5" strokeWidth={1.75} />
-                  I had a dream…
-                </button>
-                <button
-                  type="button"
-                  onClick={() => navigate('import-photos')}
-                  className="relative w-full border border-sage/30 bg-sage/5 hover:bg-sage/10 text-sageDark font-semibold py-3.5 rounded-2xl transition flex items-center justify-center gap-2 text-sm"
-                >
-                  <Camera className="w-5 h-5" strokeWidth={1.75} />
-                  Import journal photos
-                </button>
-                <button
-                  type="button"
-                  onClick={() => navigate('reflection')}
-                  className="relative w-full border border-line bg-parchment hover:bg-parchment/90 text-ink font-semibold py-3.5 rounded-2xl transition flex items-center justify-center gap-2 text-sm"
-                >
-                  <Moon className="w-5 h-5" strokeWidth={1.75} />
-                  Morning reflection
-                </button>
-              </div>
-            </div>
-
-            {/* Quick Stats */}
-            {insights && (
-              <div className="grid grid-cols-3 gap-3">
-                <StatCard icon={Moon} value={insights.totalDreams} label="Entries" />
-                <StatCard icon={Shield} value={`${insights.avgRarity}`} label="Avg depth" />
-                <StatCard icon={Zap} value={`${insights.totalAssetValue}`} label="Glow index" />
-              </div>
-            )}
-
-            {/* Gentle capabilities */}
-            <div className="rounded-2xl border border-line bg-parchment/70 p-5">
-              <h3 className="font-semibold mb-3 flex items-center gap-2 text-sm text-ink">
-                <Cpu className="w-4 h-4 text-sageDark" strokeWidth={1.75} />
-                Designed for reflection first
-              </h3>
-              <ul className="text-sm text-muted space-y-2 leading-relaxed">
-                <li>Optional AI interpretation & soft imagery — always yours to disable.</li>
-                <li>Wearable-friendly sleep context when you want it.</li>
-                <li>Local storage, exports, and GDPR-minded controls.</li>
-              </ul>
-            </div>
-
-            {/* Recent Dreams */}
-            <div>
-              <h3 className="font-serif text-lg font-medium text-ink mb-3 flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-dusk" strokeWidth={1.5} />
-                Recent in your journal
-              </h3>
-              {filteredDreams.length === 0 ? (
-                <div className="text-center py-12 text-muted border border-dashed border-line rounded-3xl bg-parchment/40">
-                  <Moon className="w-14 h-14 mx-auto mb-4 opacity-35 text-duskDeep" strokeWidth={1.25} />
-                  <p className="text-ink font-medium">Nothing here yet</p>
-                  <p className="text-sm mt-2 max-w-xs mx-auto leading-relaxed">When you wake with images still vivid, tap Record — even one sentence counts.</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {filteredDreams.slice(0, 3).map(dream => (
-                    <DreamNuggetCard 
-                      key={dream.id} 
-                      dream={dream} 
-                      getCategoryBadgeClass={getCategoryBadgeClass} 
-                      getEmotionEmoji={getEmotionEmoji}
-                      onClick={() => navigate('dream', dream.id)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
+          <HomeScreen
+            navigate={navigate}
+            insights={insights}
+            filteredDreams={filteredDreams}
+            reflectionQuote={reflectionQuote}
+            reflectionMood={reflectionMood}
+            setReflectionMood={setReflectionMood}
+            reflectionEnergy={reflectionEnergy}
+            setReflectionEnergy={setReflectionEnergy}
+            reflectionSleepData={reflectionSleepData}
+            getCategoryBadgeClass={getCategoryBadgeClass}
+            getEmotionEmoji={getEmotionEmoji}
+          />
         )}
 
         {route.screen === 'reflection' && (
-          <div className="space-y-6">
-            <button
-              type="button"
-              onClick={() => navigate('home')}
-              className="inline-flex items-center gap-2 text-sm font-medium text-muted hover:text-ink"
-            >
-              <ArrowLeft className="w-4 h-4" strokeWidth={1.75} /> Home
-            </button>
-
-            <div className="rounded-3xl border border-line bg-cream p-6 shadow-lift">
-              <p className="text-[11px] uppercase tracking-[0.2em] text-muted mb-2">Morning reflection</p>
-              <h2 className="font-serif text-2xl font-medium text-ink mb-3">Check in with your rest.</h2>
-              <p className="text-sm text-muted mb-6 max-w-xl">Review how your sleep felt, notice your mood, and decide whether you want to capture the dream from last night.</p>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="rounded-3xl border border-line bg-parchment p-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <p className="text-xs uppercase tracking-[0.2em] text-muted">Sleep summary</p>
-                    <span className="text-[11px] text-muted uppercase tracking-[0.18em]">{reflectionSleepData?.source ?? 'No sync'}</span>
-                  </div>
-                  {reflectionSleepData ? (
-                    <div className="space-y-3 text-sm text-ink">
-                      <div className="rounded-2xl bg-white/90 p-4 shadow-sm">
-                        <div className="text-xs uppercase tracking-[0.18em] text-muted">Duration</div>
-                        <div className="text-lg font-semibold">{Math.round((reflectionSleepData.sleepDuration || 0) / 60)}h {Math.round((reflectionSleepData.sleepDuration || 0) % 60)}m</div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3 text-sm">
-                        <div className="rounded-2xl bg-white/90 p-3">
-                          <div className="text-xs uppercase tracking-[0.18em] text-muted">Deep/REM</div>
-                          <div className="font-semibold">{reflectionSleepData.estimatedREM || 0}m REM</div>
-                        </div>
-                        <div className="rounded-2xl bg-white/90 p-3">
-                          <div className="text-xs uppercase tracking-[0.18em] text-muted">Quality</div>
-                          <div className="font-semibold">{reflectionSleepData.quality || reflectionSleepData.sleepQuality || 0}%</div>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted">No wearable data found yet. You can still reflect and capture what you remember this morning.</p>
-                  )}
-                </div>
-
-                <div className="rounded-3xl border border-line bg-parchment p-4">
-                  <p className="text-xs uppercase tracking-[0.2em] text-muted mb-3">Quote of the day</p>
-                  <p className="text-lg font-serif leading-relaxed text-ink">“{reflectionQuote.text}”</p>
-                  <p className="text-sm text-muted mt-4">— {reflectionQuote.source}</p>
-                </div>
-              </div>
-
-              <div className="rounded-3xl border border-line bg-parchment p-4 mt-6">
-                <p className="text-xs uppercase tracking-[0.2em] text-muted mb-3">How are you feeling?</p>
-                <div className="grid grid-cols-3 gap-2 mb-4">
-                  {['peaceful', 'anxious', 'excited', 'tired', 'curious', 'reflective'].map((mood) => (
-                    <button
-                      key={mood}
-                      type="button"
-                      onClick={() => setReflectionMood(mood)}
-                      className={`rounded-2xl border px-3 py-3 text-sm font-semibold transition ${
-                        reflectionMood === mood
-                          ? 'border-sage bg-sage text-cream'
-                          : 'border-line bg-white/80 text-ink hover:bg-parchment'
-                      }`}
-                    >
-                      {mood}
-                    </button>
-                  ))}
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between text-xs uppercase tracking-[0.18em] text-muted mb-2">
-                    <span>Energy</span>
-                    <span>{reflectionEnergy}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    value={reflectionEnergy}
-                    onChange={(e) => setReflectionEnergy(Number(e.target.value))}
-                    className="w-full accent-sage"
-                  />
-                </div>
-              </div>
-
-              <div className="mt-6 grid gap-3 sm:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={() => navigate('record')}
-                  className="w-full bg-sage hover:bg-sageDark text-cream rounded-2xl py-3.5 font-semibold transition"
-                >
-                  Capture last night’s dream
-                </button>
-                <button
-                  type="button"
-                  onClick={() => navigate('home')}
-                  className="w-full border border-line bg-parchment hover:bg-parchment/90 text-ink rounded-2xl py-3.5 font-semibold transition"
-                >
-                  Skip for now
-                </button>
-              </div>
-            </div>
-          </div>
+          <ReflectionScreen
+            navigate={navigate}
+            reflectionSleepData={reflectionSleepData}
+            reflectionQuote={reflectionQuote}
+            reflectionMood={reflectionMood}
+            setReflectionMood={setReflectionMood}
+            reflectionEnergy={reflectionEnergy}
+            setReflectionEnergy={setReflectionEnergy}
+          />
         )}
 
         {route.screen === 'journal' && (
