@@ -1,13 +1,21 @@
 /**
- * Dream Asset Generator — Supabase Edge Function Proxy
+ * Dream Asset Generator — Multi-Provider Image Generation
  *
- * Generates dream images via the Supabase Edge Function `generate-image`
- * instead of calling Pollinations/HuggingFace directly from the client.
- * Falls back to direct Pollinations calls if Supabase is not configured.
+ * Generates dream images using multiple providers with automatic fallback.
+ * Providers are tried in order of preference (cost/speed/reliability):
+ * 1. Supabase Edge Function (proxies Pollinations.ai) - FREE, CORS-safe
+ * 2. Direct Pollinations.ai - FREE, no API key needed
+ * 3. Fal AI - Very cheap (~$0.001/image), very fast
+ * 4. Local Generation (ComfyUI/A1111) - Free if you run it locally
+ * 5. HuggingFace Inference API - FREE tier available
+ * 6. SVG placeholder fallback - Always works
  *
  * Environment variables:
  *   VITE_SUPABASE_URL       — Your Supabase project URL
  *   VITE_SUPABASE_ANON_KEY  — Your Supabase anon/public key
+ *   VITE_FAL_AI_KEY         — Fal AI API key (optional, for faster/cheaper generation)
+ *   VITE_LOCAL_GEN_URL      — Local generation endpoint (e.g., http://localhost:7860 for A1111)
+ *   VITE_HF_INFERENCE_API_KEY — HuggingFace API key (optional)
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
@@ -18,6 +26,11 @@ export type { DreamAsset };
 
 const POLLINATIONS_API_URL = 'https://image.pollinations.ai/prompt';
 const HF_API_URL = 'https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0';
+const FAL_AI_API_URL = 'https://fal.run/fal-ai/fast-sdxl';
+
+// Local generation endpoints (user-configurable)
+const DEFAULT_COMFYUI_URL = 'http://localhost:8188';
+const DEFAULT_A1111_URL = 'http://localhost:7860';
 
 // ── Supabase Client ──────────────────────────────────────────
 
@@ -138,10 +151,13 @@ async function generateWithEdgeFunction(prompt: string, style: string = 'dreamli
  * Validates that the image URL actually loads before returning.
  */
 async function generateWithPollinations(prompt: string): Promise<DreamAsset> {
+  console.log('[AssetGen] Generating via Pollinations...');
   const enhancedPrompt = buildDreamPrompt(prompt);
   const encodedPrompt = encodeURIComponent(enhancedPrompt);
   const imageUrl = `${POLLINATIONS_API_URL}/${encodedPrompt}?width=1024&height=1024&nologo=true&seed=${Date.now() % 1000000}`;
 
+  console.log('[AssetGen] Pollinations URL:', imageUrl.substring(0, 100));
+  
   // Don't validate — Pollinations URLs are direct image links
   // The browser will handle loading/errors naturally
 
@@ -158,6 +174,256 @@ async function generateWithPollinations(prompt: string): Promise<DreamAsset> {
       note: 'Free unlimited generation',
     },
   };
+}
+
+/**
+ * Generate image using Fal AI — very fast and cheap (~$0.001/image).
+ * Requires VITE_FAL_AI_KEY environment variable.
+ */
+async function generateWithFalAI(prompt: string): Promise<DreamAsset> {
+  console.log('[AssetGen] Generating via Fal AI...');
+  const FAL_AI_KEY = import.meta.env.VITE_FAL_AI_KEY || '';
+  
+  if (!FAL_AI_KEY) {
+    throw new Error('Fal AI key not configured');
+  }
+
+  const enhancedPrompt = buildDreamPrompt(prompt);
+  
+  console.log('[AssetGen] Calling Fal AI API...');
+  const response = await fetch(FAL_AI_API_URL, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Key ${FAL_AI_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      prompt: enhancedPrompt,
+      image_size: { width: 1024, height: 1024 },
+      num_inference_steps: 28,
+      guidance_scale: 3.5,
+      negative_prompt: 'blurry, low quality, distorted, ugly, watermark',
+    }),
+  });
+
+  console.log('[AssetGen] Fal AI response status:', response.status);
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('[AssetGen] Fal AI error:', errorText);
+    throw new Error(`Fal AI API failed: ${response.status} - ${errorText}`);
+  }
+
+  const result = await response.json();
+  console.log('[AssetGen] Fal AI response received, image URL:', result.images?.[0]?.url?.substring(0, 80));
+  
+  if (!result.images?.[0]?.url) {
+    throw new Error('Fal AI returned no image URL');
+  }
+
+  return {
+    id: makeId(),
+    prompt: enhancedPrompt,
+    url: result.images[0].url,
+    source: 'fal-ai',
+    style: 'dreamlike',
+    generatedAt: new Date().toISOString(),
+    metadata: {
+      provider: 'fal.ai',
+      model: 'fast-sdxl',
+      note: 'Fast, cheap generation (~$0.001/image)',
+    },
+  };
+}
+
+/**
+ * Generate image using local ComfyUI or A1111 (AUTOMATIC1111) instance.
+ * Requires running Stable Diffusion locally.
+ * Configure via VITE_LOCAL_GEN_URL or use defaults.
+ */
+async function generateWithLocalProvider(prompt: string): Promise<DreamAsset> {
+  console.log('[AssetGen] Generating via local provider...');
+  
+  const localUrl = import.meta.env.VITE_LOCAL_GEN_URL || '';
+  let baseUrl = localUrl;
+  let provider: 'comfyui' | 'a1111' | 'unknown' = 'unknown';
+  
+  // Auto-detect or use specified provider
+  if (localUrl.includes('8188')) {
+    baseUrl = DEFAULT_COMFYUI_URL;
+    provider = 'comfyui';
+  } else if (localUrl.includes('7860')) {
+    baseUrl = DEFAULT_A1111_URL;
+    provider = 'a1111';
+  } else if (localUrl) {
+    // User provided custom URL, try A1111 first
+    baseUrl = localUrl;
+    provider = 'a1111';
+  } else {
+    throw new Error('No local generation URL configured');
+  }
+
+  const enhancedPrompt = buildDreamPrompt(prompt);
+  
+  if (provider === 'a1111') {
+    console.log('[AssetGen] Calling A1111 API...');
+    const response = await fetch(`${baseUrl}/sdapi/v1/txt2img`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt: enhancedPrompt,
+        negative_prompt: 'blurry, low quality, distorted, ugly, watermark',
+        steps: 20,
+        width: 1024,
+        height: 1024,
+        cfg_scale: 7,
+        sampler_name: 'Euler a',
+      }),
+    });
+
+    console.log('[AssetGen] A1111 response status:', response.status);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`A1111 API failed: ${response.status} - ${errorText}`);
+    }
+
+    const result = await response.json();
+    if (!result.images?.[0]) {
+      throw new Error('A1111 returned no images');
+    }
+
+    // Convert base64 to blob URL
+    const base64Image = result.images[0];
+    const blob = await fetch(`data:image/png;base64,${base64Image}`).then(r => r.blob());
+    const imageUrl = URL.createObjectURL(blob);
+    
+    console.log('[AssetGen] A1111 image generated successfully');
+    
+    return {
+      id: makeId(),
+      prompt: enhancedPrompt,
+      url: imageUrl,
+      source: 'local-a1111',
+      style: 'dreamlike',
+      generatedAt: new Date().toISOString(),
+      metadata: {
+        provider: 'local-comfyui',
+        model: 'stable-diffusion',
+        note: 'Generated locally on your machine',
+      },
+    };
+  } else if (provider === 'comfyui') {
+    console.log('[AssetGen] Calling ComfyUI API...');
+    
+    // ComfyUI workflow for txt2img
+    const workflow = {
+      "3": {
+        "class_type": "KSampler",
+        "inputs": {
+          "cfg": 7,
+          "denoise": 1,
+          "latent_image": ["5", 0],
+          "model": ["4", 0],
+          "negative": ["7", 0],
+          "positive": ["6", 0],
+          "sampler_name": "euler",
+          "scheduler": "normal",
+          "seed": Date.now(),
+          "steps": 20
+        }
+      },
+      "4": {
+        "class_type": "CheckpointLoaderSimple",
+        "inputs": { "ckpt_name": "v1-5-pruned-emaonly.ckpt" }
+      },
+      "5": {
+        "class_type": "EmptyLatentImage",
+        "inputs": { "batch_size": 1, "height": 1024, "width": 1024 }
+      },
+      "6": {
+        "class_type": "CLIPTextEncode",
+        "inputs": { "clip": ["4", 1], "text": enhancedPrompt }
+      },
+      "7": {
+        "class_type": "CLIPTextEncode",
+        "inputs": { "clip": ["4", 1], "text": "blurry, low quality, distorted, ugly" }
+      },
+      "8": {
+        "class_type": "VAEDecode",
+        "inputs": { "samples": ["3", 0], "vae": ["4", 2] }
+      },
+      "9": {
+        "class_type": "SaveImage",
+        "inputs": { "filename_prefix": "ComfyUI", "images": ["8", 0] }
+      }
+    };
+
+    const response = await fetch(`${baseUrl}/prompt`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: workflow }),
+    });
+
+    console.log('[AssetGen] ComfyUI response status:', response.status);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`ComfyUI API failed: ${response.status} - ${errorText}`);
+    }
+
+    const result = await response.json();
+    const promptId = result.prompt_id;
+    
+    // Poll for completion
+    console.log('[AssetGen] Waiting for ComfyUI generation to complete...');
+    let imageUrl: string | null = null;
+    let attempts = 0;
+    const maxAttempts = 30;
+    
+    while (attempts < maxAttempts && !imageUrl) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const historyResponse = await fetch(`${baseUrl}/history/${promptId}`);
+      if (historyResponse.ok) {
+        const history = await historyResponse.json();
+        if (history[promptId]?.outputs) {
+          const outputs = history[promptId].outputs;
+          for (const nodeId in outputs) {
+            const output = outputs[nodeId];
+            if (output.images) {
+              const img = output.images[0];
+              imageUrl = `${baseUrl}/view?filename=${img.filename}&subfolder=${img.subfolder}&type=${img.type}`;
+              break;
+            }
+          }
+        }
+      }
+      attempts++;
+    }
+    
+    if (!imageUrl) {
+      throw new Error('ComfyUI generation timed out');
+    }
+    
+    console.log('[AssetGen] ComfyUI image generated successfully');
+    
+    return {
+      id: makeId(),
+      prompt: enhancedPrompt,
+      url: imageUrl,
+      source: 'local-comfyui',
+      style: 'dreamlike',
+      generatedAt: new Date().toISOString(),
+      metadata: {
+        provider: 'local-comfyui',
+        model: 'stable-diffusion',
+        note: 'Generated locally on your machine',
+      },
+    };
+  }
+  
+  throw new Error('Unknown local provider');
 }
 
 /**
@@ -252,16 +518,25 @@ async function generateFallbackImage(prompt: string): Promise<DreamAsset> {
 // ── Main Exports ─────────────────────────────────────────────
 
 /**
- * Main image generation function — tries Supabase Edge Function first,
- * then falls back to direct Pollinations, then HuggingFace, and finally
- * a generated SVG placeholder if all else fails.
+ * Main image generation function — tries providers in order of preference:
+ * 1. Supabase Edge Function (handles CORS, proxies Pollinations) - FREE
+ * 2. Direct Pollinations.ai - FREE, no API key needed
+ * 3. Fal AI - Very cheap (~$0.001/image), very fast (requires API key)
+ * 4. Local Generation (ComfyUI/A1111) - Free if you run it locally
+ * 5. HuggingFace Inference API - FREE tier available
+ * 6. SVG placeholder fallback - Always works
+ * 
+ * Each step logs its progress for debugging.
  * 
  * @param prompt - The dream text or description to visualize
  * @returns Promise resolving to DreamAsset with image URL and metadata
  */
 export async function generateDreamImage(prompt: string): Promise<DreamAsset> {
+  console.log('[AssetGen] Starting image generation for prompt:', prompt.substring(0, 50));
+  
   try {
     // Try Supabase Edge Function first (handles CORS)
+    console.log('[AssetGen] Attempting Edge Function...');
     return await generateWithEdgeFunction(prompt);
   } catch (edgeError) {
     console.warn('[AssetGen] Edge function failed:', edgeError);
@@ -269,13 +544,31 @@ export async function generateDreamImage(prompt: string): Promise<DreamAsset> {
 
   try {
     // Fallback: Direct Pollinations (may have CORS issues in some browsers)
+    console.log('[AssetGen] Attempting Pollinations direct...');
     return await generateWithPollinations(prompt);
   } catch (pollinationsError) {
     console.warn('[AssetGen] Pollinations failed:', pollinationsError);
   }
 
   try {
-    // Second fallback: HuggingFace
+    // Third option: Fal AI (fast & cheap, requires API key)
+    console.log('[AssetGen] Attempting Fal AI...');
+    return await generateWithFalAI(prompt);
+  } catch (falError) {
+    console.warn('[AssetGen] Fal AI failed:', falError);
+  }
+
+  try {
+    // Fourth option: Local generation (ComfyUI or A1111)
+    console.log('[AssetGen] Attempting local provider...');
+    return await generateWithLocalProvider(prompt);
+  } catch (localError) {
+    console.warn('[AssetGen] Local provider failed:', localError);
+  }
+
+  try {
+    // Fifth option: HuggingFace
+    console.log('[AssetGen] Attempting HuggingFace...');
     return await generateWithHuggingFace(prompt);
   } catch (hfError) {
     console.warn('[AssetGen] HuggingFace failed:', hfError);
