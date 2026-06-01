@@ -16,7 +16,14 @@ export interface Dream {
   aiAnalysis?: {
     symbols: string[];
     themes: string[];
-    interpretation: string;
+    emotion?: string;
+    narrative?: string;
+    interpretation: {
+      symbols?: Record<string, string>;
+      meaning?: string;
+      commonPattern?: string;
+    } | string;
+    valence?: number;
   };
 }
 
