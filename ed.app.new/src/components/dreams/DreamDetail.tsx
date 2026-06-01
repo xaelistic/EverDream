@@ -294,8 +294,56 @@ function DreamDetailContent({
             </h3>
           </div>
 
+          {/* Emotion & Valence */}
+          {(dream.aiAnalysis.emotion || typeof dream.aiAnalysis.valence === 'number') && (
+            <div style={{ marginBottom: '20px' }}>
+              <h4 style={{
+                fontSize: '0.7rem', fontWeight: 600, color: '#9b96b0',
+                textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '8px',
+              }}>
+                Emotional Tone
+              </h4>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                {dream.aiAnalysis.emotion && (
+                  <Badge variant="default">{dream.aiAnalysis.emotion}</Badge>
+                )}
+                {typeof dream.aiAnalysis.valence === 'number' && (
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '6px',
+                    fontSize: '0.75rem',
+                    color: '#9b96b0',
+                  }}>
+                    <span>Valence:</span>
+                    <div style={{
+                      width: '100px',
+                      height: '6px',
+                      background: 'linear-gradient(to right, #c44569 0%, #9b96b0 50%, #5ec4a8 100%)',
+                      borderRadius: '3px',
+                      position: 'relative',
+                    }}>
+                      <div style={{
+                        position: 'absolute',
+                        left: `${((dream.aiAnalysis.valence || 0) + 1) / 2 * 100}%`,
+                        top: '50%',
+                        transform: 'translate(-50%, -50%)',
+                        width: '12px',
+                        height: '12px',
+                        background: '#9b8fd4',
+                        borderRadius: '50%',
+                        border: '2px solid white',
+                      }} />
+                    </div>
+                    <span>{(dream.aiAnalysis.valence || 0).toFixed(2)}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Symbols */}
-          {dream.aiAnalysis.symbols.length > 0 && (
+          {dream.aiAnalysis.symbols && dream.aiAnalysis.symbols.length > 0 && (
             <div style={{ marginBottom: '20px' }}>
               <h4 style={{
                 fontSize: '0.7rem', fontWeight: 600, color: '#9b96b0',
@@ -313,7 +361,7 @@ function DreamDetailContent({
           )}
 
           {/* Themes */}
-          {dream.aiAnalysis.themes.length > 0 && (
+          {dream.aiAnalysis.themes && dream.aiAnalysis.themes.length > 0 && (
             <div style={{ marginBottom: '20px' }}>
               <h4 style={{
                 fontSize: '0.7rem', fontWeight: 600, color: '#9b96b0',
@@ -330,6 +378,27 @@ function DreamDetailContent({
             </div>
           )}
 
+          {/* Narrative */}
+          {dream.aiAnalysis.narrative && (
+            <div style={{ marginBottom: '20px' }}>
+              <h4 style={{
+                fontSize: '0.7rem', fontWeight: 600, color: '#9b96b0',
+                textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '8px',
+              }}>
+                Enhanced Narrative
+              </h4>
+              <p style={{
+                fontSize: '0.85rem',
+                color: '#4a4860',
+                lineHeight: 1.7,
+                margin: 0,
+                fontStyle: 'italic',
+              }}>
+                "{dream.aiAnalysis.narrative}"
+              </p>
+            </div>
+          )}
+
           {/* Interpretation */}
           {dream.aiAnalysis.interpretation && (
             <div>
@@ -339,15 +408,65 @@ function DreamDetailContent({
               }}>
                 Interpretation
               </h4>
-              <p style={{
-                fontSize: '0.85rem',
-                color: '#4a4860',
-                lineHeight: 1.7,
-                margin: 0,
-                fontStyle: 'italic',
-              }}>
-                "{dream.aiAnalysis.interpretation}"
-              </p>
+              {typeof dream.aiAnalysis.interpretation === 'string' ? (
+                <p style={{
+                  fontSize: '0.85rem',
+                  color: '#4a4860',
+                  lineHeight: 1.7,
+                  margin: 0,
+                  fontStyle: 'italic',
+                }}>
+                  "{dream.aiAnalysis.interpretation}"
+                </p>
+              ) : (
+                <>
+                  {dream.aiAnalysis.interpretation.meaning && (
+                    <p style={{
+                      fontSize: '0.85rem',
+                      color: '#4a4860',
+                      lineHeight: 1.7,
+                      margin: '0 0 12px 0',
+                    }}>
+                      <strong>Meaning:</strong> {dream.aiAnalysis.interpretation.meaning}
+                    </p>
+                  )}
+                  {dream.aiAnalysis.interpretation.commonPattern && (
+                    <p style={{
+                      fontSize: '0.85rem',
+                      color: '#4a4860',
+                      lineHeight: 1.7,
+                      margin: '0 0 12px 0',
+                    }}>
+                      <strong>Common Pattern:</strong> {dream.aiAnalysis.interpretation.commonPattern}
+                    </p>
+                  )}
+                  {dream.aiAnalysis.interpretation.symbols && Object.keys(dream.aiAnalysis.interpretation.symbols).length > 0 && (
+                    <div>
+                      <p style={{
+                        fontSize: '0.75rem',
+                        color: '#9b96b0',
+                        margin: '0 0 8px 0',
+                        fontWeight: 600,
+                      }}>
+                        Symbol Meanings:
+                      </p>
+                      <ul style={{
+                        fontSize: '0.8rem',
+                        color: '#4a4860',
+                        lineHeight: 1.6,
+                        margin: 0,
+                        paddingLeft: '16px',
+                      }}>
+                        {Object.entries(dream.aiAnalysis.interpretation.symbols).map(([symbol, meaning]) => (
+                          <li key={symbol}>
+                            <strong>{symbol}:</strong> {meaning}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
         </Card>
