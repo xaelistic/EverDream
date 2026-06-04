@@ -7,7 +7,6 @@ import {
   Upload,
   Zap,
   Heart,
-  Search,
   Award,
   MessageCircle,
   Brain,
@@ -28,6 +27,7 @@ import Shell from './components/Shell';
 import { TrackerScreen } from './components/tracker/TrackerScreen';
 import { HomeScreen } from './screens/HomeScreen';
 import { ReflectionScreen } from './screens/ReflectionScreen';
+import { JournalScreen } from './screens/JournalScreen';
 import { useHashRoute } from './hooks/useHashRoute';
 import { getCategoryBadgeClass, getEmotionEmoji } from './utils/dreamPresentation';
 import PhotoUploadFlow from './components/photo-upload/PhotoUploadFlow';
@@ -1518,68 +1518,27 @@ const DreamJournalApp = () => {
         )}
 
         {route.screen === 'journal' && (
-          <div className="space-y-4">
-            {/* Error Banner */}
-            {dreamError && (
-              <ErrorBanner
-                error={dreamError}
-                onDismiss={() => setDreamError(null)}
-                onRetry={() => {
-                  setDreamError(null);
-                  setIsLoadingDreams(true);
-                  window.location.reload();
-                }}
-              />
-            )}
-
-            <div className="flex items-center gap-3 mb-4">
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted" strokeWidth={1.75} />
-                <input
-                  type="text"
-                  placeholder="Search dreams..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-cream border border-line rounded-xl pl-10 pr-4 py-2.5 text-ink placeholder:text-muted/70 text-sm focus:outline-none focus:ring-2 focus:ring-sage/35 shadow-paper"
-                />
-              </div>
-              <select
-                value={filterCategory}
-                onChange={(e) => setFilterCategory(e.target.value)}
-                className="bg-cream border border-line rounded-xl px-3 py-2.5 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-sage/35 shadow-paper shrink-0"
-              >
-                <option value="all">All Types</option>
-                <option value="peaceful">Peaceful</option>
-                <option value="lucid">Lucid</option>
-                <option value="nightmare">Nightmare</option>
-                <option value="adventure">Adventure</option>
-                <option value="anxiety">Anxiety</option>
-              </select>
-            </div>
-
-            <h2 className="font-serif text-2xl font-medium text-ink mb-1">Dream journal</h2>
-            <p className="text-sm text-muted mb-4">Browse everything you have captured.</p>
-
-            {/* Loading State */}
-            {isLoadingDreams ? (
-              <LoadingOverlay message="Loading your dreams..." />
-            ) : filteredDreams.length === 0 ? (
-              <EmptyState icon={Calendar} message="No dreams match your search" />
-            ) : (
-              <div className="space-y-3">
-                {filteredDreams.map(dream => (
-                  <DreamCard 
-                    key={dream.id} 
-                    dream={dream} 
-                    getCategoryBadgeClass={getCategoryBadgeClass} 
-                    getEmotionEmoji={getEmotionEmoji}
-                    onShare={shareDream}
-                    onClick={() => navigate('dream', dream.id)}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
+          <JournalScreen
+            dreams={dreams}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            filterCategory={filterCategory}
+            setFilterCategory={setFilterCategory}
+            isLoadingDreams={isLoadingDreams}
+            dreamError={dreamError}
+            onDismissError={() => setDreamError(null)}
+            onRetry={() => {
+              setDreamError(null);
+              setIsLoadingDreams(true);
+              window.location.reload();
+            }}
+            onNavigate={navigate}
+            onShare={shareDream}
+            getCategoryBadgeClass={getCategoryBadgeClass}
+            getEmotionEmoji={getEmotionEmoji}
+            ErrorBanner={ErrorBanner}
+            LoadingOverlay={LoadingOverlay}
+          />
         )}
 
         {route.screen === 'tracker' && (
