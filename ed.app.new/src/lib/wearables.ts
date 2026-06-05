@@ -5,6 +5,10 @@
  *           Samsung Health, Huawei Health, Xiaomi Mi Fitness,
  *           Garmin Connect, Withings, Amazfit, Polar, Sony
  *
+ * Features:
+ * - READ: Fetch sleep data from all supported wearables
+ * - WRITE: Write dream and sleep quality data back to Apple HealthKit & Google Fit
+ *
  * All APIs return normalized WearableSleepRecord format
  *
  * API Documentation:
@@ -269,6 +273,192 @@ export async function fetchGoogleFitSleep(auth: WearableAuth, startDate: string,
   return records;
 }
 
+/**
+ * Write dream data to Google Fit
+ * 
+ * Google Fit doesn't have a native "dream" category, but we can:
+ * 1. Write as a custom data type using com.google.dream.journaling
+ * 2. Store dream metadata in session notes
+ * 3. Use Health Data Types with custom metadata
+ * 
+ * @param auth - Google Fit authentication credentials
+ * @param dreamData - Dream information to write
+ * @returns Success status
+ */
+export async function writeDreamToGoogleFit(
+  auth: WearableAuth,
+  dreamData: {
+    date: string;
+    content: string;
+    emotion?: string;
+    category?: string;
+    sleepQuality?: number;
+    duration?: number;
+  }
+): Promise<{ success: boolean; message: string }> {
+  try {
+    // Google Fit approach: Create a session for dream journaling
+    const startTime = new Date(dreamData.date + 'T07:00:00.000Z');
+    const endTime = new Date(startTime.getTime() + (dreamData.duration || 5) * 60000);
+
+    // Create a session for the dream journaling activity
+    const sessionPayload = {
+      startTimeMillis: startTime.getTime().toString(),
+      endTimeMillis: endTime.getTime().toString(),
+      name: `Dream Journal - ${dreamData.emotion || 'Unknown'}`,
+      description: dreamData.content.substring(0, 500), // Truncate for description
+      activityType: 72, // 72 = Sleep (closest available)
+      application: {
+        name: 'Everdream',
+        packageName: 'com.everdream.app',
+      },
+    };
+
+    const sessionRes = await fetch(
+      `${GOOGLE_FIT_API_BASE}/users/me/sessions`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${auth.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(sessionPayload),
+      }
+    );
+
+    if (!sessionRes.ok) {
+      throw new Error(`Google Fit session error: ${sessionRes.status}`);
+    }
+
+    // Optionally, write custom data points with dream metadata
+    // Using the dataset API for custom data types
+    const datasetPayload = {
+      dataSourceId: 'derived:com.google.dream.journaling:com.everdream.app:dream_data',
+      maxTimeNs: (endTime.getTime() * 1000000).toString(),
+      minTimeNs: (startTime.getTime() * 1000000).toString(),
+      point: [
+        {
+          startTimeMillis: startTime.getTime().toString(),
+          endTimeMillis: endTime.getTime().toString(),
+          dataTypeName: 'com.google.dream.journaling',
+          value: [
+            {
+              mapValue: {
+                key: [{
+                  stringVal: dreamData.emotion || '',
+                }, {
+                  stringVal: dreamData.category || '',
+                }, {
+                  intVal: dreamData.sleepQuality || 0,
+                }],
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    // Note: Custom data types may require registration
+    // This is a best-effort write that may need server-side setup
+    try {
+      const datasetRes = await fetch(
+        `${GOOGLE_FIT_API_BASE}/users/me/datasets/derived:com.google.dream.journaling:com.everdream.app:dream_data`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${auth.accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(datasetPayload),
+        }
+      );
+
+      if (!datasetRes.ok) {
+        console.warn('Custom dream data write failed, but session was created');
+      }
+    } catch (datasetError) {
+      console.warn('Dataset write skipped:', datasetError);
+    }
+
+    return {
+      success: true,
+      message: 'Dream session written to Google Fit',
+    };
+  } catch (error) {
+    console.error('Google Fit write error:', error);
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Failed to write to Google Fit',
+    };
+  }
+}
+
+/**
+ * Write sleep quality and dream insights to Google Fit
+ * 
+ * Enhances existing sleep data with dream-derived metrics
+ */
+export async function writeSleepScoreToGoogleFit(
+  auth: WearableAuth,
+  sleepData: {
+    date: string;
+    bedtime: string;
+    wakeTime: string;
+    qualityScore: number; // 0-100
+    dreamLogged: boolean;
+    dreamEmotion?: string;
+    remMinutes?: number;
+    deepMinutes?: number;
+  }
+): Promise<{ success: boolean; message: string }> {
+  try {
+    const startMs = new Date(sleepData.bedtime).getTime();
+    const endMs = new Date(sleepData.wakeTime).getTime();
+
+    // Update or create sleep session with enhanced metadata
+    const sessionPayload = {
+      startTimeMillis: startMs.toString(),
+      endTimeMillis: endMs.toString(),
+      name: `Sleep - Quality: ${sleepData.qualityScore}`,
+      description: sleepData.dreamLogged 
+        ? `Dream logged${sleepData.dreamEmotion ? ': ' + sleepData.dreamEmotion : ''}`
+        : 'No dream recorded',
+      activityType: 72, // Sleep
+      application: {
+        name: 'Everdream',
+        packageName: 'com.everdream.app',
+      },
+    };
+
+    const res = await fetch(
+      `${GOOGLE_FIT_API_BASE}/users/me/sessions`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${auth.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(sessionPayload),
+      }
+    );
+
+    if (!res.ok) {
+      throw new Error(`Google Fit API error: ${res.status}`);
+    }
+
+    return {
+      success: true,
+      message: 'Sleep quality and dream info written to Google Fit',
+    };
+  } catch (error) {
+    console.error('Google Fit sleep write error:', error);
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Failed to write sleep score to Google Fit',
+    };
+  }
+}
+
 // ============================================================
 // APPLE HEALTHKIT (via HealthKit Web / bridge)
 // ============================================================
@@ -341,6 +531,146 @@ export async function fetchAppleHealthSleep(auth: WearableAuth, startDate: strin
   }
 
   return records;
+}
+
+/**
+ * Write dream data to Apple HealthKit
+ * 
+ * Note: This requires native iOS integration via Capacitor/Cordova plugin
+ * or a server-side HealthKit API bridge.
+ * 
+ * For web apps, this is a placeholder that demonstrates the data structure.
+ * In production, use @capacitor/healthkit or similar native bridge.
+ * 
+ * @param auth - Apple Health authentication credentials
+ * @param dreamData - Dream information to write
+ * @returns Success status
+ */
+export async function writeDreamToAppleHealth(
+  auth: WearableAuth,
+  dreamData: {
+    date: string;
+    content: string;
+    emotion?: string;
+    category?: string;
+    sleepQuality?: number;
+    duration?: number;
+  }
+): Promise<{ success: boolean; message: string }> {
+  try {
+    // Apple HealthKit doesn't have a native "dream" category
+    // We can write dream data as:
+    // 1. Mindful Minutes (for dream journaling time)
+    // 2. Sleep Analysis with custom notes
+    // 3. Custom workout type "Dream Journaling"
+    
+    // Option 1: Write as Mindful Minutes (closest HealthKit category)
+    const mindfulPayload = {
+      type: 'HKCategoryTypeIdentifierMindfulMoment',
+      startDate: dreamData.date + 'T07:00:00', // Morning after dream
+      endDate: new Date(new Date(dreamData.date + 'T07:00:00').getTime() + 5 * 60000).toISOString(),
+      value: 1, // Active
+      metadata: {
+        HKMetadataKeyExternalUUID: `dream-${Date.now()}`,
+        HKMetadataKeySyncIdentifier: `dream-${Date.now()}`,
+        dreamContent: dreamData.content.substring(0, 100), // Truncate for metadata
+        dreamEmotion: dreamData.emotion || '',
+        dreamCategory: dreamData.category || '',
+        dreamSleepQuality: dreamData.sleepQuality?.toString() || '',
+      },
+    };
+
+    const res = await fetch(
+      `${APPLE_HEALTH_BASE}/samples`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${auth.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(mindfulPayload),
+      }
+    );
+
+    if (!res.ok) {
+      throw new Error(`Apple Health API error: ${res.status}`);
+    }
+
+    return {
+      success: true,
+      message: 'Dream data written to Apple Health as Mindful Moment',
+    };
+  } catch (error) {
+    console.error('Apple Health write error:', error);
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Failed to write to Apple Health',
+    };
+  }
+}
+
+/**
+ * Write sleep quality score to Apple HealthKit
+ * 
+ * Uses HKCategoryTypeIdentifierSleepAnalysis for sleep data
+ * and stores dream-derived insights as metadata
+ */
+export async function writeSleepScoreToAppleHealth(
+  auth: WearableAuth,
+  sleepData: {
+    date: string;
+    bedtime: string;
+    wakeTime: string;
+    qualityScore: number; // 0-100
+    dreamLogged: boolean;
+    dreamEmotion?: string;
+  }
+): Promise<{ success: boolean; message: string }> {
+  try {
+    // Convert quality score to HealthKit sleep quality (0-1)
+    const normalizedQuality = sleepData.qualityScore / 100;
+    
+    const sleepPayload = {
+      type: 'HKCategoryTypeIdentifierSleepAnalysis',
+      startDate: sleepData.bedtime,
+      endDate: sleepData.wakeTime,
+      value: normalizedQuality > 0.7 ? 1 : 0, // 1 = Asleep, 0 = InBed
+      metadata: {
+        HKMetadataKeyExternalUUID: `sleep-quality-${sleepData.date}`,
+        HKMetadataKeySyncIdentifier: `sleep-quality-${sleepData.date}`,
+        everdream_quality_score: sleepData.qualityScore.toString(),
+        everdream_dream_logged: sleepData.dreamLogged.toString(),
+        everdream_dream_emotion: sleepData.dreamEmotion || '',
+      },
+    };
+
+    const res = await fetch(
+      `${APPLE_HEALTH_BASE}/samples`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${auth.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(sleepPayload),
+      }
+    );
+
+    if (!res.ok) {
+      throw new Error(`Apple Health API error: ${res.status}`);
+    }
+
+    return {
+      success: true,
+      message: 'Sleep quality written to Apple Health',
+    };
+  } catch (error) {
+    console.error('Apple Health sleep write error:', error);
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : 'Failed to write sleep score to Apple Health',
+    };
+  }
 }
 
 // ============================================================
