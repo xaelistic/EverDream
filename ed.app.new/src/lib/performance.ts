@@ -4,7 +4,7 @@
  * Tracks:
  * - Page load timing (TTFB, DOM ready, full load)
  * - Screen render times (time to interactive per route)
- * - API call latency (Anthropic, Whisper, image gen, etc.)
+ * - API call latency (AI provider, Whisper, image gen, etc.)
  * - Memory usage (JS heap)
  * - Long tasks (main thread blocking > 50ms)
  * - Network status
@@ -36,7 +36,7 @@ export type PerformanceMetricType =
   | 'fps';
 
 export interface APICallMetric {
-  api: string;            // 'anthropic', 'whisper', 'image_gen', etc.
+  api: string;            // 'ai-provider', 'whisper', 'image_gen', etc.
   endpoint: string;
   method: string;
   startTime: number;

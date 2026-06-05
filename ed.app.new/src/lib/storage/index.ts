@@ -51,7 +51,7 @@ import {
   notifySleepSessionCompleted,
   notifyMorningCheckIn,
 } from '../api/webhooks';
-import { analyzeDreamWithAI } from '../api/anthropic';
+import { analyzeDreamWithAI } from '../api/ai-provider';
 
 // ============================================================
 // DREAM API

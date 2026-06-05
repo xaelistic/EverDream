@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { Button, Card } from '../ui';
 import { Mic, Camera, Type, Sparkles, Save } from 'lucide-react';
-import { analyzeDreamWithAI } from '../../lib/api/anthropic';
+import { analyzeDreamWithAI } from '../../lib/api/ai-provider';
 import { useRateLimiter } from '../../lib/hooks/useDebounce';
 import { ErrorBanner, InlineError } from '../ui/ErrorBanner';
 
