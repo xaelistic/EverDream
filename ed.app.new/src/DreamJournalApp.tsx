@@ -44,7 +44,7 @@ import AdminDashboard from './components/admin/AdminDashboard';
 import { useSkinFull } from './contexts/SkinContext';
 import { trackScreenView, startSession, endSession } from './lib/analytics';
 import { initPerformanceMonitor, startAPICall, endAPICall } from './lib/performance';
-import { AppLoadingScreen, ErrorBanner, LoadingOverlay } from './components/ui';
+import { AppLoadingScreen, ErrorBanner, LoadingOverlay, Card } from './components/ui';
 import { getOrCreateWallet, createDreamNFT, mintNFT, saveNFT, type DreamNFT, type WalletIdentity } from './lib/nft';
 import DreamVisualizer from './components/dreams/DreamVisualizer';
 import DreamCapture from './components/dreams/DreamCapture';
