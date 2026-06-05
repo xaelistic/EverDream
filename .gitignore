@@ -1,7 +1,8 @@
+```
 # Dependencies
 node_modules/
 
-# Build artifacts
+# Build outputs
 dist/
 build/
 target/
@@ -10,10 +11,6 @@ target/
 .env
 .env.local
 *.env.*
-
-# IDE specific
-.vscode/
-.idea/
 
 # Python
 __pycache__/
@@ -34,40 +31,43 @@ nosetests.xml
 coverage.xml
 *.cover
 *.log
-.git/modules/
-*.tmproj
-*.swp
-*.swo
-*~
-.DS_Store
-Thumbs.db
+*.tmp
 
-# TypeScript/JavaScript
-*.tsbuildinfo
-*.js.map
-*.jsx.map
-*.ts.map
-*.tsx.map
-next-env.d.ts
-
-# React Native / Expo
-.expo/
-.expo-shared/
-node_modules/
-*.apk
-*.aab
-*.ipa
-*.app
+# Compiled and binary files
+*.class
+*.o
+*.obj
 *.exe
 *.dll
 *.so
-*.dylib
-*.jar
-*.war
-*.ear
+*.a
+*.out
+
+# Editor/IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Testing
+.coverage
+htmlcov/
+.nyc_output
+coverage/
+junit.xml
+test-results/
+
+# Logs
+*.log
+
+# Compressed files
 *.zip
-*.tar
 *.gz
+*.tar
 *.tgz
 *.bz2
 *.xz
@@ -87,24 +87,4 @@ node_modules/
 *.tar.bz2
 *.tar.xz
 *.tar.zst
-coverage/
-htmlcov/
-.mypy_cache/
-.pytest_cache/
-.gradle/
-*.class
-*.o
-*.obj
-*.out
-.a
-.so
-.dll
-.exe
-.jar
-.war
-.ear
-.log
-.tmp
-.swp
-.swo
-*~
+```

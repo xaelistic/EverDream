@@ -365,10 +365,31 @@ export interface MoodEntry {
   context: 'morning' | 'evening' | 'wind_down' | 'custom';
 }
 
+// Safe localStorage helpers for mood history
+function safeGetMoodHistory(): string | null {
+  try {
+    return localStorage.getItem('ed_mood_history_xy');
+  } catch (e) {
+    console.warn('[EmojiWheel] Failed to access mood history:', e);
+    return null;
+  }
+}
+
+function safeSetMoodHistory(data: string): void {
+  try {
+    localStorage.setItem('ed_mood_history_xy', data);
+  } catch (e) {
+    console.warn('[EmojiWheel] Failed to save mood history:', e);
+  }
+}
+
 export function getMoodHistory(): MoodEntry[] {
   try {
-    return JSON.parse(localStorage.getItem('ed_mood_history_xy') || '[]');
-  } catch { return []; }
+    const data = safeGetMoodHistory();
+    return data ? JSON.parse(data) : [];
+  } catch { 
+    return []; 
+  }
 }
 
 export function addMoodEntry(entry: Omit<MoodEntry, 'id'>): void {
@@ -377,7 +398,7 @@ export function addMoodEntry(entry: Omit<MoodEntry, 'id'>): void {
   // Keep last 90 days
   const cutoff = Date.now() - 90 * 86400000;
   const trimmed = history.filter(e => e.timestamp > cutoff);
-  localStorage.setItem('ed_mood_history_xy', JSON.stringify(trimmed));
+  safeSetMoodHistory(JSON.stringify(trimmed));
 }
 
 export function getMoodTrend(days: number = 7): { date: string; avgValence: number; avgEnergy: number; count: number }[] {

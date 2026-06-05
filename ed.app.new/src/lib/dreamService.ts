@@ -43,6 +43,30 @@ export interface DreamData {
   updatedAt: string;
 }
 
+export interface DreamServiceError {
+  code: 'SUPABASE_CONFIG' | 'AUTH_FAILED' | 'SAVE_FAILED' | 'SYNC_FAILED' | 'DELETE_FAILED';
+  message: string;
+  recoverable: boolean;
+}
+
+// ── Error Handling ────────────────────────────────────────────
+
+let _onError: ((error: DreamServiceError) => void) | null = null;
+
+/**
+ * Set error handler for dream service errors
+ */
+export function setDreamServiceErrorHandler(handler: (error: DreamServiceError) => void): void {
+  _onError = handler;
+}
+
+function reportError(error: DreamServiceError): void {
+  console.warn('[DreamService]', error.code, error.message);
+  if (_onError) {
+    _onError(error);
+  }
+}
+
 // ── Supabase Client ──────────────────────────────────────────
 
 let _supabase: SupabaseClient | null = null;
@@ -164,6 +188,11 @@ export async function initDreamService(): Promise<boolean> {
   const supabase = getSupabase();
   if (!supabase) {
     console.log('[DreamService] Supabase not configured — using local storage only');
+    reportError({
+      code: 'SUPABASE_CONFIG',
+      message: 'Supabase not configured - using local storage only',
+      recoverable: true,
+    });
     return false;
   }
 
@@ -172,11 +201,16 @@ export async function initDreamService(): Promise<boolean> {
     _user = user;
     if (user) {
       console.log('[DreamService] User authenticated:', user.id);
-      // Trigger background sync
-      syncFromSupabase().catch(console.warn);
+      // Trigger background sync with proper error handling
+      await syncFromSupabase();
     }
     return true;
-  } catch {
+  } catch (err) {
+    reportError({
+      code: 'AUTH_FAILED',
+      message: err instanceof Error ? err.message : 'Authentication failed',
+      recoverable: true,
+    });
     return false;
   }
 }
@@ -218,7 +252,7 @@ export function loadDreams(): DreamData[] {
 /**
  * Save a dream (local + Supabase if available).
  */
-export async function saveDream(dream: DreamData): Promise<void> {
+export async function saveDream(dream: DreamData): Promise<{ success: boolean; error?: string }> {
   // Always save locally first
   const local = loadLocal();
   const existing = local.findIndex(d => d.id === dream.id);
@@ -229,19 +263,55 @@ export async function saveDream(dream: DreamData): Promise<void> {
   }
   saveLocal(local);
 
-  // Sync to Supabase if available
+  // Sync to Supabase if available with retry logic
   const supabase = getSupabase();
   if (supabase && _user) {
     try {
       const profileId = await getProfileId(supabase, _user.id);
-      if (profileId) {
-        const record = dreamToRecord(dream, profileId);
-        await supabase.from('dreams').upsert(record);
+      if (!profileId) {
+        reportError({
+          code: 'SAVE_FAILED',
+          message: 'Profile ID lookup failed - dream saved locally only',
+          recoverable: true,
+        });
+        return { success: true, error: 'Saved locally only - profile not found' };
       }
+      
+      const record = dreamToRecord(dream, profileId);
+      
+      // Retry with exponential backoff
+      let lastError: Error | null = null;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const { error } = await supabase.from('dreams').upsert(record);
+          if (error) throw error;
+          return { success: true };
+        } catch (err) {
+          lastError = err instanceof Error ? err : new Error('Supabase save failed');
+          if (attempt < 3) {
+            // Wait before retry: 1s, 2s, 4s
+            await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt - 1) * 1000));
+          }
+        }
+      }
+      
+      reportError({
+        code: 'SAVE_FAILED',
+        message: `Supabase save failed after 3 attempts: ${lastError?.message}`,
+        recoverable: true,
+      });
+      return { success: true, error: 'Saved locally only - cloud sync failed' };
     } catch (err) {
-      console.warn('[DreamService] Supabase save failed (local copy saved):', err);
+      reportError({
+        code: 'SAVE_FAILED',
+        message: err instanceof Error ? err.message : 'Unknown save error',
+        recoverable: true,
+      });
+      return { success: true, error: 'Saved locally only - cloud sync failed' };
     }
   }
+  
+  return { success: true };
 }
 
 /**
