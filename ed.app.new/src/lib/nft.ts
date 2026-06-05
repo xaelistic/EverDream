@@ -117,6 +117,9 @@ const DEVICE_SEED_KEY = 'ed_device_seed';
  * 1. Using user's password with PBKDF2 for key derivation
  * 2. Storing encrypted data server-side instead of localStorage
  * 3. Using httpOnly cookies for sensitive session data
+ * 
+ * NOTE: Device-based key derivation is still vulnerable to spoofing.
+ * For maximum security, implement user authentication with password-based key derivation.
  */
 async function simpleEncrypt(text: string): Promise<string> {
   // Generate a device-specific key using stable device characteristics
@@ -129,9 +132,11 @@ async function simpleEncrypt(text: string): Promise<string> {
   const salt = saltData.slice(0, 16); // Use first 16 bytes as salt
   
   // Derive a key from the salt using PBKDF2
+  // SECURITY FIX: Removed hardcoded key - now using pure device-derived key
+  // This is still not ideal for production; use password-based derivation instead
   const keyMaterial = await crypto.subtle.importKey(
     'raw',
-    encoder.encode('everdream-base-key-v2'), // Base key (still not ideal, but better)
+    salt, // Use the salt itself as key material for derivation
     { name: 'PBKDF2' },
     false,
     ['deriveBits', 'deriveKey']
@@ -187,9 +192,10 @@ async function simpleDecrypt(encrypted: string): Promise<string> {
   const saltData = await crypto.subtle.digest('SHA-256', encoder.encode(deviceData));
   const salt = saltData.slice(0, 16);
   
+  // SECURITY FIX: Removed hardcoded key - now using pure device-derived key
   const keyMaterial = await crypto.subtle.importKey(
     'raw',
-    encoder.encode('everdream-base-key-v2'),
+    salt, // Use the salt itself as key material for derivation
     { name: 'PBKDF2' },
     false,
     ['deriveBits', 'deriveKey']
