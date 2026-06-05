@@ -157,14 +157,14 @@ async function generateWithEdgeFunction(prompt: string, style: string = 'dreamli
 
 /**
  * Generate image using Pollinations.ai — FREE tier with optimized parameters.
- * Uses 512x512 resolution which works on free tier (no nologo parameter).
+ * Uses direct URL format which works reliably without CORS issues.
  */
 async function generateWithPollinations(prompt: string): Promise<DreamAsset> {
   console.log('[AssetGen] Generating via Pollinations...');
   const enhancedPrompt = buildDreamPrompt(prompt);
   const encodedPrompt = encodeURIComponent(enhancedPrompt);
-  // Use 512x512 without nologo for free tier compatibility
-  const imageUrl = `${POLLINATIONS_API_URL}/${encodedPrompt}?width=512&height=512&seed=${Date.now() % 1000000}`;
+  // Use direct pollinations.ai URL with reliable parameters
+  const imageUrl = `${POLLINATIONS_API_URL}/${encodedPrompt}?width=1024&height=1024&seed=${Date.now() % 1000000}&nologo=true`;
 
   console.log('[AssetGen] Pollinations URL:', imageUrl.substring(0, 100));
   
@@ -181,7 +181,7 @@ async function generateWithPollinations(prompt: string): Promise<DreamAsset> {
     metadata: {
       provider: 'pollinations.ai',
       model: 'flux',
-      note: 'Free tier - 512x512 resolution',
+      note: 'Free tier - 1024x1024 resolution',
     },
   };
 }
@@ -508,7 +508,7 @@ async function generateFallbackImage(prompt: string): Promise<DreamAsset> {
  * @param prompt - The dream text or description to visualize
  * @returns Promise resolving to DreamAsset with image URL and metadata
  */
-export async function generateDreamImage(prompt: string): Promise<DreamAsset> {
+export async function generateDreamImage(prompt: string, style?: string): Promise<DreamAsset> {
   console.log('[AssetGen] Starting image generation for prompt:', prompt.substring(0, 50));
   
   // ========== STAGE 1: Cloud APIs ==========
@@ -516,7 +516,7 @@ export async function generateDreamImage(prompt: string): Promise<DreamAsset> {
   try {
     // First: Try Puter.com AI API (FREE, simple)
     console.log('[AssetGen] Attempting Puter.com AI...');
-    return await generateWithPuter(prompt);
+    return await generateWithPuter(prompt, style);
   } catch (puterError) {
     console.warn('[AssetGen] Puter.com failed:', puterError);
   }
@@ -524,7 +524,7 @@ export async function generateDreamImage(prompt: string): Promise<DreamAsset> {
   try {
     // Second: Try Supabase Edge Function (handles CORS)
     console.log('[AssetGen] Attempting Edge Function...');
-    return await generateWithEdgeFunction(prompt);
+    return await generateWithEdgeFunction(prompt, style);
   } catch (edgeError) {
     console.warn('[AssetGen] Edge function failed:', edgeError);
   }
