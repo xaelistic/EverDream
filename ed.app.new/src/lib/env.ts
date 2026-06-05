@@ -8,7 +8,7 @@
 export interface EnvConfig {
   supabaseUrl?: string;
   supabaseAnonKey?: string;
-  anthropicApiKey?: string;
+  openRouterApiKey?: string;
   hfInferenceApiKey?: string;
   falAiKey?: string;
   localGenUrl?: string;
@@ -54,7 +54,7 @@ export function validateEnvVariables(): ValidationResult {
   }
 
   // Optional API keys
-  config.anthropicApiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
+  config.openRouterApiKey = import.meta.env.VITE_OPENROUTER_API_KEY;
   config.hfInferenceApiKey = import.meta.env.VITE_HF_INFERENCE_API_KEY;
   config.falAiKey = import.meta.env.VITE_FAL_AI_KEY;
   config.localGenUrl = import.meta.env.VITE_LOCAL_GEN_URL;
@@ -101,7 +101,7 @@ export function initEnvValidation(): void {
 
   console.log('[Env Validation] Configuration:', {
     supabase: !!result.config.supabaseUrl,
-    anthropic: !!result.config.anthropicApiKey,
+    openRouter: !!result.config.openRouterApiKey,
     hfInference: !!result.config.hfInferenceApiKey,
     falAi: !!result.config.falAiKey,
     localGen: !!result.config.localGenUrl,

@@ -1,9 +1,14 @@
 /**
- * Anthropic API Client — Supabase Edge Function Proxy
+ * AI Provider Client — Supabase Edge Function Proxy
  *
  * Routes all AI dream analysis through the Supabase Edge Function
- * `analyze-dream` instead of calling Anthropic directly from the client.
- * This keeps the API key server-side and avoids CORS issues.
+ * `analyze-dream` instead of calling AI providers directly from the client.
+ * This keeps API keys server-side and avoids CORS issues.
+ *
+ * Supports multiple providers via OpenRouter (cheapest/free models first):
+ * - OpenRouter free tier (Google Gemini, Qwen, MythoMax, etc.)
+ * - Pollinations Text API (free, unlimited)
+ * - NVIDIA Nemotron (open source, cost-effective)
  *
  * Includes rate limiting, retry logic, and user-friendly error handling.
  *
@@ -11,7 +16,6 @@
  *   VITE_SUPABASE_URL       — Your Supabase project URL
  *   VITE_SUPABASE_ANON_KEY  — Your Supabase anon/public key
  *
- * BUG-001 FIX: No longer calls api.anthropic.com from the browser.
  * All requests go through supabase.functions.invoke('analyze-dream').
  */
 
@@ -138,7 +142,7 @@ async function delay(ms: number): Promise<void> {
 // ── Main Analysis Function ───────────────────────────────────
 
 /**
- * Analyze a dream using Claude AI via Supabase Edge Function.
+ * Analyze a dream using AI via Supabase Edge Function.
  *
  * Includes rate limiting (5 calls per 30s) and automatic retry
  * with exponential backoff on transient failures.
