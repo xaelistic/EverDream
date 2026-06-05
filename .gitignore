@@ -1,37 +1,47 @@
-```
 # Dependencies
 node_modules/
 
-# Build artifacts
+# Build outputs
 dist/
 build/
 target/
 
-# Dependency directories
-.jest/
-.nyc_output/
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+.ENV
+.ENV.*
+.python-version
+.pytest_cache/
+.mypy_cache/
+.coverage
 coverage/
-.nyc_output/
 
 # Logs
 *.log
 
-# Environment variables
+# Environment specific
 .env
 .env.local
 .env.*
+!.env.example
 
 # IDE
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 
 # OS
 .DS_Store
 Thumbs.db
-
-# Temp files
-*.tmp
-*.swp
 
 # Compressed files
 *.zip
@@ -56,5 +66,3 @@ Thumbs.db
 *.tar.bz2
 *.tar.xz
 *.tar.zst
-
-```
