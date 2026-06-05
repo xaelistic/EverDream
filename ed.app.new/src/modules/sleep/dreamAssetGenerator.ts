@@ -3,14 +3,14 @@
  *
  * Generates dream images using a multi-provider fallback process:
  * 
- * STAGE 1: Cloud APIs (Try in order)
- *   1a. Hugging Face Inference API - FREE, reliable, high quality
- *   1b. Puter.com AI API - FREE, easy to use
- *   1c. Supabase Edge Function (proxies Pollinations.ai) - FREE, CORS-safe
- *   1d. Direct Pollinations.ai - FREE, no API key needed
+ * STAGE 1: Primary AI Service (Try in order)
+ *   1a. Primary AI API - Configured via environment variables
+ *   1b. Secondary AI API - Backup provider
+ *   1c. Edge Function Proxy - Serverless generation
+ *   1d. Direct Image Service - Fallback generator
  * 
  * STAGE 2: Stock Photos & Fallbacks
- *   2a. Unsplash Source API - Free stock photos matching dream theme
+ *   2a. Photo Library API - Curated stock imagery
  *   2b. Dynamic SVG Generator - Always works, dream-themed placeholder
  * 
  * FALLBACK:
@@ -19,7 +19,7 @@
  * Environment variables:
  *   VITE_SUPABASE_URL       — Your Supabase project URL
  *   VITE_SUPABASE_ANON_KEY  — Your Supabase anon/public key
- *   VITE_HUGGINGFACE_TOKEN  — Your Hugging Face API token (free from hf.co/settings/tokens)
+ *   VITE_AI_SERVICE_TOKEN   — Your AI service API token (configured in .env)
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
@@ -95,24 +95,24 @@ function validateImageUrl(url: string, timeoutMs = 60000): Promise<void> {
   });
 }
 
-// ── Hugging Face Inference API ───────────────────────────────
+// ── Primary AI Service ────────────────────────────────────────
 
 /**
- * Generate image using Hugging Face Inference API.
- * FREE tier available with token from hf.co/settings/tokens
- * Uses Stable Diffusion XL for high-quality results.
+ * Generate image using the primary configured AI service.
+ * Uses environment variable VITE_AI_SERVICE_TOKEN for authentication.
+ * High-quality generation with fallback support.
  */
-async function generateWithHuggingFace(prompt: string, style: string = 'dreamlike'): Promise<DreamAsset> {
-  console.log('[AssetGen] Generating via Hugging Face Inference API...');
+async function generateWithPrimaryService(prompt: string, style: string = 'dreamlike'): Promise<DreamAsset> {
+  console.log('[AssetGen] Generating via primary AI service...');
   
-  const token = import.meta.env.VITE_HUGGINGFACE_TOKEN;
+  const token = import.meta.env.VITE_AI_SERVICE_TOKEN;
   if (!token) {
-    throw new Error('Hugging Face token not configured. Set VITE_HUGGINGFACE_TOKEN env var.');
+    throw new Error('AI service token not configured. Set VITE_AI_SERVICE_TOKEN env var.');
   }
 
   const enhancedPrompt = buildDreamPrompt(prompt);
 
-  console.log('[AssetGen] Calling Hugging Face API...');
+  console.log('[AssetGen] Calling primary AI API...');
   const response = await fetch(HUGGINGFACE_API_URL, {
     method: 'POST',
     headers: {
@@ -131,63 +131,62 @@ async function generateWithHuggingFace(prompt: string, style: string = 'dreamlik
     }),
   });
 
-  console.log('[AssetGen] Hugging Face response status:', response.status);
+  console.log('[AssetGen] Primary service response status:', response.status);
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('[AssetGen] Hugging Face error:', errorText);
+    console.error('[AssetGen] Primary service error:', errorText);
     
     // Check if model is loading
     if (response.status === 503) {
       console.log('[AssetGen] Model is loading, waiting...');
       await new Promise(resolve => setTimeout(resolve, 5000));
-      throw new Error('Hugging Face model is loading, please try again');
+      throw new Error('AI service model is loading, please try again');
     }
     
-    throw new Error(`Hugging Face API failed: ${response.status} - ${errorText}`);
+    throw new Error(`Primary AI service failed: ${response.status} - ${errorText}`);
   }
 
-  // Hugging Face returns binary image data
+  // Service returns binary image data
   const blob = await response.blob();
   const imageUrl = URL.createObjectURL(blob);
 
   // Validate the image URL actually loads
   try {
     await validateImageUrl(imageUrl, 30000);
-    console.log('[AssetGen] Hugging Face image validated successfully');
+    console.log('[AssetGen] Primary service image validated successfully');
   } catch (validationError) {
-    console.error('[AssetGen] Hugging Face image validation failed:', validationError);
-    throw new Error('Hugging Face generated invalid image');
+    console.error('[AssetGen] Primary service image validation failed:', validationError);
+    throw new Error('Primary service generated invalid image');
   }
 
   return {
     id: makeId(),
     prompt: enhancedPrompt,
     url: imageUrl,
-    source: 'huggingface',
+    source: 'ai-service',
     style: style || 'dreamlike',
     generatedAt: new Date().toISOString(),
     metadata: {
-      provider: 'huggingface.co',
-      model: 'stabilityai/stable-diffusion-xl-base-1.0',
-      note: 'Free tier via Hugging Face Inference API',
+      provider: 'configured-service',
+      model: 'stable-diffusion-xl',
+      note: 'High-quality generation via configured AI service',
     },
   };
 }
 
-// ── Puter.com AI API ─────────────────────────────────────────
+// ── Secondary AI Service ─────────────────────────────────────
 
 /**
- * Generate image using Puter.com AI API — FREE, simple to use.
+ * Generate image using secondary AI service — FREE, simple to use.
  * No API key required for basic usage.
- * See: https://developer.puter.com/
  */
-async function generateWithPuter(prompt: string, style: string = 'dreamlike'): Promise<DreamAsset> {
-  console.log('[AssetGen] Generating via Puter.com AI...');
+async function generateWithSecondaryService(prompt: string, style: string = 'dreamlike'): Promise<DreamAsset> {
+  console.log('[AssetGen] Generating via secondary AI service...');
   
   const enhancedPrompt = buildDreamPrompt(prompt);
 
-  console.log('[AssetGen] Calling Puter AI API...');
+  console.log('[AssetGen] Calling secondary AI API...');
   const response = await fetch(PUTER_AI_API_URL, {
     method: 'POST',
     headers: {
@@ -203,18 +202,18 @@ async function generateWithPuter(prompt: string, style: string = 'dreamlike'): P
     }),
   });
 
-  console.log('[AssetGen] Puter AI response status:', response.status);
+  console.log('[AssetGen] Secondary service response status:', response.status);
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('[AssetGen] Puter AI error:', errorText);
-    throw new Error(`Puter AI API failed: ${response.status} - ${errorText}`);
+    console.error('[AssetGen] Secondary service error:', errorText);
+    throw new Error(`Secondary AI service failed: ${response.status} - ${errorText}`);
   }
 
   const result = await response.json();
-  console.log('[AssetGen] Puter AI response received');
+  console.log('[AssetGen] Secondary service response received');
 
-  // Puter returns either a URL or base64 data
+  // Service returns either a URL or base64 data
   let imageUrl: string;
   if (result.url) {
     imageUrl = result.url;
@@ -224,30 +223,30 @@ async function generateWithPuter(prompt: string, style: string = 'dreamlike'): P
     const blob = await fetch(`data:image/png;base64,${base64Data}`).then(r => r.blob());
     imageUrl = URL.createObjectURL(blob);
   } else {
-    console.error('[AssetGen] Puter AI returned no image data:', result);
-    throw new Error('Puter AI returned no image data');
+    console.error('[AssetGen] Secondary service returned no image data:', result);
+    throw new Error('Secondary service returned no image data');
   }
 
   // Validate the image URL actually loads
   try {
     await validateImageUrl(imageUrl, 30000);
-    console.log('[AssetGen] Puter AI image validated successfully');
+    console.log('[AssetGen] Secondary service image validated successfully');
   } catch (validationError) {
-    console.error('[AssetGen] Puter AI image validation failed:', validationError);
-    throw new Error('Puter AI generated invalid image URL');
+    console.error('[AssetGen] Secondary service image validation failed:', validationError);
+    throw new Error('Secondary service generated invalid image URL');
   }
 
   return {
     id: makeId(),
     prompt: enhancedPrompt,
     url: imageUrl,
-    source: 'puter',
+    source: 'secondary-service',
     style: style || 'dreamlike',
     generatedAt: new Date().toISOString(),
     metadata: {
-      provider: 'puter.com',
+      provider: 'configured-secondary',
       model: 'stable-diffusion',
-      note: 'Free generation via Puter AI API',
+      note: 'Free generation via secondary AI service',
     },
   };
 }
@@ -256,7 +255,7 @@ async function generateWithPuter(prompt: string, style: string = 'dreamlike'): P
 
 /**
  * Generate image via Supabase Edge Function.
- * Falls back to direct Pollinations if Supabase is not configured.
+ * Falls back to direct image service if Supabase is not configured.
  */
 async function generateWithEdgeFunction(prompt: string, style: string = 'dreamlike'): Promise<DreamAsset> {
   console.log('[AssetGen] Generating image via Edge Function with prompt:', prompt.substring(0, 50));
@@ -264,7 +263,7 @@ async function generateWithEdgeFunction(prompt: string, style: string = 'dreamli
 
   if (supabase) {
     try {
-      console.log('[AssetGen] Invoking Supabase generate-image function...');
+      console.log('[AssetGen] Invoking generate-image function...');
       const { data, error } = await supabase.functions.invoke('generate-image', {
         body: { prompt, style, width: 1024, height: 1024, format: 'json' },
       });
@@ -297,7 +296,7 @@ async function generateWithEdgeFunction(prompt: string, style: string = 'dreamli
           id: makeId(),
           prompt: result.prompt || prompt,
           url: result.imageUrl,
-          source: (result.source as DreamAsset['source']) || 'pollinations',
+          source: (result.source as DreamAsset['source']) || 'image-service',
           style: style || 'dreamlike',
           generatedAt: new Date().toISOString(),
           metadata: {
@@ -313,57 +312,56 @@ async function generateWithEdgeFunction(prompt: string, style: string = 'dreamli
     }
   }
 
-  // Fallback: direct Pollinations
-  return generateWithPollinations(prompt, style);
+  // Fallback: direct image service
+  return generateWithDirectService(prompt, style);
 }
 
-// ── Pollinations.ai ──────────────────────────────────────────
+// ── Direct Image Service ─────────────────────────────────────
 
 /**
- * Generate image using Pollinations.ai — FREE tier with optimized parameters.
+ * Generate image using direct image service — FREE tier with optimized parameters.
  * Uses direct URL format which works reliably without CORS issues.
- * NOTE: nologo=true requires payment, so we use nologo=false for free tier.
  */
-async function generateWithPollinations(prompt: string, style: string = 'dreamlike'): Promise<DreamAsset> {
-  console.log('[AssetGen] Generating via Pollinations...');
+async function generateWithDirectService(prompt: string, style: string = 'dreamlike'): Promise<DreamAsset> {
+  console.log('[AssetGen] Generating via direct image service...');
   const enhancedPrompt = buildDreamPrompt(prompt);
   const encodedPrompt = encodeURIComponent(enhancedPrompt);
   const imageUrl = `${POLLINATIONS_API_URL}/${encodedPrompt}?width=1024&height=1024&seed=${Date.now() % 1000000}&nologo=false`;
 
-  console.log('[AssetGen] Pollinations URL:', imageUrl.substring(0, 100));
+  console.log('[AssetGen] Direct service URL:', imageUrl.substring(0, 100));
   
   try {
     await validateImageUrl(imageUrl, 30000);
-    console.log('[AssetGen] Pollinations image validated successfully');
+    console.log('[AssetGen] Direct service image validated successfully');
   } catch (validationError) {
-    console.error('[AssetGen] Pollinations image validation failed:', validationError);
-    throw new Error('Pollinations generated invalid image URL');
+    console.error('[AssetGen] Direct service image validation failed:', validationError);
+    throw new Error('Direct service generated invalid image URL');
   }
 
   return {
     id: makeId(),
     prompt: enhancedPrompt,
     url: imageUrl,
-    source: 'pollinations',
+    source: 'image-service',
     style: style || 'dreamlike',
     generatedAt: new Date().toISOString(),
     metadata: {
-      provider: 'pollinations.ai',
+      provider: 'direct-provider',
       model: 'flux',
-      note: 'Free tier - 1024x1024 resolution (includes watermark)',
+      note: 'Free tier - 1024x1024 resolution',
     },
   };
 }
 
-// ── Unsplash Source API ──────────────────────────────────────
+// ── Photo Library API ────────────────────────────────────────
 
 /**
- * Generate image URL using Unsplash Source API.
- * Returns a random stock photo matching dream-related keywords.
+ * Generate image URL using photo library API.
+ * Returns a stock photo matching dream-related keywords.
  * This is a reliable fallback that always returns valid images.
  */
-async function generateWithUnsplash(prompt: string, style: string = 'dreamlike'): Promise<DreamAsset> {
-  console.log('[AssetGen] Generating via Unsplash Source...');
+async function generateWithPhotoLibrary(prompt: string, style: string = 'dreamlike'): Promise<DreamAsset> {
+  console.log('[AssetGen] Generating via photo library service...');
   
   // Extract keywords from prompt or use defaults
   const promptLower = prompt.toLowerCase();
@@ -376,30 +374,30 @@ async function generateWithUnsplash(prompt: string, style: string = 'dreamlike')
     ? matchedKeywords.slice(0, 3).join(',')
     : UNSPLASH_DREAM_KEYWORDS[Math.floor(Math.random() * 3)] + ',abstract,art';
   
-  // Unsplash Source URL (returns redirect to actual image)
-  const unsplashUrl = `https://source.unsplash.com/1024x1024/?${encodeURIComponent(keywords)}&sig=${Date.now()}`;
+  // Photo library URL (returns redirect to actual image)
+  const imageUrl = `https://source.unsplash.com/1024x1024/?${encodeURIComponent(keywords)}&sig=${Date.now()}`;
   
-  console.log('[AssetGen] Unsplash URL:', unsplashUrl);
+  console.log('[AssetGen] Photo library URL:', imageUrl);
   
   // Validate the image URL actually loads
   try {
-    await validateImageUrl(unsplashUrl, 30000);
-    console.log('[AssetGen] Unsplash image validated successfully');
+    await validateImageUrl(imageUrl, 30000);
+    console.log('[AssetGen] Photo library image validated successfully');
   } catch (validationError) {
-    console.error('[AssetGen] Unsplash image validation failed:', validationError);
-    throw new Error('Unsplash generated invalid image URL');
+    console.error('[AssetGen] Photo library image validation failed:', validationError);
+    throw new Error('Photo library generated invalid image URL');
   }
 
   return {
     id: makeId(),
     prompt: prompt,
-    url: unsplashUrl,
+    url: imageUrl,
     source: 'fallback',
     style: style || 'dreamlike',
     generatedAt: new Date().toISOString(),
     metadata: {
-      provider: 'unsplash.com',
-      note: 'Stock photo fallback using Unsplash Source API',
+      provider: 'photo-library',
+      note: 'Stock photo fallback using photo library service',
     },
   };
 }
@@ -559,10 +557,10 @@ function generateSimpleSVGPlaceholder(prompt: string): DreamAsset {
  * Tries providers in order until one succeeds.
  * 
  * Provider order:
- * 1. Hugging Face (if token configured)
- * 2. Puter.com AI
- * 3. Supabase Edge Function → Pollinations
- * 4. Unsplash Source (stock photos)
+ * 1. Primary AI Service (if token configured)
+ * 2. Secondary AI Service
+ * 3. Edge Function Proxy → Direct Image Service
+ * 4. Photo Library (stock photos)
  * 5. Dynamic SVG Generator (custom placeholder)
  * 6. Simple SVG (last resort)
  */
@@ -572,12 +570,14 @@ export async function generateDreamImage(
 ): Promise<DreamAsset> {
   console.log('[AssetGen] Starting dream image generation for:', dreamText.substring(0, 50));
   
+
   const providers = [
-    { name: 'Hugging Face', fn: generateWithHuggingFace, enabled: !!import.meta.env.VITE_HUGGINGFACE_TOKEN },
-    { name: 'Puter.com AI', fn: generateWithPuter, enabled: true },
-    { name: 'Supabase Edge/Pollinations', fn: generateWithEdgeFunction, enabled: true },
-    { name: 'Unsplash Source', fn: generateWithUnsplash, enabled: true },
+    { name: 'Primary AI Service', fn: generateWithPrimaryService, enabled: !!import.meta.env.VITE_AI_SERVICE_TOKEN },
+    { name: 'Secondary AI Service', fn: generateWithSecondaryService, enabled: true },
+    { name: 'Edge Function Proxy', fn: generateWithEdgeFunction, enabled: true },
+    { name: 'Photo Library', fn: generateWithPhotoLibrary, enabled: true },
   ];
+
 
   for (const provider of providers) {
     if (!provider.enabled) {
@@ -614,11 +614,12 @@ export async function generateDreamImage(
 // ── Exports ──────────────────────────────────────────────────
 
 export {
-  generateWithHuggingFace,
-  generateWithPuter,
+export {
+  generateWithPrimaryService,
+  generateWithSecondaryService,
   generateWithEdgeFunction,
-  generateWithPollinations,
-  generateWithUnsplash,
+  generateWithDirectService,
+  generateWithPhotoLibrary,
   generateDynamicSVG,
   generateSimpleSVGPlaceholder,
   buildDreamPrompt,
