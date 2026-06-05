@@ -121,7 +121,7 @@ export interface DreamAsset {
   dreamText?: string;
   prompt: string;
   url: string;
-  source: 'pollinations' | 'replicate' | 'puter' | 'fallback';
+  source: 'pollinations' | 'replicate' | 'puter' | 'huggingface' | 'fallback';
   style: string;
   generatedAt: string;
   metadata?: {
