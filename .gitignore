@@ -1,5 +1,5 @@
 ```
-# Environment variables
+# Environment
 .env
 .env.local
 .env.*
@@ -17,22 +17,19 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
-.pycache/
-.mypy_cache/
-.pytest_cache/
-.coverage
-coverage/
-htmlcov/
+*.py.class
+*.py.obj
 
 # Logs
 *.log
 
 # Temporary files
 *.tmp
+*.temp
 *.swp
 *.swo
 
-# OS generated files
+# OS
 .DS_Store
 Thumbs.db
 
@@ -56,7 +53,11 @@ tsconfig.tsbuildinfo
 # Serverless/Wrangler specific
 .wrangler/
 
-# Compressed files
+# IDE
+.vscode/
+.idea/
+
+# Compression
 *.zip
 *.gz
 *.tar
