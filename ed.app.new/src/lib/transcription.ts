@@ -1,9 +1,11 @@
 /**
  * Audio transcription utilities
  *
- * For live recording: uses Web Speech API (built into browser, free)
- * For file transcription: uses OpenAI Whisper via a free proxy or the
- * browser's built-in SpeechRecognition as fallback
+ * DEPRECATED: This file uses a flawed approach (playing audio through speakers).
+ * Use transcriptionWhisper.ts instead, which properly transcribes audio files
+ * via the Web Speech API or Whisper AI.
+ *
+ * This file is kept for backward compatibility but should not be used for new code.
  */
 
 export interface TranscriptionResult {
@@ -13,31 +15,35 @@ export interface TranscriptionResult {
 }
 
 /**
+ * @deprecated Use transcribeAudio from transcriptionWhisper.ts instead
+ * 
  * Transcribe an audio file using the browser's SpeechRecognition API.
  * This works in Chrome/Edge without any API key.
- * Note: This is a best-effort approach - for production, use Whisper API.
+ * Note: This approach plays audio through speakers and captures it via microphone,
+ * which is unreliable. Use the Whisper-based transcription instead.
  */
 export async function transcribeAudioFile(file: File): Promise<TranscriptionResult> {
+  console.warn('[transcription.ts] transcribeAudioFile is deprecated. Use transcriptionWhisper.ts instead.');
+  
+  // Check for SpeechRecognition support
+  const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    throw new Error('Speech recognition not supported in this browser. Please use a modern browser or try manual transcription.');
+  }
+
+  // For file transcription, we play the audio and use SpeechRecognition
+  // This is a workaround since SpeechRecognition doesn't directly accept files
+  const audio = new Audio(URL.createObjectURL(file));
+  const recognition = new SpeechRecognition();
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.lang = 'en-US';
+
+  let transcript = '';
+  let confidence = 0;
+  const startTime = Date.now();
+
   return new Promise((resolve, reject) => {
-    // Check for SpeechRecognition support
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      reject(new Error('Speech recognition not supported in this browser'));
-      return;
-    }
-
-    // For file transcription, we play the audio and use SpeechRecognition
-    // This is a workaround since SpeechRecognition doesn't directly accept files
-    const audio = new Audio(URL.createObjectURL(file));
-    const recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = 'en-US';
-
-    let transcript = '';
-    let confidence = 0;
-    const startTime = Date.now();
-
     recognition.onresult = (event: any) => {
       let interimTranscript = '';
       for (let i = event.resultIndex; i < event.results.length; i++) {

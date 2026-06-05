@@ -27,6 +27,32 @@ import {
 } from 'lucide-react';
 import { useSkinFull } from '../contexts/SkinContext';
 
+// Safe localStorage helpers with try-catch wrappers
+function safeGetLocalStorage(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch (e) {
+    console.warn('[ProfileAndSettings] localStorage access failed:', e);
+    return null;
+  }
+}
+
+function safeSetLocalStorage(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch (e) {
+    console.error('[ProfileAndSettings] Failed to save to localStorage:', e);
+  }
+}
+
+function safeClearLocalStorage(): void {
+  try {
+    localStorage.clear();
+  } catch (e) {
+    console.error('[ProfileAndSettings] Failed to clear localStorage:', e);
+  }
+}
+
 interface ProfileAndSettingsProps {
   user?: any;
   onClose: () => void;
@@ -220,33 +246,41 @@ export default function ProfileAndSettings({ user, onClose }: ProfileAndSettings
 
   // Load saved preferences on mount
   useEffect(() => {
-    try {
-      const savedTheme = localStorage.getItem('everdream-theme');
-      if (savedTheme) {
+    const savedTheme = safeGetLocalStorage('everdream-theme');
+    if (savedTheme) {
+      try {
         const parsed = JSON.parse(savedTheme);
         setThemeMode(parsed.mode || 'light');
         setThemeVariant(parsed.variant || 'modern');
         setAutoTheme(parsed.auto || false);
+      } catch (e) {
+        console.error('Failed to parse theme preferences:', e);
       }
+    }
 
-      const savedPrivacy = localStorage.getItem('everdream-privacy');
-      if (savedPrivacy) {
+    const savedPrivacy = safeGetLocalStorage('everdream-privacy');
+    if (savedPrivacy) {
+      try {
         setPrivacySettings(JSON.parse(savedPrivacy));
+      } catch (e) {
+        console.error('Failed to parse privacy settings:', e);
       }
+    }
 
-      const savedNotifications = localStorage.getItem('everdream-notifications');
-      if (savedNotifications) {
+    const savedNotifications = safeGetLocalStorage('everdream-notifications');
+    if (savedNotifications) {
+      try {
         setNotificationPrefs(JSON.parse(savedNotifications));
+      } catch (e) {
+        console.error('Failed to parse notification preferences:', e);
       }
-    } catch (e) {
-      console.error('Failed to load preferences:', e);
     }
   }, []);
 
   // Save theme preferences
   const saveThemePreferences = (mode: typeof themeMode, variant: typeof themeVariant, auto: boolean) => {
     const prefs = { mode, variant, auto };
-    localStorage.setItem('everdream-theme', JSON.stringify(prefs));
+    safeSetLocalStorage('everdream-theme', JSON.stringify(prefs));
     
     // Apply theme mode
     if (mode === 'dark') {
@@ -258,7 +292,7 @@ export default function ProfileAndSettings({ user, onClose }: ProfileAndSettings
 
   // Save privacy preferences
   const savePrivacySettings = (settings: typeof privacySettings) => {
-    localStorage.setItem('everdream-privacy', JSON.stringify(settings));
+    safeSetLocalStorage('everdream-privacy', JSON.stringify(settings));
   };
 
   // Handle wearable connection
@@ -350,8 +384,8 @@ export default function ProfileAndSettings({ user, onClose }: ProfileAndSettings
     
     setIsLoading(true);
     try {
-      // Clear all local data
-      localStorage.clear();
+      // Clear all local data safely
+      safeClearLocalStorage();
       // In production, would call API to delete server-side data
       await new Promise(resolve => setTimeout(resolve, 2000));
       window.location.reload();
@@ -720,7 +754,7 @@ export default function ProfileAndSettings({ user, onClose }: ProfileAndSettings
                         [option.id]: !isEnabled
                       };
                       setNotificationPrefs(newPrefs);
-                      localStorage.setItem('everdream-notifications', JSON.stringify(newPrefs));
+                      safeSetLocalStorage('everdream-notifications', JSON.stringify(newPrefs));
                     }}
                     className={`relative w-12 h-6 rounded-full transition ${
                       isEnabled ? 'bg-purple-600' : 'bg-gray-300'
