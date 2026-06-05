@@ -7,7 +7,7 @@ import {
   isWhisperAvailable,
   type TranscriptionResult,
 } from '../lib/transcriptionWhisper';
-import { generateImagePrompt } from '../lib/api/anthropic';
+import { generateImagePrompt } from '../lib/api/ai-provider';
 
 describe('Transcription Module', () => {
   describe('transcribeAudio', () => {

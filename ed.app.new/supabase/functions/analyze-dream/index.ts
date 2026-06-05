@@ -9,13 +9,13 @@
  * 2. Pollinations Text API (free, unlimited)
  * 3. Google Gemini 1.5 Flash (free tier)
  * 4. OpenAI GPT-4o-mini (cheap)
- * 5. Anthropic Claude (expensive, last resort)
+ * 5. NVIDIA Nemotron (open source, cost-effective)
  *
  * Environment variables (set via `supabase secrets set`):
  *   OPENROUTER_API_KEY — OpenRouter API key (free tier available)
  *   GEMINI_API_KEY — Google AI Studio key (free tier)
  *   OPENAI_API_KEY — OpenAI API key ($5 free credit)
- *   ANTHROPIC_API_KEY — Anthropic API key (pay per use)
+ *   NVIDIA_API_KEY — NVIDIA NIM API key (open source models)
  *
  * Request body:
  *   { text: string } — The dream text to analyze
@@ -264,39 +264,39 @@ async function analyzeWithOpenAI(text: string): Promise<ProviderResult> {
   return { analysis, provider: 'openai', model: 'gpt-4o-mini' };
 }
 
-// ── Provider: Anthropic Claude (Expensive, last resort) ──────
+// ── Provider: NVIDIA Nemotron (Open Source, Cost-Effective) ──────
 
-async function analyzeWithClaude(text: string): Promise<ProviderResult> {
-  const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
-  if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set');
+async function analyzeWithNVIDIA(text: string): Promise<ProviderResult> {
+  const apiKey = Deno.env.get('NVIDIA_API_KEY');
+  if (!apiKey) throw new Error('NVIDIA_API_KEY not set');
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  // NVIDIA NIM endpoint for Nemotron models
+  const response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
+      'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 2000,
+      model: 'nvidia/nemotron-4-340b-instruct',
       messages: [{
         role: 'user',
         content: ANALYSIS_PROMPT.replace('{DREAM_TEXT}', text),
       }],
+      max_tokens: 2000,
     }),
   });
 
   if (!response.ok) {
-    throw new Error(`Claude returned ${response.status}`);
+    throw new Error(`NVIDIA returned ${response.status}`);
   }
 
   const data = await response.json();
-  const content = data.content?.find((c: { type: string }) => c.type === 'text')?.text || '{}';
+  const content = data.choices?.[0]?.message?.content || '{}';
   const clean = content.replace(/```json|```/g, '').trim();
   const analysis = JSON.parse(clean) as DreamAnalysis;
 
-  return { analysis, provider: 'anthropic', model: 'claude-sonnet-4' };
+  return { analysis, provider: 'nvidia', model: 'nemotron-4-340b' };
 }
 
 // ── Main Handler ──────────────────────────────────────────────
@@ -336,13 +336,13 @@ serve(async (req: Request): Promise<Response> => {
       ? trimmed.substring(0, MAX_INPUT_LENGTH)
       : trimmed;
 
-    // Try providers in order: free → cheap → expensive
+    // Try providers in order: free → cheap → open source
     const providers = [
       { name: 'openrouter', fn: () => analyzeWithOpenRouter(safeText) },
       { name: 'pollinations', fn: () => analyzeWithPollinations(safeText) },
       { name: 'gemini', fn: () => analyzeWithGemini(safeText) },
       { name: 'openai', fn: () => analyzeWithOpenAI(safeText) },
-      { name: 'anthropic', fn: () => analyzeWithClaude(safeText) },
+      { name: 'nvidia', fn: () => analyzeWithNVIDIA(safeText) },
     ];
 
     const errors: string[] = [];

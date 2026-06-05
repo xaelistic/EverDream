@@ -11,13 +11,12 @@
  * - Valence (emotional polarity -1 to 1)
  * - Interpretation (symbol meanings, psychological insight, common patterns)
  *
- * Uses the Supabase Edge Function `analyze-dream` as the primary provider,
- * with direct Anthropic API as fallback for development.
+ * Uses the Supabase Edge Function `analyze-dream` as the primary provider.
+ * All AI calls are routed through server-side edge functions to protect API keys.
  *
  * Environment variables:
  *   VITE_SUPABASE_URL       — Supabase project URL
  *   VITE_SUPABASE_ANON_KEY  — Supabase anon/public key
- *   VITE_ANTHROPIC_API_KEY  — Direct Anthropic key (dev fallback only)
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
@@ -161,68 +160,6 @@ async function analyzeViaEdgeFunction(text: string): Promise<DreamAnalysis> {
   }
 }
 
-// ── Analysis via Direct Anthropic API (Dev Fallback) ─────────
-
-async function analyzeViaAnthropic(text: string): Promise<DreamAnalysis> {
-  console.log('[DreamAnalyzer] Anthropic fallback: Starting direct API call...');
-  
-  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY || '';
-  if (!apiKey) {
-    console.warn('[DreamAnalyzer] Anthropic fallback: VITE_ANTHROPIC_API_KEY not set');
-    throw new Error('VITE_ANTHROPIC_API_KEY not set');
-  }
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), ANALYSIS_TIMEOUT_MS);
-
-  try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 2000,
-        messages: [{
-          role: 'user',
-          content: ANALYSIS_PROMPT.replace('{DREAM_TEXT}', text),
-        }],
-      }),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    console.log('[DreamAnalyzer] Anthropic fallback: Response status:', response.status);
-
-    if (!response.ok) {
-      console.error('[DreamAnalyzer] Anthropic fallback: API error:', response.status);
-      throw new Error(`Anthropic API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    console.log('[DreamAnalyzer] Anthropic fallback: Parsing response...');
-    
-    const content = data.content?.find((c: { type: string }) => c.type === 'text')?.text || '{}';
-    const clean = content.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(clean) as DreamAnalysis;
-    
-    console.log('[DreamAnalyzer] Anthropic fallback: Successfully parsed, category:', parsed.category);
-    return validateAndNormalizeAnalysis(parsed);
-  } catch (err) {
-    clearTimeout(timeoutId);
-    if (err instanceof Error && err.name === 'AbortError') {
-      console.error('[DreamAnalyzer] Anthropic fallback: Timed out after', ANALYSIS_TIMEOUT_MS, 'ms');
-      throw new Error(`Anthropic API timed out after ${ANALYSIS_TIMEOUT_MS / 1000}s`);
-    }
-    throw err;
-  }
-}
-
 // ── Main Analysis Function ────────────────────────────────────
 
 /**
@@ -261,13 +198,12 @@ function validateAndNormalizeAnalysis(analysis: Partial<DreamAnalysis>): DreamAn
  * Analyze a dream text using AI.
  *
  * Uses Supabase Edge Function only - all API keys are server-side.
- * Direct Anthropic API calls have been removed for security.
+ * Supports multiple AI providers through the edge function:
+ * OpenRouter (free), Pollinations (free), Gemini (free tier), 
+ * OpenAI (cheap), and NVIDIA Nemotron (open source).
  *
  * @param text — The dream text to analyze (minimum 10 characters)
  * @returns Parsed DreamAnalysis, or fallback on failure
- *
- * SECURITY FIX: Removed direct Anthropic API fallback that exposed API keys.
- * All AI analysis now goes through Supabase Edge Functions only.
  */
 export async function analyzeDream(text: string): Promise<DreamAnalysis> {
   console.log('[DreamAnalyzer] ========== DREAM ANALYSIS STARTED ==========');
@@ -289,7 +225,7 @@ export async function analyzeDream(text: string): Promise<DreamAnalysis> {
   const safeText = trimmed.length > 10000 ? trimmed.substring(0, 10000) : trimmed;
   console.log('[DreamAnalyzer] Safe text length after truncation:', safeText.length);
 
-  // Try Supabase Edge Function ONLY - no direct API fallbacks
+  // Try Supabase Edge Function ONLY - provider-agnostic, server-side API keys
   try {
     console.log('[DreamAnalyzer] Attempt 1: Trying Supabase Edge Function...');
     const result = await analyzeViaEdgeFunction(safeText);
@@ -300,9 +236,6 @@ export async function analyzeDream(text: string): Promise<DreamAnalysis> {
     console.warn('[DreamAnalyzer] ✗ Edge function failed:', err instanceof Error ? err.message : String(err));
   }
 
-  // SECURITY FIX: Removed direct Anthropic API fallback
-  // All AI calls must go through Supabase Edge Functions to protect API keys
-  
   // Return fallback analysis if edge function fails
   console.error('[DreamAnalyzer] ✗ Analysis failed, returning fallback');
   console.log('[DreamAnalyzer] ========== DREAM ANALYSIS COMPLETED (FALLBACK) ==========');

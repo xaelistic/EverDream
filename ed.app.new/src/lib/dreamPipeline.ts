@@ -5,7 +5,7 @@
  *
  * All AI analysis goes through the Supabase Edge Function "analyze-dream"
  * which handles provider fallback automatically:
- *   OpenRouter (free) → Pollinations (free) → Gemini (free tier) → OpenAI (cheap) → Claude (last resort)
+ *   OpenRouter (free) → Pollinations (free) → Gemini (free tier) → OpenAI (cheap) → NVIDIA Nemotron (open source)
  *
  * Image generation: Pollinations.ai (free, unlimited) → HF SDXL fallback
  *
