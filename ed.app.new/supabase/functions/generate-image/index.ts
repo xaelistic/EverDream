@@ -1,9 +1,17 @@
 /**
- * Supabase Edge Function: generate-image v2
+ * Supabase Edge Function: generate-image v3
  *
- * Proxies Pollinations.ai for free dream image generation.
+ * Multi-provider image generation with automatic fallback.
  * Returns the actual image bytes to avoid CORS issues in the browser.
- * Falls back to returning the URL if image fetching fails.
+ *
+ * Provider Priority:
+ * 1. Hugging Face Inference API (FREE - Stable Diffusion XL)
+ * 2. Fal AI (cheap ~$0.001-0.01/image)
+ * 3. Local SD (if configured)
+ *
+ * Environment variables (set via `supabase secrets set`):
+ *   HF_INFERENCE_API_KEY — Hugging Face token (free from hf.co/settings/tokens)
+ *   FAL_AI_KEY — Fal AI API key (from fal.ai/dashboard/keys)
  *
  * Request body:
  *   { prompt: string, style?: string, width?: number, height?: number }
@@ -32,7 +40,8 @@ interface GenerateImageRequest {
 
 // ── Constants ────────────────────────────────────────────────
 
-const POLLINATIONS_BASE_URL = 'https://image.pollinations.ai/prompt';
+const HF_API_URL = 'https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0';
+const FAL_API_URL = 'https://fal.ai/api/fal-ai/fast-sdxl';
 
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -69,31 +78,102 @@ function errorResponse(message: string, status: number): Response {
   return jsonResponse({ error: message }, status);
 }
 
-// ── Image Generation ─────────────────────────────────────────
+// ── Provider: Hugging Face (FREE) ────────────────────────────
 
-async function generateWithPollinations(
+async function generateWithHuggingFace(
   prompt: string,
   width: number,
   height: number,
-  format: 'binary' | 'json',
 ): Promise<Response> {
-  const enhancedPrompt = buildEnhancedPrompt(prompt, 'dreamlike');
-  const encodedPrompt = encodeURIComponent(enhancedPrompt);
-  const seed = Date.now() % 1_000_000;
-  const imageUrl = `${POLLINATIONS_BASE_URL}/${encodedPrompt}?width=${width}&height=${height}&nologo=true&seed=${seed}`;
+  const apiKey = Deno.env.get('HF_INFERENCE_API_KEY');
+  if (!apiKey) throw new Error('HF_INFERENCE_API_KEY not set');
 
-  if (format === 'json') {
-    return jsonResponse({
-      imageUrl,
-      source: 'pollinations',
-      prompt: enhancedPrompt,
-    });
+  const enhancedPrompt = buildEnhancedPrompt(prompt, 'dreamlike');
+
+  const response = await fetch(HF_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      inputs: enhancedPrompt,
+      parameters: {
+        negative_prompt: 'blurry, low quality, distorted, ugly, watermark, text',
+        num_inference_steps: 30,
+        guidance_scale: 7.5,
+        width,
+        height,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    
+    // Model loading - wait and retry
+    if (response.status === 503) {
+      throw new Error('Hugging Face model is loading, please try again');
+    }
+    
+    throw new Error(`Hugging Face failed: ${response.status} - ${errorText}`);
   }
 
-  // Fetch the actual image bytes to proxy them (avoids CORS)
+  const imageBlob = await response.blob();
+  const contentType = imageBlob.type || 'image/jpeg';
+
+  return new Response(imageBlob, {
+    status: 200,
+    headers: {
+      'Content-Type': contentType,
+      'Cache-Control': 'public, max-age=86400',
+      ...CORS_HEADERS,
+    },
+  });
+}
+
+// ── Provider: Fal AI (Cheap) ─────────────────────────────────
+
+async function generateWithFalAI(
+  prompt: string,
+  width: number,
+  height: number,
+): Promise<Response> {
+  const apiKey = Deno.env.get('FAL_AI_KEY');
+  if (!apiKey) throw new Error('FAL_AI_KEY not set');
+
+  const enhancedPrompt = buildEnhancedPrompt(prompt, 'dreamlike');
+
+  const response = await fetch(FAL_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      prompt: enhancedPrompt,
+      image_size: { width, height },
+      num_inference_steps: 25,
+      guidance_scale: 7.5,
+      negative_prompt: 'blurry, low quality, distorted, ugly, watermark',
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Fal AI returned ${response.status}`);
+  }
+
+  const data = await response.json();
+  const imageUrl = data.images?.[0]?.url;
+  
+  if (!imageUrl) {
+    throw new Error('Fal AI returned no image URL');
+  }
+
+  // Fetch the actual image
   const imageResponse = await fetch(imageUrl);
   if (!imageResponse.ok) {
-    throw new Error(`Pollinations returned ${imageResponse.status}`);
+    throw new Error(`Failed to fetch Fal AI image: ${imageResponse.status}`);
   }
 
   const imageBlob = await imageResponse.blob();
@@ -148,17 +228,35 @@ serve(async (req: Request): Promise<Response> => {
       return errorResponse('Prompt too long. Maximum 2000 characters.', 400);
     }
 
-    // Generate image via Pollinations
+    // Try providers in order: free → cheap
+    const errors: string[] = [];
+
+    // Provider 1: Hugging Face (FREE)
     try {
-      console.log('[generate-image] Generating via Pollinations...');
-      const result = await generateWithPollinations(prompt, width, height, format);
-      console.log('[generate-image] Success');
+      console.log('[generate-image] Trying Hugging Face...');
+      const result = await generateWithHuggingFace(prompt, width, height);
+      console.log('[generate-image] Hugging Face succeeded');
       return result;
     } catch (err) {
-      console.warn('[generate-image] Pollinations failed:', err);
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('[generate-image] Hugging Face failed:', msg);
+      errors.push(`huggingface: ${msg}`);
+    }
+
+    // Provider 2: Fal AI (cheap)
+    try {
+      console.log('[generate-image] Trying Fal AI...');
+      const result = await generateWithFalAI(prompt, width, height);
+      console.log('[generate-image] Fal AI succeeded');
+      return result;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn('[generate-image] Fal AI failed:', msg);
+      errors.push(`fal-ai: ${msg}`);
     }
 
     // All providers failed
+    console.error('[generate-image] All providers failed:', errors);
     return errorResponse(
       'Image generation is currently unavailable. Please try again later.',
       502,

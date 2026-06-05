@@ -1,13 +1,11 @@
 ```
-# Environment variables
+# Environment
 .env
 .env.local
-*.env.*
+.env.*
 
 # Dependencies
 node_modules/
-.julia/
-.zig-cache/
 
 # Build artifacts
 dist/
@@ -19,18 +17,19 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
-.Python
-env/
-venv/
-.venv/
-.venv.bak/
-pip-log.txt
-pip-selfcheck.json
+*.py.class
+*.py.obj
 
 # Logs
 *.log
 
-# OS generated files
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+
+# OS
 .DS_Store
 .DS_Store?
 ._*
@@ -55,7 +54,11 @@ htmlcov/
 .pytest_cache/
 .hypothesis/
 
-# Compressed files
+# IDE
+.vscode/
+.idea/
+
+# Compression
 *.zip
 *.gz
 *.tar

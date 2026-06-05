@@ -5,11 +5,10 @@
  * Tries providers in order of cost (free first, paid last).
  *
  * Provider Priority:
- * 1. OpenRouter (owl-alpha model)
- * 2. Pollinations Text API (free, unlimited)
- * 3. Google Gemini 1.5 Flash (free tier)
- * 4. OpenAI GPT-4o-mini (cheap)
- * 5. NVIDIA Nemotron (open source, cost-effective)
+ * 1. OpenRouter (free tier models available)
+ * 2. Google Gemini 1.5 Flash (free tier - 60 req/min)
+ * 3. OpenAI GPT-4o-mini (cheap - ~$0.15/1M tokens)
+ * 4. NVIDIA Nemotron (open source, cost-effective)
  *
  * Environment variables (set via `supabase secrets set`):
  *   OPENROUTER_API_KEY — OpenRouter API key (free tier available)
@@ -166,26 +165,6 @@ async function analyzeWithOpenRouter(text: string): Promise<ProviderResult> {
   }
 }
 
-// ── Provider: Pollinations Text (Free, no key) ───────────────
-
-async function analyzeWithPollinations(text: string): Promise<ProviderResult> {
-  const prompt = encodeURIComponent(
-    ANALYSIS_PROMPT.replace('{DREAM_TEXT}', text) + ' Respond ONLY with valid JSON.'
-  );
-  const url = `https://text.pollinations.ai/${prompt}?model=openai&seed=${Date.now() % 1000000}`;
-
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Pollinations returned ${response.status}`);
-  }
-
-  const content = await response.text();
-  const clean = content.replace(/```json|```/g, '').trim();
-  const analysis = JSON.parse(clean) as DreamAnalysis;
-
-  return { analysis, provider: 'pollinations', model: 'text' };
-}
-
 // ── Provider: Google Gemini (Free tier) ──────────────────────
 
 async function analyzeWithGemini(text: string): Promise<ProviderResult> {
@@ -325,7 +304,6 @@ serve(async (req: Request): Promise<Response> => {
     // Try providers in order: free → cheap → expensive
     const providers = [
       { name: 'openrouter', fn: () => analyzeWithOpenRouter(safeText) },
-      { name: 'pollinations', fn: () => analyzeWithPollinations(safeText) },
       { name: 'gemini', fn: () => analyzeWithGemini(safeText) },
       { name: 'openai', fn: () => analyzeWithOpenAI(safeText) },
       { name: 'nemotron', fn: () => analyzeWithNemotron(safeText) },
