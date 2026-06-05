@@ -5,7 +5,7 @@
  * Tries providers in order of cost (free first, paid last).
  *
  * Provider Priority:
- * 1. OpenRouter (free models via OWL_ALPHA)
+ * 1. OpenRouter (owl-alpha model)
  * 2. Pollinations Text API (free, unlimited)
  * 3. Google Gemini 1.5 Flash (free tier)
  * 4. OpenAI GPT-4o-mini (cheap)
@@ -129,54 +129,41 @@ async function analyzeWithOpenRouter(text: string): Promise<ProviderResult> {
   const apiKey = Deno.env.get('OPENROUTER_API_KEY');
   if (!apiKey) throw new Error('OPENROUTER_API_KEY not set');
 
-  // Try multiple free models in order of preference
-  const models = [
-    'google/gemini-2.0-flash-exp:free',
-    'google/gemini-2.0-flash-thinking-exp:free',
-    'qwen/qwen-2-7b-instruct:free',
-    'openchat/openchat-7b:free',
-    'gryphe/mythomax-l2-13b:free',
-  ];
+  // Use owl-alpha model from OpenRouter
+  const model = 'openrouter/owl-alpha';
 
-  const errors: string[] = [];
+  try {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': 'https://everdream.app',
+        'X-Title': 'EverDream',
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{
+          role: 'user',
+          content: ANALYSIS_PROMPT.replace('{DREAM_TEXT}', text),
+        }],
+        max_tokens: 2000,
+      }),
+    });
 
-  for (const model of models) {
-    try {
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-          'HTTP-Referer': 'https://everdream.app',
-          'X-Title': 'EverDream',
-        },
-        body: JSON.stringify({
-          model,
-          messages: [{
-            role: 'user',
-            content: ANALYSIS_PROMPT.replace('{DREAM_TEXT}', text),
-          }],
-          max_tokens: 2000,
-        }),
-      });
-
-      if (!response.ok) {
-        errors.push(`${model}: ${response.status}`);
-        continue;
-      }
-
-      const data = await response.json();
-      const content = data.choices?.[0]?.message?.content || '{}';
-      const clean = content.replace(/```json|```/g, '').trim();
-      const analysis = JSON.parse(clean) as DreamAnalysis;
-
-      return { analysis, provider: 'openrouter', model };
-    } catch (err) {
-      errors.push(`${model}: ${err instanceof Error ? err.message : String(err)}`);
+    if (!response.ok) {
+      throw new Error(`OpenRouter returned ${response.status}`);
     }
-  }
 
-  throw new Error(`All OpenRouter models failed: ${errors.join('; ')}`);
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || '{}';
+    const clean = content.replace(/```json|```/g, '').trim();
+    const analysis = JSON.parse(clean) as DreamAnalysis;
+
+    return { analysis, provider: 'openrouter', model };
+  } catch (err) {
+    throw new Error(`OpenRouter failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 // ── Provider: Pollinations Text (Free, no key) ───────────────

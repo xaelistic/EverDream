@@ -102,8 +102,9 @@ async function generateWithEdgeFunction(prompt: string, style: string = 'dreamli
   if (supabase) {
     try {
       console.log('[AssetGen] Invoking Supabase generate-image function...');
+      // Request JSON format to get URL back instead of binary
       const { data, error } = await supabase.functions.invoke('generate-image', {
-        body: { prompt, style, width: 1024, height: 1024 },
+        body: { prompt, style, width: 1024, height: 1024, format: 'json' },
       });
 
       if (error) {
