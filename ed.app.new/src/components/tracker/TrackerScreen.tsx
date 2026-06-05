@@ -6,7 +6,6 @@ import { MonthlySleepReport } from './MonthlySleepReport';
 import { SleepDayDetail } from './SleepDayDetail';
 import { WeeklySleepView } from './WeeklySleepView';
 import { EmotionalThemesChart } from './EmotionalThemesChart';
-import { InsightsPanel } from './InsightsPanel';
 
 type TrackerScreenProps = {
   dreams: DreamLike[];
@@ -59,9 +58,6 @@ export function TrackerScreen({
 
       {/* Emotional themes spider diagram */}
       <EmotionalThemesChart dreams={dreams} summaries={tracker.summaries} />
-
-      {/* Ongoing insights and user typing */}
-      <InsightsPanel dreams={dreams} summaries={tracker.summaries} />
 
       <div className="flex gap-2 rounded-2xl border border-line bg-parchment p-1">
         <button
