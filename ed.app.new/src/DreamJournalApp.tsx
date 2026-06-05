@@ -45,6 +45,7 @@ import { useSkinFull } from './contexts/SkinContext';
 import { trackScreenView, startSession, endSession } from './lib/analytics';
 import { initPerformanceMonitor, startAPICall, endAPICall } from './lib/performance';
 import { AppLoadingScreen, ErrorBanner, LoadingOverlay } from './components/ui';
+import { TermsModal } from './components/modal';
 import { getOrCreateWallet, createDreamNFT, mintNFT, saveNFT, type DreamNFT, type WalletIdentity } from './lib/nft';
 import DreamVisualizer from './components/dreams/DreamVisualizer';
 import DreamCapture from './components/dreams/DreamCapture';
@@ -2875,141 +2876,12 @@ const DreamJournalApp = () => {
       )}
 
       {/* Terms & Conditions Modal */}
-      {showTerms && (
-        <Modal onClose={() => !hasAcceptedTerms ? null : setShowTerms(false)}>
-          <h2 className="text-2xl font-bold mb-4">Terms & Conditions</h2>
-          
-          <div className="space-y-4 text-sm max-h-96 overflow-y-auto">
-            <div className="bg-purple-600 bg-opacity-20 rounded-lg p-4">
-              <h3 className="font-semibold mb-2">1. Your Data, Your Rights</h3>
-              <p className="text-purple-100 text-xs leading-relaxed">
-                You retain 100% ownership of all dream content, metadata, and generated assets. DreamScape operates on a "loan, not transfer" model. You license your data to us for processing only. This license is revocable at any time. You may delete all data permanently exercising GDPR Article 17 (Right to Erasure).
-              </p>
-            </div>
-
-            <div className="bg-blue-600 bg-opacity-20 rounded-lg p-4">
-              <h3 className="font-semibold mb-2">2. Data Processing</h3>
-              <div className="text-blue-100 text-xs space-y-2">
-                <p><strong>What we process:</strong></p>
-                <ul className="list-disc list-inside ml-2">
-                  <li>Dream text for AI analysis (Anthropic Claude)</li>
-                  <li>Dream content for image generation (OpenAI DALL-E)</li>
-                  <li>Anonymized usage statistics (optional, opt-in)</li>
-                </ul>
-                <p className="mt-2"><strong>What we DON'T do:</strong></p>
-                <ul className="list-disc list-inside ml-2">
-                  <li>Sell your data to third parties</li>
-                  <li>Use your dreams to train AI models without consent</li>
-                  <li>Share personal information with advertisers</li>
-                  <li>Retain data after you request deletion</li>
-                </ul>
-              </div>
-            </div>
-
-            <div className="bg-green-600 bg-opacity-20 rounded-lg p-4">
-              <h3 className="font-semibold mb-2">3. Data Storage & Location</h3>
-              <div className="text-green-100 text-xs space-y-1">
-                <p><strong>Primary Storage:</strong> Browser IndexedDB (your device)</p>
-                <p><strong>Processing:</strong> Anthropic API (US), OpenAI API (US)</p>
-                <p><strong>Future:</strong> IPFS (decentralized) + Ethereum (blockchain)</p>
-                <p className="mt-2">Data transmission uses TLS 1.3 encryption. Processing APIs do not retain your data per their privacy policies.</p>
-              </div>
-            </div>
-
-            <div className="bg-yellow-600 bg-opacity-20 rounded-lg p-4">
-              <h3 className="font-semibold mb-2">4. NFT Ownership & Smart Contracts</h3>
-              <div className="text-yellow-100 text-xs space-y-2">
-                <p>When you mint a dream as an NFT:</p>
-                <ul className="list-disc list-inside ml-2">
-                  <li>You own the NFT on-chain</li>
-                  <li>Content stored on IPFS remains under your license</li>
-                  <li>Smart contract is GPL-3.0 (open source)</li>
-                  <li>You can sell, transfer, or burn the NFT</li>
-                  <li>Original watermark proves provenance</li>
-                </ul>
-                <p className="mt-2 bg-yellow-700 bg-opacity-30 p-2 rounded">
-                  ⚠️ <strong>Important:</strong> Once minted to Ethereum, the NFT is permanent on-chain. The content link can be updated, but the token exists forever.
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-red-600 bg-opacity-20 rounded-lg p-4">
-              <h3 className="font-semibold mb-2">5. Dream Economy Participation (Phase 3)</h3>
-              <div className="text-red-100 text-xs space-y-2">
-                <p>If you choose to participate in Dream Economy baskets:</p>
-                <ul className="list-disc list-inside ml-2">
-                  <li>Your dreams may be licensed to third parties (with your consent)</li>
-                  <li>You earn yield from licensing fees</li>
-                  <li>You can opt-out anytime</li>
-                  <li>License terms are transparent in smart contracts</li>
-                  <li>Rarity scoring is algorithmic and auditable</li>
-                </ul>
-                <p className="mt-2"><strong>You control:</strong> Which dreams to include, licensing terms, opt-out timing</p>
-              </div>
-            </div>
-
-            <div className="bg-purple-600 bg-opacity-20 rounded-lg p-4">
-              <h3 className="font-semibold mb-2">6. Privacy & GDPR Compliance</h3>
-              <div className="text-purple-100 text-xs space-y-1">
-                <p><strong>Legal Basis:</strong> Consent (GDPR Article 6(1)(a))</p>
-                <p><strong>Data Controller:</strong> DreamScape (open source project)</p>
-                <p><strong>Data Processors:</strong> Anthropic, OpenAI (bound by DPAs)</p>
-                <p><strong>Retention:</strong> Until you delete (no automatic deletion)</p>
-                <p><strong>Your Rights:</strong> Access, rectification, erasure, portability, restriction, objection</p>
-                <p className="mt-2 bg-purple-700 bg-opacity-30 p-2 rounded">
-                  To exercise rights: Use in-app Privacy controls or contact via GitHub
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-white bg-opacity-10 rounded-lg p-4">
-              <h3 className="font-semibold mb-2">7. Disclaimers</h3>
-              <div className="text-xs space-y-1">
-                <p><strong>Medical:</strong> DreamScape is not a medical device. Dream analysis is for entertainment/insight only.</p>
-                <p><strong>Therapeutic:</strong> Not a replacement for professional mental health care.</p>
-                <p><strong>Financial:</strong> NFT and basket values may fluctuate. Not financial advice.</p>
-                <p><strong>Technical:</strong> Software provided "as is" under MIT license.</p>
-              </div>
-            </div>
-
-            <div className="bg-cyan-600 bg-opacity-20 rounded-lg p-4">
-              <h3 className="font-semibold mb-2">8. Changes to Terms</h3>
-              <p className="text-cyan-100 text-xs">
-                We may update these terms. You'll be notified in-app. Continued use after notification constitutes acceptance. You can always export your data and leave if you disagree with changes.
-              </p>
-            </div>
-
-            <div className="bg-green-600 bg-opacity-20 rounded-lg p-4">
-              <h3 className="font-semibold mb-2">9. Contact & Support</h3>
-              <div className="text-green-100 text-xs">
-                <p><strong>GitHub:</strong> github.com/dreamscape/dreamscape</p>
-                <p><strong>Privacy Inquiries:</strong> Via GitHub Issues</p>
-                <p><strong>GDPR Requests:</strong> privacy@dreamscape.app (when live)</p>
-              </div>
-            </div>
-          </div>
-
-          {!hasAcceptedTerms && (
-            <div className="mt-6 space-y-3">
-              <div className="bg-yellow-600 bg-opacity-20 p-3 rounded-lg text-xs text-yellow-100">
-                ⚠️ You must accept these terms to use DreamScape. Your data sovereignty and privacy are our highest priority.
-              </div>
-              <button
-                onClick={acceptTerms}
-                className="w-full bg-green-600 hover:bg-green-700 py-3 rounded-lg font-semibold transition"
-              >
-                I Accept - Start Dreaming
-              </button>
-              <button
-                onClick={() => window.close()}
-                className="w-full bg-gray-600 hover:bg-gray-700 py-2 rounded-lg text-sm transition"
-              >
-                I Don't Accept - Close App
-              </button>
-            </div>
-          )}
-        </Modal>
-      )}
+      <TermsModal
+        isOpen={showTerms}
+        onClose={() => setShowTerms(false)}
+        onAccept={acceptTerms}
+        hasAccepted={hasAcceptedTerms}
+      />
     </Shell>
     </>
   );
