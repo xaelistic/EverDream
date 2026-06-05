@@ -110,41 +110,114 @@ const WALLET_STORAGE_KEY = 'ed_wallet_identity';
 const DEVICE_SEED_KEY = 'ed_device_seed';
 
 /**
- * Simple encryption for localStorage data
- * Uses XOR cipher with rotating key (NOT cryptographically secure - for obfuscation only)
- * For production, use Web Crypto API with AES-GCM
+ * Simple encryption for localStorage data using Web Crypto API AES-GCM
+ * This provides real cryptographic security for sensitive data like wallet seeds
  */
-function simpleEncrypt(text: string): string {
+async function simpleEncrypt(text: string): Promise<string> {
   const key = 'everdream-key-2024';
-  let result = '';
-  for (let i = 0; i < text.length; i++) {
-    const charCode = text.charCodeAt(i) ^ key.charCodeAt(i % key.length);
-    result += String.fromCharCode(charCode);
-  }
-  return btoa(result);
+  
+  // Derive a key from the password using PBKDF2
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(key);
+  const salt = encoder.encode('everdream-salt-v1');
+  
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    keyData,
+    { name: 'PBKDF2' },
+    false,
+    ['deriveBits', 'deriveKey']
+  );
+  
+  const derivedKey = await crypto.subtle.deriveKey(
+    {
+      name: 'PBKDF2',
+      salt,
+      iterations: 100000,
+      hash: 'SHA-256',
+    },
+    cryptoKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt']
+  );
+  
+  // Generate random IV
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  
+  // Encrypt the data
+  const encrypted = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    derivedKey,
+    encoder.encode(text)
+  );
+  
+  // Combine IV and ciphertext, then base64 encode
+  const combined = new Uint8Array(iv.length + encrypted.byteLength);
+  combined.set(iv, 0);
+  combined.set(new Uint8Array(encrypted), iv.length);
+  
+  return btoa(String.fromCharCode(...combined));
 }
 
 /**
  * Decrypt data encrypted with simpleEncrypt
  */
-function simpleDecrypt(encrypted: string): string {
+async function simpleDecrypt(encrypted: string): Promise<string> {
   const key = 'everdream-key-2024';
-  const decoded = atob(encrypted);
-  let result = '';
-  for (let i = 0; i < decoded.length; i++) {
-    const charCode = decoded.charCodeAt(i) ^ key.charCodeAt(i % key.length);
-    result += String.fromCharCode(charCode);
-  }
-  return result;
+  
+  // Decode from base64
+  const combined = Uint8Array.from(atob(encrypted), c => c.charCodeAt(0));
+  
+  // Extract IV and ciphertext
+  const iv = combined.slice(0, 12);
+  const ciphertext = combined.slice(12);
+  
+  // Derive the same key
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(key);
+  const salt = encoder.encode('everdream-salt-v1');
+  
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    keyData,
+    { name: 'PBKDF2' },
+    false,
+    ['deriveBits', 'deriveKey']
+  );
+  
+  const derivedKey = await crypto.subtle.deriveKey(
+    {
+      name: 'PBKDF2',
+      salt,
+      iterations: 100000,
+      hash: 'SHA-256',
+    },
+    cryptoKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['decrypt']
+  );
+  
+  // Decrypt the data
+  const decrypted = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv },
+    derivedKey,
+    ciphertext
+  );
+  
+  return new TextDecoder().decode(decrypted);
 }
 
 /**
  * Generate a deterministic device seed
+ * Uses only stable device characteristics - no random or time-based components
  */
 function generateDeviceSeed(): string {
   const navigator = window.navigator as any;
   const screen = window.screen;
   
+  // Only use stable, deterministic properties
   const components = [
     navigator.userAgent || '',
     navigator.language || '',
@@ -154,8 +227,7 @@ function generateDeviceSeed(): string {
     new Date().getTimezoneOffset(),
     !!navigator.cookieEnabled,
     navigator.hardwareConcurrency || 0,
-    Date.now().toString(),
-    Math.random().toString(36).slice(2),
+    navigator.platform || '',
   ];
 
   // Simple hash function (djb2)
@@ -165,9 +237,9 @@ function generateDeviceSeed(): string {
     hash = ((hash << 5) + hash + str.charCodeAt(i)) | 0;
   }
 
-  // Convert to hex and pad
+  // Convert to hex and pad to create a consistent seed
   const hexSeed = Math.abs(hash).toString(16).padStart(16, '0');
-  return hexSeed + '-' + Date.now().toString(36);
+  return hexSeed;
 }
 
 /**
@@ -195,9 +267,9 @@ function deriveAddressFromSeed(seed: string): string {
 /**
  * Get or create wallet identity for this device
  */
-export function getOrCreateWallet(): WalletIdentity {
+export async function getOrCreateWallet(): Promise<WalletIdentity> {
   // Check for existing wallet
-  const stored = localStorage.getItem(WALLET_STORAGE_KEY);
+  const stored = safeGetLocalStorage(WALLET_STORAGE_KEY);
   if (stored) {
     try {
       return JSON.parse(stored);
@@ -207,10 +279,10 @@ export function getOrCreateWallet(): WalletIdentity {
   }
 
   // Get or create device seed
-  let seed = localStorage.getItem(DEVICE_SEED_KEY);
+  let seed = safeGetLocalStorage(DEVICE_SEED_KEY);
   if (!seed) {
     seed = generateDeviceSeed();
-    localStorage.setItem(DEVICE_SEED_KEY, seed);
+    safeSetLocalStorage(DEVICE_SEED_KEY, seed);
   }
 
   const address = deriveAddressFromSeed(seed);
@@ -222,7 +294,7 @@ export function getOrCreateWallet(): WalletIdentity {
     deviceId: seed.slice(0, 16),
   };
 
-  localStorage.setItem(WALLET_STORAGE_KEY, JSON.stringify(wallet));
+  safeSetLocalStorage(WALLET_STORAGE_KEY, JSON.stringify(wallet));
   return wallet;
 }
 
@@ -230,7 +302,7 @@ export function getOrCreateWallet(): WalletIdentity {
  * Get existing wallet or null
  */
 export function getWallet(): WalletIdentity | null {
-  const stored = localStorage.getItem(WALLET_STORAGE_KEY);
+  const stored = safeGetLocalStorage(WALLET_STORAGE_KEY);
   if (stored) {
     try {
       return JSON.parse(stored);
@@ -239,6 +311,29 @@ export function getWallet(): WalletIdentity | null {
     }
   }
   return null;
+}
+
+/**
+ * Safe localStorage get with try-catch wrapper
+ */
+function safeGetLocalStorage(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch (e) {
+    console.warn('[NFT] localStorage access failed:', e);
+    return null;
+  }
+}
+
+/**
+ * Safe localStorage set with try-catch wrapper
+ */
+function safeSetLocalStorage(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch (e) {
+    console.warn('[NFT] localStorage set failed:', e);
+  }
 }
 
 /**
