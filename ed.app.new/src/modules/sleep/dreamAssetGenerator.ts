@@ -156,14 +156,15 @@ async function generateWithEdgeFunction(prompt: string, style: string = 'dreamli
 }
 
 /**
- * Generate image using Pollinations.ai — completely free, no API key needed.
- * Validates that the image URL actually loads before returning.
+ * Generate image using Pollinations.ai — FREE tier with optimized parameters.
+ * Uses 512x512 resolution which works on free tier (no nologo parameter).
  */
 async function generateWithPollinations(prompt: string): Promise<DreamAsset> {
   console.log('[AssetGen] Generating via Pollinations...');
   const enhancedPrompt = buildDreamPrompt(prompt);
   const encodedPrompt = encodeURIComponent(enhancedPrompt);
-  const imageUrl = `${POLLINATIONS_API_URL}/${encodedPrompt}?width=1024&height=1024&nologo=true&seed=${Date.now() % 1000000}`;
+  // Use 512x512 without nologo for free tier compatibility
+  const imageUrl = `${POLLINATIONS_API_URL}/${encodedPrompt}?width=512&height=512&seed=${Date.now() % 1000000}`;
 
   console.log('[AssetGen] Pollinations URL:', imageUrl.substring(0, 100));
   
@@ -180,7 +181,7 @@ async function generateWithPollinations(prompt: string): Promise<DreamAsset> {
     metadata: {
       provider: 'pollinations.ai',
       model: 'flux',
-      note: 'Free unlimited generation',
+      note: 'Free tier - 512x512 resolution',
     },
   };
 }
