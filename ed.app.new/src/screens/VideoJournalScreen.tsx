@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Video, Camera, Mic, Square, Play, Pause, X, Check, Sparkles } from 'lucide-react';
-import { Button, Card } from '../ui';
+import { Button, Card } from '../components/ui';
 
 interface VideoJournalScreenProps {
   onComplete: (videoUrl: string, thumbnailUrl: string, duration: number) => Promise<void>;
