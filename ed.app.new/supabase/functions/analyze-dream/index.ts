@@ -5,16 +5,16 @@
  * Tries providers in order of cost (free first, paid last).
  *
  * Provider Priority:
- * 1. OpenRouter (free tier models available)
+ * 1. OpenRouter owl-alpha (FREE - high-performance agentic model)
  * 2. Google Gemini 1.5 Flash (free tier - 60 req/min)
  * 3. OpenAI GPT-4o-mini (cheap - ~$0.15/1M tokens)
  * 4. NVIDIA Nemotron (open source, cost-effective)
  *
  * Environment variables (set via `supabase secrets set`):
- *   OPENROUTER_API_KEY — OpenRouter API key (free tier available)
- *   GEMINI_API_KEY — Google AI Studio key (free tier)
- *   OPENAI_API_KEY — OpenAI API key ($5 free credit)
- *   NVIDIA_API_KEY — NVIDIA API key for Nemotron models
+ *   OPENROUTER_API_KEY — OpenRouter API key (required, free tier available)
+ *   GEMINI_API_KEY — Google AI Studio key (free tier, optional backup)
+ *   OPENAI_API_KEY — OpenAI API key ($5 free credit, optional backup)
+ *   NVIDIA_API_KEY — NVIDIA API key for Nemotron models (optional backup)
  *
  * Request body:
  *   { text: string } — The dream text to analyze
@@ -128,10 +128,11 @@ async function analyzeWithOpenRouter(text: string): Promise<ProviderResult> {
   const apiKey = Deno.env.get('OPENROUTER_API_KEY');
   if (!apiKey) throw new Error('OPENROUTER_API_KEY not set');
 
-  // Use owl-alpha model from OpenRouter
+  // Use owl-alpha model from OpenRouter - FREE, high-performance for agentic workloads
   const model = 'openrouter/owl-alpha';
 
   try {
+    console.log(`[analyze-dream][openrouter] Using model: ${model}`);
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -150,11 +151,16 @@ async function analyzeWithOpenRouter(text: string): Promise<ProviderResult> {
       }),
     });
 
+    console.log(`[analyze-dream][openrouter] Response status: ${response.status}`);
+
     if (!response.ok) {
-      throw new Error(`OpenRouter returned ${response.status}`);
+      const errorText = await response.text();
+      throw new Error(`OpenRouter returned ${response.status}: ${errorText}`);
     }
 
     const data = await response.json();
+    console.log(`[analyze-dream][openrouter] Response received, choices: ${data.choices?.length || 0}`);
+    
     const content = data.choices?.[0]?.message?.content || '{}';
     const clean = content.replace(/```json|```/g, '').trim();
     const analysis = JSON.parse(clean) as DreamAnalysis;
@@ -302,6 +308,7 @@ serve(async (req: Request): Promise<Response> => {
       : trimmed;
 
     // Try providers in order: free → cheap → expensive
+    // OpenRouter (owl-alpha) is now first - it's FREE and high-performance
     const providers = [
       { name: 'openrouter', fn: () => analyzeWithOpenRouter(safeText) },
       { name: 'gemini', fn: () => analyzeWithGemini(safeText) },

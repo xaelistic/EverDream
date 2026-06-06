@@ -1,63 +1,86 @@
 ```
+# Dependencies
+node_modules/
+
 # Environment
 .env
 .env.local
 .env.*
 
-# Dependencies
-node_modules/
+# Editors
+.vscode/
+.idea/
+
+# Logs and temp files
+*.log
+*.tmp
+*.swp
 
 # Build artifacts
 dist/
 build/
 target/
 
-# Cache directories
+# Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-*.py.class
-*.py.obj
-
-# Logs
+.Python
+env/
+venv/
+.venv/
+.ENV
+.python-version
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
 *.log
+.git/
+.mypy_cache/
+.pytest_cache/
+.hypothesis/
 
-# Temporary files
-*.tmp
-*.temp
-*.swp
-*.swo
+# Node.js
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+node_modules/
+jspm_packages/
+web_modules/
+*.tsbuildinfo
+.nyc_output
+coverage/
+.nyc_output/
+istanbul.yml
+.nyc_output/
+.tap/
+.testcoverage/
 
-# OS
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.prof
 .DS_Store
 Thumbs.db
 
-# IDE specific
-.vscode/
-.idea/
+# Julia
+julia-*/
 
-# Package lock files (if not already managed by version control)
-yarn.lock
-package-lock.json
+# Zig
+zig*/
 
-# Runtime specific (Bun)
-.bun/
-bun.lock
-
-# Configuration and build tools
-.nyc_output/
-.jscache/
-tsconfig.tsbuildinfo
-
-# Serverless/Wrangler specific
-.wrangler/
-
-# IDE
-.vscode/
-.idea/
-
-# Compression
+# Compressed files
 *.zip
 *.gz
 *.tar
@@ -80,4 +103,7 @@ tsconfig.tsbuildinfo
 *.tar.bz2
 *.tar.xz
 *.tar.zst
+
+# Supabase specific
+supabase/.temp/
 ```

@@ -78,6 +78,10 @@ function errorResponse(message: string, status: number): Response {
   return jsonResponse({ error: message }, status);
 }
 
+async function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 // ── Provider: Hugging Face (FREE) ────────────────────────────
 
 async function generateWithHuggingFace(
@@ -231,7 +235,7 @@ serve(async (req: Request): Promise<Response> => {
     // Try providers in order: free → cheap
     const errors: string[] = [];
 
-    // Provider 1: Hugging Face (FREE)
+    // Provider 1: Hugging Face (FREE) - Now with better error handling
     try {
       console.log('[generate-image] Trying Hugging Face...');
       const result = await generateWithHuggingFace(prompt, width, height);
@@ -241,6 +245,21 @@ serve(async (req: Request): Promise<Response> => {
       const msg = err instanceof Error ? err.message : String(err);
       console.warn('[generate-image] Hugging Face failed:', msg);
       errors.push(`huggingface: ${msg}`);
+      
+      // If model is loading, wait and retry once
+      if (msg.includes('loading')) {
+        console.log('[generate-image] Waiting for model to load...');
+        await delay(5000);
+        try {
+          const retryResult = await generateWithHuggingFace(prompt, width, height);
+          console.log('[generate-image] Hugging Face succeeded on retry');
+          return retryResult;
+        } catch (retryErr) {
+          const retryMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
+          console.warn('[generate-image] Hugging Face retry failed:', retryMsg);
+          errors.push(`huggingface-retry: ${retryMsg}`);
+        }
+      }
     }
 
     // Provider 2: Fal AI (cheap)
