@@ -30,6 +30,7 @@ import { ReflectionScreen } from './screens/ReflectionScreen';
 import { JournalScreen } from './screens/JournalScreen';
 import { InsightsScreen } from './screens/InsightsScreen';
 import { MoreScreen } from './screens/MoreScreen';
+import { RecordScreen } from './screens/RecordScreen';
 import { useHashRoute } from './hooks/useHashRoute';
 import { getCategoryBadgeClass, getEmotionEmoji } from './utils/dreamPresentation';
 import PhotoUploadFlow from './components/photo-upload/PhotoUploadFlow';
@@ -2024,57 +2025,51 @@ const DreamJournalApp = () => {
 
       {/* Record (full page) — uses DreamCapture with pipeline progress */}
       {route.screen === 'record' && (
-        <div className="space-y-6">
-          {/* Quick capture mode selector */}
-          <Card>
-            <p className="text-xs uppercase tracking-[0.2em] text-muted mb-3">Choose how to capture your dream</p>
-            <div className="grid grid-cols-3 gap-3">
-              <button
-                type="button"
-                onClick={() => navigate('record')}
-                className={`flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all ${
-                  true
-                    ? 'border-sage bg-sage/10 text-sageDark'
-                    : 'border-line bg-parchment text-muted hover:bg-parchment/80'
-                }`}
-              >
-                <span className="text-2xl">📝</span>
-                <span className="text-xs font-medium">Text</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => window.location.hash = '#/video-journal'}
-                className={`flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all ${
-                  route.screen === 'video-journal'
-                    ? 'border-sage bg-sage/10 text-sageDark'
-                    : 'border-line bg-parchment text-muted hover:bg-parchment/80'
-                }`}
-              >
-                <span className="text-2xl">🎥</span>
-                <span className="text-xs font-medium">Video</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate('import-photos')}
-                className={`flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all ${
-                  route.screen === 'import-photos'
-                    ? 'border-sage bg-sage/10 text-sageDark'
-                    : 'border-line bg-parchment text-muted hover:bg-parchment/80'
-                }`}
-              >
-                <span className="text-2xl">📷</span>
-                <span className="text-xs font-medium">Photos</span>
-              </button>
-            </div>
-          </Card>
-          
-          <DreamCapture
-            onComplete={async (result, text) => {
-              // Build a complete dream object from the pipeline result
+        <RecordScreen
+          onComplete={async (result, text) => {
+            // Handle both video and text capture results
+            let newDream;
+            
+            if (result.videoUrl) {
+              // Video capture result
+              newDream = {
+                id: `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                date: new Date().toISOString(),
+                content: 'Video journal entry - watch to hear the dream details',
+                category: 'video-journal',
+                themes: ['video', 'personal-recording'],
+                emotion: 'neutral',
+                symbols: [],
+                narrative: 'Video journal recording',
+                nugget: `Video journal (${Math.floor(result.duration / 60)}:${(result.duration % 60).toString().padStart(2, '0')})`,
+                interpretation: {
+                  symbols: {},
+                  meaning: 'Video journal - personal reflection',
+                  commonPattern: '',
+                },
+                captureMode: 'video',
+                videoCapture: {
+                  url: result.videoUrl,
+                  capturedAt: new Date().toISOString(),
+                  duration: result.duration,
+                },
+                generatedImage: result.thumbnail
+                  ? {
+                      url: result.thumbnail,
+                      prompt: 'Video journal thumbnail',
+                      style: 'photo',
+                      generatedAt: new Date().toISOString(),
+                      source: 'video-capture',
+                    }
+                  : null,
+                isSample: false,
+              };
+            } else {
+              // Text capture result from DreamCapture
               const analysis = result.analysis;
               const imageAsset = result.image;
 
-              const newDream = {
+              newDream = {
                 id: `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
                 date: new Date().toISOString(),
                 content: text,
@@ -2102,23 +2097,23 @@ const DreamJournalApp = () => {
                 captureMode: 'text',
                 isSample: false,
               };
+            }
 
-              // Save to state
-              const updatedDreams = [newDream, ...dreams];
-              setDreams(updatedDreams);
-              await saveDreamsToStorage(updatedDreams);
+            // Save to state
+            const updatedDreams = [newDream, ...dreams];
+            setDreams(updatedDreams);
+            await saveDreamsToStorage(updatedDreams);
 
-              // Sync to Supabase (non-blocking)
-              syncDreamToSupabase(newDream).catch((err: unknown) => {
-                console.warn('[RecordScreen] Supabase sync error:', err);
-              });
+            // Sync to Supabase (non-blocking)
+            syncDreamToSupabase(newDream).catch((err: unknown) => {
+              console.warn('[RecordScreen] Supabase sync error:', err);
+            });
 
-              // Navigate to the new dream detail
-              navigate('dream', newDream.id);
-            }}
-            onCancel={() => navigate('home')}
-          />
-        </div>
+            // Navigate to the new dream detail
+            navigate('dream', newDream.id);
+          }}
+          onCancel={() => navigate('home')}
+        />
       )}
 
       {/* Video Journal Screen */}
