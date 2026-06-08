@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
-import { Sparkles, Wand2, Image, Brain, Type } from 'lucide-react';
-import { Button, Card } from '../ui';
+import { Sparkles, Wand2, Image, Brain, Type, Camera, Mic, Video } from 'lucide-react';
+import { Button, Card, Modal } from '../ui';
 import PipelineProgress from './PipelineProgress';
 import { analyzeDream } from '../../lib/dream-analyzer';
 import { generateDreamImage } from '../../modules/sleep/dreamAssetGenerator';
@@ -21,6 +21,10 @@ interface DreamCaptureProps {
   onCancel: () => void;
   /** Whether to auto-start analysis */
   autoStart?: boolean;
+  /** Selected date from tracker/calendar - ensures correct timestamp */
+  selectedDate?: string;
+  /** Trigger full-screen visual capture modal */
+  onOpenCamera?: () => void;
 }
 
 type StepStatus = 'pending' | 'running' | 'done' | 'error' | 'skipped';
@@ -52,9 +56,13 @@ export default function DreamCapture({
   onComplete,
   onCancel,
   autoStart = false,
+  selectedDate,
+  onOpenCamera,
 }: DreamCaptureProps) {
   const [text, setText] = useState(initialText);
   const [isRunning, setIsRunning] = useState(false);
+  const [showCameraModal, setShowCameraModal] = useState(false);
+  const [captureMode, setCaptureMode] = useState<'photo' | 'video' | 'audio'>('photo');
   const [steps, setSteps] = useState<Step[]>([
     { name: 'Dream Analysis', status: 'pending', message: '' },
     { name: 'Image Generation', status: 'pending', message: '' },
@@ -62,6 +70,7 @@ export default function DreamCapture({
   const [analysisResult, setAnalysisResult] = useState<DreamAnalysis | null>(null);
   const [imageResult, setImageResult] = useState<DreamAsset | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [capturedMedia, setCapturedMedia] = useState<{ url: string; type: string; timestamp: string } | null>(null);
 
   const updateStep = useCallback((name: string, update: { status?: StepStatus; message?: string }) => {
     setSteps(prev => prev.map(s => s.name === name ? { ...s, ...update } : s));
