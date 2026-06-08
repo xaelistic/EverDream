@@ -1,8 +1,18 @@
 /**
  * Supabase Edge Function: analyze-dream
  *
- * Multi-provider dream analysis with automatic fallback.
- * Tries providers in order of cost (free first, paid last).
+ * XAEL NVCNT Matrix Analysis - Multi-provider with automatic fallback.
+ * Analyzes dreams using the Subconscious Data Structurer protocol.
+ *
+ * NVCNT Matrix Dimensions:
+ * - Narrative: Coherence and story arc (anti-spam gatekeeper)
+ * - Valence: Absolute emotional magnitude + polarity
+ * - Complexity: (Avg Abstraction Level * Semantic Variance)
+ *   - hierarchical_depth: 0.0 (concrete) to 1.0 (abstract/philosophical)
+ *   - semantic_variance: 0.0 (same domain) to 1.0 (bridged domains)
+ *   - conceptual_payload: Array of concepts with abstraction levels
+ * - Novelty: Statistical rarity of words/scenarios
+ * - Texture: Sensory/material/lighting density for 3D/VR rendering
  *
  * Provider Priority:
  * 1. OpenRouter owl-alpha (FREE - high-performance agentic model)
@@ -20,7 +30,7 @@
  *   { text: string } — The dream text to analyze
  *
  * Response:
- *   { analysis: DreamAnalysis, provider: string, model: string }
+ *   { analysis: NVCNTMatrix, provider: string, model: string }
  *
  * Error responses:
  *   400 — Missing or invalid input
@@ -32,19 +42,45 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 
 // ── Types ────────────────────────────────────────────────────
 
-interface DreamAnalysis {
-  category: string;
-  themes: string[];
-  emotion: string;
-  symbols: string[];
-  narrative: string;
-  nugget: string;
-  valence?: number;
-  interpretation: {
-    symbols: Record<string, string>;
-    meaning: string;
-    commonPattern: string;
-  };
+interface ConceptualPayload {
+  concept: string;
+  abstraction_level: number; // 1-10 (1=physical object, 10=high-order philosophy)
+  domain_cluster: string; // e.g., "physics", "emotion", "sociology"
+}
+
+interface ComplexityMetric {
+  score: number; // 0.0 to 1.0
+  hierarchical_depth: number; // 0.0 to 1.0
+  semantic_variance: number; // 0.0 to 1.0
+  conceptual_payload: ConceptualPayload[];
+}
+
+interface NarrativeMetric {
+  score: number; // 0.0 to 1.0
+  summary: string;
+}
+
+interface ValenceMetric {
+  score: number; // 0.0 to 1.0 (absolute emotional magnitude)
+  polarity: number; // -1.0 to 1.0
+}
+
+interface NoveltyMetric {
+  score: number; // 0.0 to 1.0
+  unique_identifiers: string[];
+}
+
+interface TextureMetric {
+  score: number; // 0.0 to 1.0
+  render_prompt: string;
+}
+
+interface NVCNTMatrix {
+  narrative: NarrativeMetric;
+  valence: ValenceMetric;
+  complexity: ComplexityMetric;
+  novelty: NoveltyMetric;
+  texture: TextureMetric;
 }
 
 interface AnalyzeRequestBody {
@@ -52,7 +88,7 @@ interface AnalyzeRequestBody {
 }
 
 interface ProviderResult {
-  analysis: DreamAnalysis;
+  analysis: NVCNTMatrix;
   provider: string;
   model: string;
 }
@@ -67,37 +103,69 @@ const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const FALLBACK_ANALYSIS: DreamAnalysis = {
-  category: 'uncategorized',
-  themes: ['dream', 'experience'],
-  emotion: 'neutral',
-  symbols: [],
-  narrative: '',
-  nugget: '',
-  valence: 0,
-  interpretation: {
-    symbols: {},
-    meaning: 'Analysis unavailable — all providers failed',
-    commonPattern: '',
+const FALLBACK_ANALYSIS: NVCNTMatrix = {
+  narrative: {
+    score: 0.0,
+    summary: '',
+  },
+  valence: {
+    score: 0.0,
+    polarity: 0.0,
+  },
+  complexity: {
+    score: 0.0,
+    hierarchical_depth: 0.0,
+    semantic_variance: 0.0,
+    conceptual_payload: [],
+  },
+  novelty: {
+    score: 0.0,
+    unique_identifiers: [],
+  },
+  texture: {
+    score: 0.0,
+    render_prompt: '',
   },
 };
 
-const ANALYSIS_PROMPT = `Analyze this dream and provide a detailed response in JSON format:
+const XAEL_PROMPT = `You are the Subconscious Data Structurer for the DreamScape Protocol.
+Analyze the dream transcript and extract the NVCNT Matrix.
+
+CRITICAL DEFINITIONS:
+- COMPLEXITY is NOT about big words or visual weirdness. It is about CONCEPTUAL HIERARCHY (abstract/philosophical depth) and SEMANTIC VARIANCE (how conceptually distant the ideas are from one another).
+- NOVELTY is about statistical rarity and unusual linguistic choices.
+- TEXTURE is purely about sensory, material, and spatial renderability.
+
+Return a STRICT JSON object matching this schema:
+
 {
-  "category": "nightmare/lucid/recurring/peaceful/prophetic/anxiety/adventure",
-  "themes": ["theme1", "theme2", "theme3"],
-  "emotion": "primary emotional tone",
-  "symbols": ["symbol1", "symbol2", "symbol3"],
-  "narrative": "expanded 200-word vivid narrative in first person present tense",
-  "nugget": "one captivating sentence (15-20 words)",
-  "valence": -1.0 to 1.0 (negative to positive emotional tone, single number),
-  "interpretation": {
-    "symbols": {
-      "symbol1": "what it represents",
-      "symbol2": "what it represents"
-    },
-    "meaning": "psychological insight about what this dream reveals",
-    "commonPattern": "when people typically have dreams like this"
+  "narrative": {
+    "score": 0.0 to 1.0,
+    "summary": "string"
+  },
+  "valence": {
+    "score": 0.0 to 1.0,
+    "polarity": -1.0 to 1.0
+  },
+  "complexity": {
+    "score": 0.0 to 1.0,
+    "hierarchical_depth": 0.0 to 1.0,
+    "semantic_variance": 0.0 to 1.0,
+    "conceptual_payload": [
+      {
+        "concept": "string",
+        "abstraction_level": 1 to 10,
+        "domain_cluster": "string"
+      }
+    ]
+  },
+  "novelty": {
+    "score": 0.0 to 1.0,
+    "unique_identifiers": ["string"]
+  },
+  "texture": {
+    "score": 0.0 to 1.0,
+    "render_prompt": "string"
   }
 }
 
@@ -145,7 +213,7 @@ async function analyzeWithOpenRouter(text: string): Promise<ProviderResult> {
         model,
         messages: [{
           role: 'user',
-          content: ANALYSIS_PROMPT.replace('{DREAM_TEXT}', text),
+          content: XAEL_PROMPT.replace('{DREAM_TEXT}', text),
         }],
         max_tokens: 2000,
       }),
@@ -163,7 +231,7 @@ async function analyzeWithOpenRouter(text: string): Promise<ProviderResult> {
     
     const content = data.choices?.[0]?.message?.content || '{}';
     const clean = content.replace(/```json|```/g, '').trim();
-    const analysis = JSON.parse(clean) as DreamAnalysis;
+    const analysis = JSON.parse(clean) as NVCNTMatrix;
 
     return { analysis, provider: 'openrouter', model };
   } catch (err) {
@@ -184,7 +252,7 @@ async function analyzeWithGemini(text: string): Promise<ProviderResult> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       contents: [{
-        parts: [{ text: ANALYSIS_PROMPT.replace('{DREAM_TEXT}', text) }],
+        parts: [{ text: XAEL_PROMPT.replace('{DREAM_TEXT}', text) }],
       }],
       generationConfig: { maxOutputTokens: 2000 },
     }),
@@ -197,7 +265,7 @@ async function analyzeWithGemini(text: string): Promise<ProviderResult> {
   const data = await response.json();
   const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
   const clean = content.replace(/```json|```/g, '').trim();
-  const analysis = JSON.parse(clean) as DreamAnalysis;
+  const analysis = JSON.parse(clean) as NVCNTMatrix;
 
   return { analysis, provider: 'gemini', model: 'gemini-1.5-flash' };
 }
@@ -218,7 +286,7 @@ async function analyzeWithOpenAI(text: string): Promise<ProviderResult> {
       model: 'gpt-4o-mini',
       messages: [{
         role: 'user',
-        content: ANALYSIS_PROMPT.replace('{DREAM_TEXT}', text),
+        content: XAEL_PROMPT.replace('{DREAM_TEXT}', text),
       }],
       max_tokens: 2000,
     }),
@@ -231,7 +299,7 @@ async function analyzeWithOpenAI(text: string): Promise<ProviderResult> {
   const data = await response.json();
   const content = data.choices?.[0]?.message?.content || '{}';
   const clean = content.replace(/```json|```/g, '').trim();
-  const analysis = JSON.parse(clean) as DreamAnalysis;
+  const analysis = JSON.parse(clean) as NVCNTMatrix;
 
   return { analysis, provider: 'openai', model: 'gpt-4o-mini' };
 }
@@ -252,7 +320,7 @@ async function analyzeWithNemotron(text: string): Promise<ProviderResult> {
       model: 'nvidia/nemotron-4-340b-instruct',
       messages: [{
         role: 'user',
-        content: ANALYSIS_PROMPT.replace('{DREAM_TEXT}', text),
+        content: XAEL_PROMPT.replace('{DREAM_TEXT}', text),
       }],
       max_tokens: 2000,
     }),
@@ -265,7 +333,7 @@ async function analyzeWithNemotron(text: string): Promise<ProviderResult> {
   const data = await response.json();
   const content = data.choices?.[0]?.message?.content || '{}';
   const clean = content.replace(/```json|```/g, '').trim();
-  const analysis = JSON.parse(clean) as DreamAnalysis;
+  const analysis = JSON.parse(clean) as NVCNTMatrix;
 
   return { analysis, provider: 'nemotron', model: 'nemotron-4-340b' };
 }
@@ -297,7 +365,7 @@ serve(async (req: Request): Promise<Response> => {
     const trimmed = text.trim();
     if (trimmed.length < 10) {
       return jsonResponse({
-        analysis: { ...FALLBACK_ANALYSIS, narrative: trimmed, nugget: trimmed.substring(0, 100) },
+        analysis: FALLBACK_ANALYSIS,
         provider: 'none',
         note: 'Text too short for meaningful analysis',
       });
@@ -334,7 +402,7 @@ serve(async (req: Request): Promise<Response> => {
     // All providers failed
     console.error('[analyze-dream] All providers failed:', errors);
     return jsonResponse({
-      analysis: { ...FALLBACK_ANALYSIS, narrative: safeText, nugget: safeText.substring(0, 100) },
+      analysis: FALLBACK_ANALYSIS,
       provider: 'none',
       errors,
     });
