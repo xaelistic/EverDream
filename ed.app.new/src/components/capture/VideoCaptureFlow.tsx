@@ -26,6 +26,7 @@ import {
   Zap,
   Moon
 } from 'lucide-react';
+import { mediaStorageManager } from '../../lib/mediaStorage';
 
 export interface VideoCaptureData {
   /** Blob of recorded video */
@@ -130,6 +131,7 @@ export function VideoCaptureFlow({
   const [permissionGranted, setPermissionGranted] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentEmotion, setCurrentEmotion] = useState<string | null>(null);
+  const [savedMediaId, setSavedMediaId] = useState<string | null>(null);
 
   // Request camera permission and start preview
   useEffect(() => {
@@ -233,6 +235,29 @@ export function VideoCaptureFlow({
         console.warn('[VideoCapture] Failed to generate thumbnail:', e);
       }
       
+      // Save to IndexedDB
+      let mediaId: string | null = null;
+      try {
+        mediaId = await mediaStorageManager.saveMedia(videoBlob, {
+          dreamId: undefined, // Will be linked later if associated with a dream
+          type: 'video',
+          mimeType: recorder.mimeType || 'video/webm',
+          size: videoBlob.size,
+          duration,
+          recordedAt: new Date().toISOString(),
+          emotion: currentEmotion || undefined,
+          emotionConfidence: 0.75,
+          thumbnail,
+          backedUp: false,
+          cloudProviders: [],
+          tags: ['dream-recording'],
+        });
+        setSavedMediaId(mediaId);
+        console.log('[VideoCapture] Video saved to IndexedDB with ID:', mediaId);
+      } catch (err) {
+        console.error('[VideoCapture] Failed to save video to IndexedDB:', err);
+      }
+      
       const data: VideoCaptureData = {
         videoBlob,
         duration,
@@ -246,7 +271,8 @@ export function VideoCaptureFlow({
         duration: data.duration,
         hasThumbnail: !!thumbnail,
         hasAudio: data.hasAudio,
-        timestamp: data.timestamp
+        timestamp: data.timestamp,
+        mediaId
       });
       
       try {
