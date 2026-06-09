@@ -2,9 +2,12 @@
  * Audio Recording & Feature Extraction
  * Privacy-first: Extracts audio features locally, never stores raw audio without consent
  * Prepares for future cloud processing with explicit user opt-in
+ * 
+ * UPDATED: Now saves audio to IndexedDB automatically when recording stops
  */
 
 import { sleepSessionManager } from './sleepSession';
+import { mediaStorageManager } from '../../lib/mediaStorage';
 
 export interface AudioRecorderConfig {
   /** Sample rate (Hz) - 16000 is good balance between quality & storage */
@@ -110,15 +113,19 @@ class AudioRecorderManager {
   }
 
   /**
-   * Stop recording
+   * Stop recording and save to IndexedDB
+   * @returns Media ID if saved successfully, null otherwise
    */
-  stop(): void {
-    if (!this.isRecording) return;
+  async stop(dreamId?: string, emotion?: string, emotionConfidence?: number): Promise<string | null> {
+    if (!this.isRecording) return null;
 
     this.isRecording = false;
     this.processor?.disconnect();
     this.analyser?.disconnect();
 
+    // Get raw audio data before releasing stream
+    const audioBuffer = this.getRawAudioData();
+    
     // Release microphone
     if (this.mediaStream) {
       this.mediaStream.getTracks().forEach((track) => track.stop());
@@ -126,6 +133,34 @@ class AudioRecorderManager {
     }
 
     console.log('[AudioRecorder] Stopped recording');
+
+    // Save to IndexedDB if we have audio data
+    if (audioBuffer && this.config.storeRawAudio) {
+      try {
+        const blob = new Blob([audioBuffer], { type: 'audio/wav' });
+        const mediaId = await mediaStorageManager.saveMedia(blob, {
+          dreamId,
+          type: 'audio',
+          mimeType: 'audio/wav',
+          size: blob.size,
+          duration: this.rawAudioBuffer.length * this.config.frameSize / this.config.sampleRate,
+          recordedAt: new Date().toISOString(),
+          emotion,
+          emotionConfidence,
+          backedUp: false,
+          cloudProviders: [],
+          tags: ['dream-recording'],
+        });
+        console.log('[AudioRecorder] Audio saved to IndexedDB with ID:', mediaId);
+        this.clearAudioData();
+        return mediaId;
+      } catch (err) {
+        console.error('[AudioRecorder] Failed to save audio to IndexedDB:', err);
+      }
+    }
+
+    this.clearAudioData();
+    return null;
   }
 
   /**
