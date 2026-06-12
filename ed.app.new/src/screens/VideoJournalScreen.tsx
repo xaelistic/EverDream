@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Video, Camera, Mic, Square, Play, Pause, X, Check, Sparkles } from 'lucide-react';
 import { Button, Card } from '../components/ui';
+import FacialEmotionDetector, { EmotionCapture } from '../components/face/FacialEmotionDetector';
 
 interface VideoJournalScreenProps {
   onComplete: (videoUrl: string, thumbnailUrl: string, duration: number, videoBlob?: Blob) => Promise<void>;
