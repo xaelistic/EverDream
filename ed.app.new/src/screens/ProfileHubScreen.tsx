@@ -24,7 +24,7 @@ import {
   ChevronRight,
   Globe
 } from 'lucide-react';
-import { useSkinFull } from '../../contexts/SkinContext';
+import { useSkinFull } from '../contexts/SkinContext';
 
 interface ProfileHubProps {
   onClose: () => void;

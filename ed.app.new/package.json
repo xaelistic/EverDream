@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "preview:qa": "vite build && vite preview --host 0.0.0.0 --port 4173",
+    "qa": "npm run preview:qa",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

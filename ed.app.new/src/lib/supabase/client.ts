@@ -15,7 +15,7 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.su
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder';
 
 if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
-  console.warn('[Supabase] Credentials not configured. Using placeholder client for local-only mode.');
+  console.warn('[Supabase] Credentials not configured in .env (or using placeholder). App will run in local-only / offline mode. See .env.example for setup. Real cloud features (sync, auth, NFTs) will be disabled until configured.');
 }
 
 export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey, {

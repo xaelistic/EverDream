@@ -47,5 +47,13 @@ export async function generateDreamImage(prompt: string, style = 'dreamlike'): P
   }
 }
 
+export async function generateDreamAssets(prompt: string, count = 2): Promise<DreamAsset[]> {
+  const assets: DreamAsset[] = [];
+  for (let index = 0; index < count; index += 1) {
+    assets.push(await generateDreamImage(prompt, 'dreamlike'));
+  }
+  return assets;
+}
+
 // Keep other functions (generateDreamAssets, etc.) and update them to use the new reliable path if needed.
 // ... rest of file unchanged for compatibility ...

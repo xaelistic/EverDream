@@ -9,7 +9,7 @@ interface RecordScreenProps {
   captureMode?: 'text' | 'video' | 'audio';
 }
 
-export function RecordScreen({ onComplete, onCancel, captureMode = 'text' }: RecordScreenProps) {
+export function RecordScreen({ onComplete, onCancel, captureMode = 'video' }: RecordScreenProps) {
   // Full-screen video capture mode
   if (captureMode === 'video') {
     return (

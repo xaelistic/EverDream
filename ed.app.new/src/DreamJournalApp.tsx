@@ -2026,6 +2026,7 @@ const DreamJournalApp = () => {
       {/* Record (full page) — uses DreamCapture with pipeline progress */}
       {route.screen === 'record' && (
         <RecordScreen
+          captureMode="video"
           onComplete={async (result, text) => {
             // Handle both video and text capture results
             let newDream;
