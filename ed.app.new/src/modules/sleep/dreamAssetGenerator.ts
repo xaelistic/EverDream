@@ -51,38 +51,52 @@ async function generateWithOllama(prompt: string, style: string = 'dreamlike'): 
 
   const enhancedPrompt = buildDreamPrompt(prompt);
 
-  const response = await fetch(`${baseUrl}/api/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'HSR-DeepThink/nwe',
-      prompt: enhancedPrompt,
-      stream: false,
-    }),
-  });
+  // Prefer OpenAI-compatible endpoint (works great with the Express wrapper on port 11435)
+  // Falls back to raw Ollama /api/generate if needed
+  let ollamaResponse;
+  try {
+    ollamaResponse = await fetch(`${baseUrl}/v1/images/generations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: enhancedPrompt, n: 1, size: '1024x1024' }),
+    });
+  } catch {}
 
-  if (!response.ok) {
-    throw new Error(`Ollama returned ${response.status}: ${await response.text().catch(() => 'unknown')}`);
+  if (!ollamaResponse || !ollamaResponse.ok) {
+    // Direct Ollama path (for when no wrapper or direct exposure)
+    ollamaResponse = await fetch(`${baseUrl}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'HSR-DeepThink/nwe:latest',
+        prompt: enhancedPrompt,
+        stream: false,
+      }),
+    });
   }
 
-  const data = await response.json();
+  if (!ollamaResponse.ok) {
+    throw new Error(`Ollama returned ${ollamaResponse.status}: ${await ollamaResponse.text().catch(() => 'unknown')}`);
+  }
 
-  // Flexible parsing - adjust based on Phase 1 test results for this model
+  const data = await ollamaResponse.json();
+
+  // Flexible parsing based on Phase 1 findings + wrapper normalization
   let imageUrl: string;
-  if (data.response && data.response.length > 100) {
+
+  if (data.data?.[0]?.url) {
+    // OpenAI-compatible wrapper response (preferred)
+    imageUrl = data.data[0].url;
+  } else if (data.response && data.response.length > 100) {
     if (data.response.match(/^[A-Za-z0-9+/=]+$/)) {
       imageUrl = `data:image/png;base64,${data.response}`;
     } else {
-      // Text response - fall through to other providers
       throw new Error('Ollama NWE returned text description instead of image data');
     }
   } else if (data.image) {
     imageUrl = data.image.startsWith('data:') ? data.image : `data:image/png;base64,${data.image}`;
-  } else if (data.data?.[0]?.url) {
-    // If using the Express wrapper
-    imageUrl = data.data[0].url;
   } else {
-    throw new Error(`Unexpected Ollama NWE response format: ${JSON.stringify(data).substring(0, 300)}`);
+    throw new Error(`Unexpected Ollama NWE response format: ${JSON.stringify(data).substring(0, 400)}`);
   }
 
   return {

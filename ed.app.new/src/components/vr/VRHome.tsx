@@ -386,7 +386,7 @@ function EmotionIndicator({ emotion, position }: { emotion: string; position: [n
   const color = EMOTION_COLORS[emotion] || EMOTION_COLORS.neutral;
 
   return (
-    <Float speed={2} rotationIntensity={0.5} floatIntensity={0.5}>
+    <Float speed={2} rotationIntensity={0.5} floatIntensity={0.5} data-component="VRHome">
       <mesh position={position}>
         <sphereGeometry args={[0.06, 16, 16]} />
         <meshStandardMaterial

@@ -389,7 +389,7 @@ export const XPScoreDisplay: React.FC<XPScoreDisplayProps> = ({
 };
 
 export const XPScoreMini: React.FC<{ dxpScore: number; xaelScore: number }> = ({ dxpScore, xaelScore }) => {
-  return <XPScoreDisplay dxpScore={dxpScore} xaelScore={xaelScore} variant="mini" showBreakdown={false} />;
+  return <XPScoreDisplay dxpScore={dxpScore} xaelScore={xaelScore} variant="mini" showBreakdown={false} / data-component="XPScoreDisplay">;
 };
 
 export default XPScoreDisplay;

@@ -346,7 +346,7 @@ interface StatCardProps {
 
 function StatCard({ icon, label, value, subtitle, color }: StatCardProps) {
   return (
-    <Card>
+    <Card data-component="DreamStatsDashboard">
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
         {icon}
         <span style={{

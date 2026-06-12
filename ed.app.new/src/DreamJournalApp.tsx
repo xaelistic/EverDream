@@ -53,6 +53,8 @@ import DreamVisualizer from './components/dreams/DreamVisualizer';
 import DreamCapture from './components/dreams/DreamCapture';
 import { VideoJournalScreen } from './screens/VideoJournalScreen';
 import { analyzeDream, type DreamAnalysis } from './lib/dream-analyzer';
+import OnboardingFlow from './components/onboarding/OnboardingFlow';
+import LoadingScreen from './components/loading-screen';
 import type { DreamAsset } from './modules/sleep/types';
 import { initDreamService, syncFromSupabase } from './lib/dreamService';
 import { supabase as supabaseClient } from './lib/supabase/client';
@@ -198,6 +200,7 @@ const DreamJournalApp = () => {
   const [wallet, setWallet] = useState<WalletIdentity | null>(null);
   const [capturedEmotions, setCapturedEmotions] = useState<EmotionCapture | null>(null);
   const [wearableData, setWearableData] = useState<WearableSleepRecord[]>([]);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [wearableConfigs, setWearableConfigs] = useState<WearableConfig[]>([
     { provider: 'oura', auth: { provider: 'oura', accessToken: '' }, enabled: false },
     { provider: 'apple_health', auth: { provider: 'apple_health', accessToken: '' }, enabled: false },

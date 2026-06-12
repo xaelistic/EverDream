@@ -73,7 +73,7 @@ export function SkinProvider({ children }: { children: ReactNode }) {
   }, [skin]);
 
   return (
-    <SkinContextFull.Provider value={{ skin, setSkin, isPearl: skin === 'pearl', isDefault: skin === 'default' }}>
+    <SkinContextFull .Provider value={{ skin, setSkin, isPearl: skin === 'pearl', isDefault: skin === 'default' }} data-component="SkinContext">
       {children}
     </SkinContextFull.Provider>
   );

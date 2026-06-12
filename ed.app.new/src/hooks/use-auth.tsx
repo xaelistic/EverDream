@@ -41,7 +41,7 @@ const AuthContext = createContext<AuthState | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const auth = useAuthInternal();
   return (
-    <AuthContext.Provider value={auth}>
+    <AuthContext .Provider value={auth} data-component="use-auth">
       {children}
     </AuthContext.Provider>
   );

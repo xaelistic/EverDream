@@ -83,7 +83,7 @@ export default function DreamVisualizer({
   }, [asset, dreamId]);
 
   return (
-    <Card style={{ marginBottom: '24px' }}>
+    <Card style={{ marginBottom: '24px' }} data-component="DreamVisualizer">
       {/* Header */}
       <div style={{
         display: 'flex',

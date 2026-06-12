@@ -256,7 +256,7 @@ function DreamCard({ dream, onClick }: DreamCardProps) {
   const categoryVariant = getCategoryVariant(dream.category);
 
   return (
-    <Card hover onClick={onClick} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+    <Card hover onClick={onClick} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }} data-component="DreamList">
       {/* Card Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
