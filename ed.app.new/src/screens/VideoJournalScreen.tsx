@@ -4,7 +4,7 @@ import { Button, Card } from '../components/ui';
 import FacialEmotionDetector, { EmotionCapture } from '../components/face/FacialEmotionDetector';
 
 interface VideoJournalScreenProps {
-  onComplete: (videoUrl: string, thumbnailUrl: string, duration: number, videoBlob?: Blob) => Promise<void>;
+  onComplete: (videoUrl: string, thumbnailUrl: string, duration: number, videoBlob?: Blob, emotion?: EmotionCapture | null) => Promise<void>;
   onCancel: () => void;
 }
 
@@ -17,6 +17,7 @@ export function VideoJournalScreen({ onComplete, onCancel }: VideoJournalScreenP
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
+  const [capturedEmotion, setCapturedEmotion] = useState<EmotionCapture | null>(null);
   
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -174,7 +175,7 @@ export function VideoJournalScreen({ onComplete, onCancel }: VideoJournalScreenP
 
   const handleSave = async () => {
     if (previewUrl && thumbnailUrl) {
-      await onComplete(previewUrl, thumbnailUrl, recordingDuration, videoBlob || undefined);
+      await onComplete(previewUrl, thumbnailUrl, recordingDuration, videoBlob || undefined, capturedEmotion);
     }
   };
 
@@ -264,6 +265,18 @@ export function VideoJournalScreen({ onComplete, onCancel }: VideoJournalScreenP
             </>
           )}
         </div>
+
+        {/* Facial / Emotional Recognition during live recording */}
+        {!previewUrl && isRecording && (
+          <div className="mt-4">
+            <FacialEmotionDetector
+              isActive={true}
+              onEmotionsCaptured={(emotion) => setCapturedEmotion(emotion)}
+              width={320}
+              height={180}
+            />
+          </div>
+        )}
       </Card>
 
       {/* Error message */}

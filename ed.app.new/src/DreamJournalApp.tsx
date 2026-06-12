@@ -1019,6 +1019,15 @@ const DreamJournalApp = () => {
       context: contextData
     };
 
+    // Feed emotional recognition outputs into the analysis flow / narrative
+    if (capturedEmotions && capturedEmotions.dominantEmotion && newDream.interpretation) {
+      const emoNote = ` (Facial emotion during entry: ${capturedEmotions.dominantEmotion})`;
+      if (newDream.interpretation.meaning) newDream.interpretation.meaning += emoNote;
+      if (newDream.narrative) newDream.narrative += emoNote;
+      newDream.emotion = capturedEmotions.dominantEmotion;
+      console.log('[SaveDream] Emotional recog output merged into narrative/emotion');
+    }
+
     console.log('[SaveDream] Dream object created with videoCapture:', newDream.videoCapture ? 'yes' : 'no');
     
     const updatedDreams = [newDream, ...dreams.filter(d => !d.isSample)];
@@ -2120,7 +2129,7 @@ const DreamJournalApp = () => {
       {/* Video Journal Screen */}
       {route.screen === 'video-journal' && (
         <VideoJournalScreen
-          onComplete={async (videoUrl, thumbnailUrl, duration, videoBlob) => {
+          onComplete={async (videoUrl, thumbnailUrl, duration, videoBlob, capturedEmotionFromVideo) => {
             console.log('[VideoJournal] Processing video journal with transcription + analysis...');
 
             let transcriptText = 'Video journal entry - watch the video for the full dream description.';
@@ -2157,6 +2166,17 @@ const DreamJournalApp = () => {
               };
             }
 
+            // Feed emotional recognition outputs into the analysis flow
+            if (capturedEmotionFromVideo?.dominantEmotion) {
+              finalEmotion = capturedEmotionFromVideo.dominantEmotion;
+              const emoNote = ` (Facial rec during video: ${capturedEmotionFromVideo.dominantEmotion}, conf ${Math.round((capturedEmotionFromVideo.confidence || 0)*100)}%)`;
+              if (finalAnalysis.interpretation?.meaning) {
+                finalAnalysis.interpretation.meaning += emoNote;
+              }
+              finalAnalysis.narrative = (finalAnalysis.narrative || '') + emoNote;
+              console.log('[VideoJournal] Emotional recog output fed into analysis/narrative:', capturedEmotionFromVideo.dominantEmotion);
+            }
+
             // Persist video blob if available (for reliable playback after refresh)
             let persistentVideoUrl = videoUrl;
             if (videoBlob) {
@@ -2183,6 +2203,7 @@ const DreamJournalApp = () => {
               narrative: finalAnalysis.narrative,
               nugget: finalAnalysis.nugget,
               interpretation: finalAnalysis.interpretation,
+              capturedEmotions: capturedEmotionFromVideo || null,
               captureMode: 'video',
               videoCapture: {
                 url: persistentVideoUrl,

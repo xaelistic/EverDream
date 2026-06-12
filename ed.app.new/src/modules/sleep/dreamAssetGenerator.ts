@@ -42,9 +42,79 @@ async function generateWithReliableFree(prompt: string, style = 'dreamlike'): Pr
   return { id: makeId(), prompt: enhanced, url: fallbackUrl, source: 'image-service', style, generatedAt: new Date().toISOString(), metadata: { provider: 'pollinations-fallback' } };
 }
 
+// Ollama NWE integration (Brief 1 - primary provider when configured)
+async function generateWithOllama(prompt: string, style: string = 'dreamlike'): Promise<DreamAsset> {
+  const baseUrl = (import.meta.env.VITE_OLLAMA_URL || 'http://localhost:11434').replace(/\/+$/, '');
+  const isProxied = baseUrl.startsWith('/');
+
+  console.log(`[AssetGen] Trying Ollama NWE (Local) via ${baseUrl} (proxied: ${isProxied}) ...`);
+
+  const enhancedPrompt = buildDreamPrompt(prompt);
+
+  const response = await fetch(`${baseUrl}/api/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'HSR-DeepThink/nwe',
+      prompt: enhancedPrompt,
+      stream: false,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Ollama returned ${response.status}: ${await response.text().catch(() => 'unknown')}`);
+  }
+
+  const data = await response.json();
+
+  // Flexible parsing - adjust based on Phase 1 test results for this model
+  let imageUrl: string;
+  if (data.response && data.response.length > 100) {
+    if (data.response.match(/^[A-Za-z0-9+/=]+$/)) {
+      imageUrl = `data:image/png;base64,${data.response}`;
+    } else {
+      // Text response - fall through to other providers
+      throw new Error('Ollama NWE returned text description instead of image data');
+    }
+  } else if (data.image) {
+    imageUrl = data.image.startsWith('data:') ? data.image : `data:image/png;base64,${data.image}`;
+  } else if (data.data?.[0]?.url) {
+    // If using the Express wrapper
+    imageUrl = data.data[0].url;
+  } else {
+    throw new Error(`Unexpected Ollama NWE response format: ${JSON.stringify(data).substring(0, 300)}`);
+  }
+
+  return {
+    id: makeId(),
+    prompt,
+    url: imageUrl,
+    source: 'ollama-nwe',
+    style,
+    generatedAt: new Date().toISOString(),
+    metadata: {
+      provider: 'ollama',
+      model: 'HSR-DeepThink/nwe',
+      note: 'Generated locally via Ollama on Windows host (ngrok tunnel in prod)',
+    },
+  };
+}
+
 // Main exported function - simplified and robust
+// Ollama NWE is tried FIRST when VITE_OLLAMA_URL is set (Brief 1 requirement)
 export async function generateDreamImage(prompt: string, style = 'dreamlike'): Promise<DreamAsset> {
   console.log('[AssetGen] Starting image generation for dream...');
+
+  // Phase 4: Try Ollama NWE as #1 provider when enabled
+  const ollamaEnabled = import.meta.env.VITE_OLLAMA_ENABLED !== 'false' && !!import.meta.env.VITE_OLLAMA_URL;
+  if (ollamaEnabled) {
+    try {
+      return await generateWithOllama(prompt, style);
+    } catch (error) {
+      console.warn('[AssetGen] Ollama NWE failed, falling back to reliable free providers:', error);
+    }
+  }
+
   try {
     return await generateWithReliableFree(prompt, style);
   } catch (error) {

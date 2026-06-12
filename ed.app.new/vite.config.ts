@@ -49,6 +49,14 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5173,
     allowedHosts: ['.ngrok-free.dev'],
+    proxy: {
+      // Ollama Image Gen proxy (Brief 1) - allows dev without CORS issues
+      '/ollama': {
+        target: 'http://localhost:11434',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/ollama/, ''),
+      },
+    },
   },
   optimizeDeps: {
     exclude: ['@supabase/supabase-js', 'tesseract.js'],

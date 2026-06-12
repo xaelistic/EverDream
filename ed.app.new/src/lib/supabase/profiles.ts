@@ -24,6 +24,12 @@ export interface ProfileRecord {
   circadian_goal: string;
   created_at: string;
   updated_at: string;
+  // Added for Onboarding/Auth Merge Brief 2
+  onboarded_at?: string;
+  birth_date?: string;
+  gender?: 'female' | 'male' | 'non-binary' | 'prefer-not';
+  onboarding_goals?: string[];
+  average_sleep_hours?: number;
 }
 
 export type ProfileInsert = Partial<Omit<ProfileRecord, 'auth_user_id'>>;

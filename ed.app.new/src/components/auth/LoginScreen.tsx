@@ -38,8 +38,8 @@ export default function LoginScreen() {
     const hasNumbers = /\d/.test(password);
     const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(password);
     
-    if (!hasUpperCase || !hasLowerCase || !hasNumbers || !hasSpecialChar) {
-      setError('Password must include uppercase, lowercase, numbers, and special characters.');
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters.');
       return;
     }
 
@@ -64,9 +64,15 @@ export default function LoginScreen() {
     }
     setOauthLoading(provider);
     try {
-      // TODO: Implement actual OAuth flow
-      await new Promise(resolve => setTimeout(resolve, 1500));
-    } finally {
+      const supabaseProvider = provider === 'google' ? 'google' : 'facebook';
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: supabaseProvider,
+        options: { redirectTo: window.location.origin },
+      });
+      if (error) throw error;
+      // Supabase will redirect
+    } catch (e: any) {
+      setError(e.message || 'OAuth sign-in failed');
       setOauthLoading(null);
     }
   };
