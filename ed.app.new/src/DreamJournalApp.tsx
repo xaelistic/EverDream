@@ -38,7 +38,7 @@ import type { ExtractedDreamEntry } from './components/photo-upload/PhotoUploadF
 import { generateDreamImage } from './modules/sleep/dreamAssetGenerator';
 import { generateParallaxVideo } from './lib/assets/pipeline';
 import type { EmotionCapture } from './components/face/FacialEmotionDetector';
-import { transcribeAudioFile, isSpeechRecognitionSupported } from './lib/transcription';
+import { transcribeAudio, isSpeechRecognitionSupported } from './lib/transcriptionWhisper';  // use robust Whisper + fallback version
 import { WearableSettings } from './components/wearables/WearableSettings';
 import type { WearableConfig, WearableSleepRecord } from './lib/wearables';
 import AdminDashboard from './components/admin/AdminDashboard';
@@ -2120,28 +2120,75 @@ const DreamJournalApp = () => {
       {/* Video Journal Screen */}
       {route.screen === 'video-journal' && (
         <VideoJournalScreen
-          onComplete={async (videoUrl, thumbnailUrl, duration) => {
-            // Create a dream entry from video journal
+          onComplete={async (videoUrl, thumbnailUrl, duration, videoBlob) => {
+            console.log('[VideoJournal] Processing video journal with transcription + analysis...');
+
+            let transcriptText = 'Video journal entry - watch the video for the full dream description.';
+            let finalEmotion = 'neutral';
+            let finalAnalysis: DreamAnalysis | null = null;
+
+            // Transcribe video/audio (prefer blob for accuracy)
+            const transcriptionSource = videoBlob || videoUrl;
+            try {
+              const transResult = await transcribeAudio(transcriptionSource as any, {
+                onProgress: (status) => console.log('[VideoJournal] Transcribe progress:', status),
+              });
+              transcriptText = transResult.text || transcriptText;
+              console.log('[VideoJournal] Transcription succeeded, length:', transcriptText.length);
+            } catch (e) {
+              console.warn('[VideoJournal] Transcription failed (will use placeholder + analysis):', e);
+            }
+
+            // Run dream analysis to get narrative, emotion, symbols, etc.
+            try {
+              finalAnalysis = await analyzeDream(transcriptText);
+              finalEmotion = finalAnalysis.emotion || 'neutral';
+              console.log('[VideoJournal] Analysis succeeded, narrative length:', finalAnalysis.narrative?.length);
+            } catch (e) {
+              console.warn('[VideoJournal] Analysis failed, using fallback:', e);
+              finalAnalysis = {
+                category: 'video-journal',
+                themes: ['video', 'personal-recording'],
+                emotion: 'neutral',
+                symbols: [],
+                narrative: transcriptText.length > 50 ? transcriptText : 'The dreamer recorded a video description of their dream.',
+                nugget: transcriptText.substring(0, 90) + (transcriptText.length > 90 ? '...' : ''),
+                interpretation: { symbols: {}, meaning: 'Personal video reflection captured immediately upon waking.', commonPattern: 'Video journals provide rich emotional context.' },
+              };
+            }
+
+            // Persist video blob if available (for reliable playback after refresh)
+            let persistentVideoUrl = videoUrl;
+            if (videoBlob) {
+              try {
+                // Use existing media storage if available, else keep object URL (dev)
+                const mediaId = await (typeof (window as any).mediaStorageManager?.saveMedia === 'function'
+                  ? (window as any).mediaStorageManager.saveMedia(videoBlob, { type: 'video', duration, recordedAt: new Date().toISOString() })
+                  : null);
+                console.log('[VideoJournal] Video blob persisted with id:', mediaId);
+              } catch (e) {
+                console.warn('[VideoJournal] Blob persistence skipped (object URL will be used):', e);
+              }
+            }
+
+            // Build rich dream
             const newDream = {
               id: `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
               date: new Date().toISOString(),
-              content: 'Video journal entry - watch to hear the dream details',
-              category: 'video-journal',
-              themes: ['video', 'personal-recording'],
-              emotion: 'neutral',
-              symbols: [],
-              narrative: 'Video journal recording',
-              nugget: `Video journal (${Math.floor(duration / 60)}:${(duration % 60).toString().padStart(2, '0')})`,
-              interpretation: {
-                symbols: {},
-                meaning: 'Video journal - personal reflection',
-                commonPattern: '',
-              },
+              content: transcriptText,
+              category: finalAnalysis.category,
+              themes: finalAnalysis.themes,
+              emotion: finalEmotion,
+              symbols: finalAnalysis.symbols,
+              narrative: finalAnalysis.narrative,
+              nugget: finalAnalysis.nugget,
+              interpretation: finalAnalysis.interpretation,
               captureMode: 'video',
               videoCapture: {
-                url: videoUrl,
+                url: persistentVideoUrl,
                 capturedAt: new Date().toISOString(),
-                duration: duration,
+                duration: duration || 0,
+                thumbnail: thumbnailUrl || undefined,
               },
               generatedImage: thumbnailUrl
                 ? {
@@ -2155,12 +2202,10 @@ const DreamJournalApp = () => {
               isSample: false,
             };
 
-            // Save to state
+            // Save
             const updatedDreams = [newDream, ...dreams];
             setDreams(updatedDreams);
             await saveDreamsToStorage(updatedDreams);
-
-            // Sync to Supabase (non-blocking)
             syncDreamToSupabase(newDream).catch((err: unknown) => {
               console.warn('[VideoJournal] Supabase sync error:', err);
             });

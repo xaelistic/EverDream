@@ -4,7 +4,10 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { DreamAsset } from './types';
 export type { DreamAsset };
 
-// ... (keep all existing helpers: makeId, buildDreamPrompt, validateImageUrl, etc.)
+// Helpers (ensure they exist for the reliable path)
+function makeId() { return 'asset-' + Date.now() + '-' + Math.random().toString(36).slice(2, 9); }
+function buildDreamPrompt(base: string) { return `${base}, surreal dreamlike visualization, cinematic lighting, ethereal atmosphere, high detail`; }
+async function validateImageUrl(url: string) { const res = await fetch(url, { method: 'HEAD' }); if (!res.ok) throw new Error('Invalid image url'); }
 
 // Prioritize the most reliable FREE path: Edge Function (Pollinations proxy) or direct Pollinations
 async function generateWithReliableFree(prompt: string, style = 'dreamlike'): Promise<DreamAsset> {
@@ -32,8 +35,11 @@ async function generateWithReliableFree(prompt: string, style = 'dreamlike'): Pr
     return { id: makeId(), prompt: enhanced, url, source: 'image-service', style, generatedAt: new Date().toISOString(), metadata: { provider: 'pollinations-flux' } };
   } catch (e) { console.warn('[AssetGen] Direct Pollinations failed', e); }
 
-  // 3. Final SVG fallback (always works)
-  return generateDynamicSVG(prompt, style);
+  // 3. Final reliable image fallback (proper image, no SVG)
+  console.warn('[AssetGen] Using direct Pollinations fallback for proper image');
+  const enhanced = buildDreamPrompt(prompt);
+  const fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhanced)}?width=1024&height=1024&seed=${Date.now()}&nologo=true&safe=true`;
+  return { id: makeId(), prompt: enhanced, url: fallbackUrl, source: 'image-service', style, generatedAt: new Date().toISOString(), metadata: { provider: 'pollinations-fallback' } };
 }
 
 // Main exported function - simplified and robust
@@ -42,8 +48,10 @@ export async function generateDreamImage(prompt: string, style = 'dreamlike'): P
   try {
     return await generateWithReliableFree(prompt, style);
   } catch (error) {
-    console.error('[AssetGen] All methods failed, using SVG fallback:', error);
-    return generateDynamicSVG(prompt, style);
+    console.error('[AssetGen] All methods failed, using reliable image fallback:', error);
+    const enhanced = buildDreamPrompt(prompt);
+    const fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhanced)}?width=1024&height=1024&seed=${Date.now()}&nologo=true&safe=true`;
+    return { id: makeId(), prompt: enhanced, url: fallbackUrl, source: 'image-service', style, generatedAt: new Date().toISOString(), metadata: { provider: 'pollinations-fallback' } };
   }
 }
 

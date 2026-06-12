@@ -3,7 +3,7 @@ import { Video, Camera, Mic, Square, Play, Pause, X, Check, Sparkles } from 'luc
 import { Button, Card } from '../components/ui';
 
 interface VideoJournalScreenProps {
-  onComplete: (videoUrl: string, thumbnailUrl: string, duration: number) => Promise<void>;
+  onComplete: (videoUrl: string, thumbnailUrl: string, duration: number, videoBlob?: Blob) => Promise<void>;
   onCancel: () => void;
 }
 
@@ -15,6 +15,7 @@ export function VideoJournalScreen({ onComplete, onCancel }: VideoJournalScreenP
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
+  const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
   
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -101,6 +102,7 @@ export function VideoJournalScreen({ onComplete, onCancel }: VideoJournalScreenP
       const blob = new Blob(chunksRef.current, { type: 'video/webm' });
       const url = URL.createObjectURL(blob);
       setPreviewUrl(url);
+      setVideoBlob(blob);  // persist blob for saving + transcription
       
       // Capture thumbnail from the first frame
       const thumbnail = captureThumbnail();
@@ -128,6 +130,12 @@ export function VideoJournalScreen({ onComplete, onCancel }: VideoJournalScreenP
       if (timerRef.current) {
         clearInterval(timerRef.current);
         timerRef.current = null;
+      }
+
+      // Stop the live stream to prevent double video feed / overlaid captures
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
       }
     }
   };
@@ -165,7 +173,7 @@ export function VideoJournalScreen({ onComplete, onCancel }: VideoJournalScreenP
 
   const handleSave = async () => {
     if (previewUrl && thumbnailUrl) {
-      await onComplete(previewUrl, thumbnailUrl, recordingDuration);
+      await onComplete(previewUrl, thumbnailUrl, recordingDuration, videoBlob || undefined);
     }
   };
 
