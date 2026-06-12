@@ -2415,54 +2415,91 @@ const DreamJournalApp = () => {
         />
       )}
 
-      {/* Dream Capture — full pipeline flow */}
-      {route.screen === 'capture' && (
-        <div className="space-y-5">
-          <button
-            type="button"
-            onClick={() => navigate('record')}
-            className="inline-flex items-center gap-2 text-sm font-medium text-muted hover:text-ink"
-          >
-            <ArrowLeft className="w-4 h-4" strokeWidth={1.75} /> Back to record
-          </button>
-          <DreamCapture
-            onComplete={(result, text) => {
-              // Save the dream with analysis and image
-              const dreamId = Date.now().toString();
+      {/* Dream Capture / Record — video-first capture flow */}
+      {(route.screen === 'capture' || route.screen === 'record') && (
+        <RecordScreen
+          captureMode="video"
+          onComplete={async (result, text) => {
+            if (result.videoUrl) {
               const newDream = {
-                id: dreamId,
+                id: `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
                 date: new Date().toISOString(),
-                content: text,
-                category: result.analysis.category,
-                themes: result.analysis.themes,
-                emotion: result.analysis.emotion,
-                symbols: result.analysis.symbols,
-                narrative: result.analysis.narrative || text,
-                nugget: result.analysis.nugget || text.substring(0, 100),
-                interpretation: result.analysis.interpretation || {
+                content: 'Video journal entry - watch to hear the dream details',
+                category: 'video-journal',
+                themes: ['video', 'personal-recording'],
+                emotion: 'neutral',
+                symbols: [],
+                narrative: 'Video journal recording',
+                nugget: `Video journal (${Math.floor(result.duration / 60)}:${(result.duration % 60).toString().padStart(2, '0')})`,
+                interpretation: {
                   symbols: {},
-                  meaning: 'Analysis unavailable',
+                  meaning: 'Video journal - personal reflection',
                   commonPattern: '',
                 },
-                generatedImage: result.image ? {
-                  url: result.image.url,
-                  prompt: result.image.prompt,
-                  style: result.image.style,
-                  generatedAt: result.image.generatedAt,
-                  source: result.image.source,
-                } : null,
-                moodValence: result.analysis.valence ?? null,
-                captureMode: 'text' as const,
+                captureMode: 'video' as const,
+                videoCapture: {
+                  url: result.videoUrl,
+                  capturedAt: new Date().toISOString(),
+                  duration: result.duration,
+                },
+                generatedImage: result.thumbnail
+                  ? {
+                      url: result.thumbnail,
+                      prompt: 'Video journal thumbnail',
+                      style: 'photo',
+                      generatedAt: new Date().toISOString(),
+                      source: 'video-capture',
+                    }
+                  : null,
                 isSample: false,
               };
-              const updatedDreams = [newDream, ...dreams.filter(d => !d.isSample)];
+
+              const updatedDreams = [newDream, ...dreams];
               setDreams(updatedDreams);
-              saveDreamsToStorage(updatedDreams);
-              navigate('dream', dreamId);
-            }}
-            onCancel={() => navigate('record')}
-          />
-        </div>
+              await saveDreamsToStorage(updatedDreams);
+              syncDreamToSupabase(newDream).catch((err: unknown) => {
+                console.warn('[RecordScreen] Supabase sync error:', err);
+              });
+              navigate('dream', newDream.id);
+              return;
+            }
+
+            const analysis = result.analysis;
+            const imageAsset = result.image;
+            const dreamId = Date.now().toString();
+            const newDream = {
+              id: dreamId,
+              date: new Date().toISOString(),
+              content: text,
+              category: analysis.category,
+              themes: analysis.themes,
+              emotion: analysis.emotion,
+              symbols: analysis.symbols,
+              narrative: analysis.narrative || text,
+              nugget: analysis.nugget || text.substring(0, 100),
+              interpretation: analysis.interpretation || {
+                symbols: {},
+                meaning: 'Analysis unavailable',
+                commonPattern: '',
+              },
+              generatedImage: imageAsset ? {
+                url: imageAsset.url,
+                prompt: imageAsset.prompt,
+                style: imageAsset.style,
+                generatedAt: imageAsset.generatedAt,
+                source: imageAsset.source,
+              } : null,
+              moodValence: analysis.valence ?? null,
+              captureMode: 'text' as const,
+              isSample: false,
+            };
+            const updatedDreams = [newDream, ...dreams.filter(d => !d.isSample)];
+            setDreams(updatedDreams);
+            await saveDreamsToStorage(updatedDreams);
+            navigate('dream', dreamId);
+          }}
+          onCancel={() => navigate('record')}
+        />
       )}
 
       {route.screen === 'admin' && (

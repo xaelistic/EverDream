@@ -1,3 +1,9 @@
+import { storage as indexedDbStorage } from './storage/index';
+
+export { indexedDbStorage as storage };
+
+export type { LocalDream } from './storage/indexedDB';
+
 type StoredValue = { value?: string };
 
 /** Mirrors Cursor/host storage API; falls back to localStorage for Vite dev. */
