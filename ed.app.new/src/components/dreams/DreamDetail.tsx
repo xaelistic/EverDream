@@ -4,7 +4,6 @@ import { ArrowLeft, Share2, Download, Sparkles, Brain, Eye, Image, Copy, Check }
 import { getEmotionEmoji } from '../../utils/dreamPresentation';
 import type { Dream } from './DreamList';
 import DreamVisualizer from './DreamVisualizer';
-import NFTMintButton from './NFTMintButton';
 
 export interface DreamDetailProps {
   dream: Dream | null;
@@ -474,7 +473,6 @@ function DreamDetailContent({
 
       {/* Action Buttons */}
       <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '32px', flexWrap: 'wrap' }}>
-        <NFTMintButton dream={dream} />
         {onShare && (
           <Button variant="primary" size="md" onClick={() => onShare(dream)}>
             <Share2 size={16} />
