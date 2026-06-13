@@ -1,0 +1,169 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>EverDream — Journal mockups</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600&display=swap" rel="stylesheet" />
+<style>
+:root{--paper:#f7f4ee;--ink:#2a2826;--muted:#6f6a63;--line:rgba(42,40,38,.08);--sage:#6f8f72;--sd:rgba(111,143,114,.14);--bl:rgba(201,169,166,.18);--du:rgba(139,135,174,.18);--moon:#e8e4dc;--sh:0 24px 60px rgba(42,40,38,.08)}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"DM Sans",system-ui,sans-serif;background:linear-gradient(165deg,#ebe6dc,#d4cdc3);color:var(--ink);padding:2rem 1rem 3rem;line-height:1.45}
+.wrap{max-width:1180px;margin:0 auto}
+h1{font-family:Fraunces,Georgia,serif;font-size:clamp(1.6rem,3vw,2.2rem);margin-bottom:.4rem}
+.lead{color:var(--muted);max-width:48rem;font-size:.92rem;margin-bottom:1.25rem}
+.grid{display:grid;gap:1.75rem;grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+.cell{display:flex;flex-direction:column;gap:.5rem}
+.lab{font-size:.62rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.tit{font-family:Fraunces,serif;font-size:1.05rem;font-weight:600}
+.note{font-size:.76rem;color:var(--muted)}
+.phone{width:100%;max-width:360px;margin:0 auto;background:var(--paper);border-radius:28px;border:1px solid var(--line);box-shadow:var(--sh);overflow:hidden}
+.sb{display:flex;justify-content:space-between;padding:12px 18px 4px;font-size:11px;color:var(--muted)}
+.sc{max-height:540px;overflow-y:auto}
+.hero{padding:1.2rem 1.1rem;background:linear-gradient(160deg,var(--paper),var(--moon));border-bottom:1px solid var(--line)}
+.hk{font-size:.6rem;text-transform:uppercase;letter-spacing:.14em;color:var(--muted)}
+.hero h2{font-family:Fraunces,serif;font-size:1.28rem;margin:.35rem 0;line-height:1.25}
+.hero h2 em{font-style:italic;color:#8b87ae}
+.hs{font-size:.8rem;color:var(--muted)}
+.row{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.st{text-align:center;padding:8px 4px;border-radius:10px;border:1px solid var(--line);background:#fffdf9;font-size:.58rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.st b{font-family:Fraunces,serif;display:block;font-size:1rem;color:var(--ink);margin-bottom:2px}
+.btn{margin:10px 14px 14px;width:calc(100% - 28px);border:none;border-radius:14px;padding:12px;font:inherit;font-weight:600;color:#fff;background:linear-gradient(135deg,var(--sage),#5a7d5e);box-shadow:0 10px 28px rgba(90,125,94,.2)}
+.btn2{margin:0 14px 12px;width:calc(100% - 28px);border-radius:14px;padding:10px;font:inherit;font-size:.78rem;background:#fffdf9;border:1px solid var(--line)}
+.sec{font-size:.58rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);padding:12px 14px 6px}
+.card{margin:0 12px 10px;background:#fffdf9;border-radius:18px;border:1px solid var(--line)}
+.ch{padding:10px 12px 4px;display:flex;justify-content:space-between;gap:8px}
+.ct{font-family:Fraunces,serif;font-size:.92rem}
+.bd{padding:0 12px 10px;font-size:.78rem;color:var(--muted)}
+.bf{padding:8px 12px;border-top:1px solid var(--line);font-size:.65rem;color:var(--muted);display:flex;justify-content:space-between}
+.bdg{font-size:.58rem;font-weight:700;text-transform:uppercase;padding:4px 8px;border-radius:999px}
+.bp{background:var(--sd)}.bl{background:var(--bl)}.bd2{background:var(--du)}
+.nav{display:flex;justify-content:space-around;padding:10px 4px 16px;border-top:1px solid var(--line);font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600}
+.ni{padding:4px 6px}.ni.on{color:var(--sage)}
+.tb{padding:8px 12px;display:flex;gap:8px;border-bottom:1px solid var(--line)}
+.srch{flex:1;display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:12px;border:1px solid var(--line);background:#fffdf9;font-size:.76rem;color:var(--muted)}
+.fld{margin:0 14px 10px} .fld label{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);display:block;margin-bottom:5px}
+.fld input,.fld select,.fld textarea{width:100%;border-radius:12px;border:1px solid var(--line);padding:10px;font:inherit;font-size:.8rem;background:#fffdf9}
+.fld textarea{min-height:120px;font-family:Fraunces,serif;font-style:italic}
+.db{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 14px 12px}
+.db button{border-radius:12px;border:1px solid var(--line);padding:10px;font:inherit;font-size:.76rem;font-weight:600;background:#fffdf9}
+.db .r{background:rgba(201,169,166,.22);border-color:rgba(201,169,166,.35)}
+.host{position:relative;min-height:440px;background:#cfc7bb}
+.dim{position:absolute;inset:0;background:rgba(42,40,38,.32);backdrop-filter:blur(3px)}
+.sheet{position:absolute;left:8px;right:8px;bottom:8px;background:var(--paper);border-radius:18px;border:1px solid var(--line);box-shadow:var(--sh);padding:14px;max-height:78%;overflow:auto}
+.sheet h3{font-family:Fraunces,serif;margin-bottom:10px}
+.det{background:linear-gradient(135deg,var(--du),var(--bl));padding:1rem;text-align:center;font-family:Fraunces,serif;font-style:italic;font-size:.85rem;border-bottom:1px solid var(--line)}
+.blk{margin-top:10px;padding:12px;border-radius:12px;border:1px solid var(--line);background:#fffdf9;font-size:.76rem}
+.blk h4{font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:6px}
+.ms{display:grid;gap:10px;padding:12px 14px}
+.me{padding:12px;border-radius:12px;border:1px solid var(--line);background:#fffdf9;font-size:.78rem}
+.me b{font-family:Fraunces,serif;font-size:1.05rem}
+.tr{display:flex;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--line);font-size:.78rem}
+.sw{width:44px;height:26px;border-radius:999px;background:var(--sage);flex-shrink:0;position:relative}
+.sw::after{content:"";position:absolute;width:20px;height:20px;border-radius:50%;background:#fff;top:3px;right:3px}
+.sw.o{background:#d4cfc7}.sw.o::after{left:3px;right:auto}
+.sess{margin:0 14px 10px;padding:12px;border-radius:12px;border:1px solid var(--line);background:#fffdf9;font-size:.74rem}
+.sg{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px;font-size:.65rem;color:var(--muted)}
+.ach{margin:0 12px 10px;padding:14px;border-radius:14px;border:1px solid var(--line);background:linear-gradient(135deg,#fff9ef,#fffdf9)}
+.cm{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.25rem;margin-bottom:2rem}
+.cm h2{grid-column:1/-1;font-family:Fraunces,serif;font-size:1.1rem}
+footer{max-width:1180px;margin:2rem auto;text-align:center;font-size:.7rem;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>EverDream — journal-first mockups (all variants)</h1>
+<p class="lead">Warm paper, Fraunces headings, sage/dusk accents — comparable to Intelligent Change + soft dream-journal imagery. Open locally; no build.</p>
+
+<section class="cm">
+<h2>Record: full page vs bottom sheet</h2>
+<div class="cell"><span class="lab">Surface A</span><span class="tit">Record — full screen</span><span class="note">Dedicated focus route.</span>
+<div class="phone"><div class="sb"><span>9:41</span><span>···</span></div><div class="sc">
+<div class="hero"><div class="hk">Tonight</div><h2><em>Capture</em> while it fades</h2><p class="hs">Voice, text, or a sketch from memory.</p></div>
+<div class="fld"><label>Mood</label><select><option>Peaceful</option></select></div>
+<div class="fld"><label>Dream</label><textarea readonly>Kitchen light like honey…</textarea></div>
+<div class="db"><button type="button" class="r">Voice</button><button type="button">Import</button></div>
+<button type="button" class="btn">Save to journal</button>
+</div><nav class="nav"><span class="ni">◇ Home</span><span class="ni on">◎ Rec</span><span class="ni">❋ Jrnl</span><span class="ni">◎ In</span><span class="ni">○ More</span></nav></div></div>
+
+<div class="cell"><span class="lab">Surface B</span><span class="tit">Record — modal sheet</span><span class="note">Dims home; same fields.</span>
+<div class="phone host"><div class="sb"><span>9:41</span><span>···</span></div><div class="sc" style="max-height:200px"><div class="hero"><div class="hk">Tue</div><h2>Good <em>morning</em></h2></div><div class="row"><span class="st"><b>7</b>str</span><span class="st"><b>24</b>dreams</span><span class="st"><b>82%</b>sleep</span><span class="st"><b>4</b>tags</span></div></div><div class="dim"></div><div class="sheet"><h3>Record dream</h3><div class="fld" style="margin:0"><label>Dream</label><textarea style="min-height:80px"></textarea></div><div class="db" style="padding-left:0;padding-right:0"><button type="button" class="r">Voice</button><button type="button">File</button></div><button type="button" class="btn" style="margin:8px 0 0;width:100%">Save</button></div></div></div>
+</section>
+
+<section class="grid">
+
+<div class="cell"><span class="lab">01</span><span class="tit">Journal home</span><span class="note">Hub + CTA + recent.</span>
+<div class="phone"><div class="sb"><span>9:41</span><span>···</span></div><div class="sc">
+<div class="hero"><div class="hk">EverDream</div><h2>Your nights, <em>remembered</em></h2><p class="hs">Private journal. Insights optional.</p></div>
+<div class="row"><span class="st"><b>7</b>str</span><span class="st"><b>24</b>dreams</span><span class="st"><b>82%</b>sleep</span><span class="st"><b>.71</b>rare</span></div>
+<button type="button" class="btn">Record last night</button><button type="button" class="btn2">Browse journal</button>
+<div class="sec">Recent</div>
+<div class="card"><div class="ch"><span class="ct">Shoreline at dawn</span><span class="bdg bp">Peace</span></div><div class="bd">Salt air, dolphins like punctuation.</div><div class="bf"><span>flight · ocean</span><span>May 11</span></div></div>
+</div><nav class="nav"><span class="ni on">◇ Home</span><span class="ni">❋ Jrnl</span><span class="ni">◎ In</span><span class="ni">⌚ Wear</span><span class="ni">○ More</span></nav></div></div>
+
+<div class="cell"><span class="lab">02</span><span class="tit">Journal browse</span><span class="note">Search + filter.</span>
+<div class="phone"><div class="sb"><span>9:41</span><span>···</span></div><div class="tb"><div class="srch">⌕ Search…</div><select style="border-radius:12px;border:1px solid var(--line);padding:8px;background:#fffdf9;font:inherit;font-size:.72rem"><option>All</option></select></div><div class="sc">
+<div class="sec">Entries</div>
+<div class="card"><div class="ch"><span class="ct">Humming marketplace</span><span class="bdg bl">Anxiety</span></div><div class="bd">Paid in melody; lost my note.</div><div class="bf"><span>sound</span><span>Wed</span></div></div>
+</div><nav class="nav"><span class="ni">◇ Home</span><span class="ni on">❋ Jrnl</span><span class="ni">◎ In</span><span class="ni">⌚ Wear</span><span class="ni">○ More</span></nav></div></div>
+
+<div class="cell"><span class="lab">03</span><span class="tit">Dream detail</span><span class="note">Interpretation blocks.</span>
+<div class="phone"><div class="sb"><span>9:41</span><span>···</span></div><div class="sc">
+<div class="det">“Shoreline flight…”</div>
+<div style="padding:14px"><span class="bdg bp">Peaceful</span><span style="margin-left:8px;font-size:.74rem;color:var(--muted)">May 11</span>
+<p style="font-family:Fraunces,serif;font-style:italic;margin:12px 0;font-size:.92rem">Flying over dawn water — dolphins below.</p>
+<div class="blk"><h4>Interpret</h4><p>Transition + gentle curiosity.</p></div>
+<div class="blk"><h4>Symbols</h4><p><strong>Ocean</strong> feeling depth.<br/><strong>Dolphins</strong> play, guidance.</p></div>
+<button type="button" class="btn">Share excerpt</button>
+</div></div><nav class="nav"><span class="ni">◇ Home</span><span class="ni on">❋ Jrnl</span><span class="ni">◎ In</span><span class="ni">⌚ Wear</span><span class="ni">○ More</span></nav></div></div>
+
+<div class="cell"><span class="lab">04</span><span class="tit">Insights</span><span class="note">Editorial metrics.</span>
+<div class="phone"><div class="sb"><span>9:41</span><span>···</span></div><div class="sc">
+<div class="hero"><div class="hk">Patterns</div><h2>What nights <em>whisper</em></h2></div>
+<div class="ms"><div class="me"><b>24</b><div style="font-size:.7rem;color:var(--muted);margin-top:4px">Dreams</div></div><div class="me"><b>Peaceful</b><div style="font-size:.7rem;color:var(--muted);margin-top:4px">Common tone</div></div></div>
+<div class="sec">Sleep ↔ dreams</div>
+<div class="card"><div class="bd" style="padding:12px">• REM length aligns with vivid flight motifs.<br/>• Earlier sleep → gentler tags.</div></div>
+</div><nav class="nav"><span class="ni">◇ Home</span><span class="ni">❋ Jrnl</span><span class="ni on">◎ In</span><span class="ni">⌚ Wear</span><span class="ni">○ More</span></nav></div></div>
+
+<div class="cell"><span class="lab">05</span><span class="tit">Wearables</span><span class="note">Sync + nights.</span>
+<div class="phone"><div class="sb"><span>9:41</span><span>···</span></div><div class="sc">
+<div class="hero"><div class="hk">Sleep</div><h2>Bring in your <em>body</em></h2></div>
+<button type="button" class="btn">Sync Apple Watch</button>
+<div class="sec">Recent</div>
+<div class="sess"><strong>May 11</strong> <span style="float:right;font-size:.58rem;padding:2px 8px;border-radius:999px;background:var(--sd)">Health</span><div class="sg"><div><span>Duration</span><br/><b>7h 12m</b></div><div><span>Quality</span><br/><b>84%</b></div><div><span>REM</span><br/><b>1h 54m</b></div></div></div>
+</div><nav class="nav"><span class="ni">◇ Home</span><span class="ni">❋ Jrnl</span><span class="ni">◎ In</span><span class="ni on">⌚ Wear</span><span class="ni">○ More</span></nav></div></div>
+
+<div class="cell"><span class="lab">06</span><span class="tit">Privacy</span><span class="note">Export / delete / toggles.</span>
+<div class="phone"><div class="sb"><span>9:41</span><span>···</span></div><div class="sc">
+<div class="hero"><div class="hk">Data</div><h2>You stay in <em>control</em></h2></div>
+<div style="padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px"><button type="button" class="btn2" style="margin:0;width:100%">Export</button><button type="button" style="margin:0;width:100%;border-radius:14px;padding:10px;font:inherit;font-weight:600;background:rgba(201,169,166,.35);border:1px solid rgba(201,169,166,.45)">Delete</button></div>
+<div style="padding:4px 14px 14px"><div class="tr"><div><b>AI analysis</b><br/><span style="font-size:.68rem;color:var(--muted)">Core themes</span></div><span class="sw"></span></div><div class="tr"><div><b>Wearables</b></div><span class="sw o"></span></div></div>
+</div><nav class="nav"><span class="ni">◇ Home</span><span class="ni">❋ Jrnl</span><span class="ni">◎ In</span><span class="ni on">⌚ Wear</span><span class="ni">○ More</span></nav></div></div>
+
+<div class="cell"><span class="lab">07</span><span class="tit">Achievements</span><span class="note">Quiet celebration.</span>
+<div class="phone"><div class="sb"><span>9:41</span><span>···</span></div><div class="sc">
+<div class="hero"><div class="hk">Milestones</div><h2>Small rituals</h2></div>
+<div class="ach"><div style="font-size:1.4rem">✦</div><strong style="font-family:Fraunces,serif">First light</strong><p style="font-size:.74rem;color:var(--muted);margin-top:6px">Seven mornings saved.</p></div>
+</div><nav class="nav"><span class="ni">◇ Home</span><span class="ni">❋ Jrnl</span><span class="ni">◎ In</span><span class="ni on">⌚ Wear</span><span class="ni">○ More</span></nav></div></div>
+
+<div class="cell"><span class="lab">08</span><span class="tit">Keepsakes / vault</span><span class="note">Softer than NFT hub.</span>
+<div class="phone"><div class="sb"><span>9:41</span><span>···</span></div><div class="sc">
+<div class="hero"><div class="hk">Vault</div><h2>Cherished <em>echoes</em></h2></div>
+<div class="row"><span class="st"><b>12</b>keep</span><span class="st"><b>.71</b>rare</span><span class="st"><b>9</b>art</span><span class="st"><b>✓</b>seal</span></div>
+<div class="card"><div class="det" style="height:90px;border:none">Visual · shoreline</div><div class="bd"><strong style="font-family:Fraunces,serif">May 11</strong><p style="margin-top:6px;font-size:.68rem;color:var(--muted)">Verified · export JSON</p></div></div>
+</div><nav class="nav"><span class="ni">◇ Home</span><span class="ni">❋ Jrnl</span><span class="ni">○ Vault</span><span class="ni">◎ In</span><span class="ni">○ More</span></nav></div></div>
+
+<div class="cell"><span class="lab">09</span><span class="tit">Welcome / terms</span><span class="note">Calm gate.</span>
+<div class="phone"><div class="sb"><span>9:41</span><span>···</span></div><div class="sc" style="max-height:none;padding:18px">
+<div class="hk">Welcome</div><h2 style="font-family:Fraunces,serif;font-size:1.15rem;margin:.5rem 0">Dream with intention</h2>
+<p style="font-size:.74rem;color:var(--muted);margin-bottom:12px">Summary before you write.</p>
+<div class="blk"><p style="margin-bottom:6px">• Local first.</p><p style="margin-bottom:6px">• AI when enabled.</p><p>• Export anytime.</p></div>
+<button type="button" class="btn" style="margin-top:16px">Continue</button><button type="button" class="btn2" style="margin-top:8px">Full terms</button>
+</div></div></div>
+
+</section>
+
+<footer>Static only — wire tokens into Tailwind + React when you leave plan-only tooling.</footer>
+</div>
+</body>
+</html>
