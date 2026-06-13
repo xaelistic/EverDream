@@ -1,70 +1,57 @@
-## DEV / Archive for EverDream (2026-06-13 Cleanup)
+## DEV / Archive + Plans for EverDream
 
-This directory contains organized copies (or records) of defunct, legacy, and temporary development files that were cluttering the main repository.
+This directory is the home for:
+- Archived defunct / legacy / temporary development artifacts (so the main repo stays clean).
+- **Ongoing plans and daily notes** (so work is documented in-repo and easy to resume).
 
-**Goal:** Clean the repo while preserving history and context for future reference (e.g. by the nige-n15 / Everdream Foundation team or in production debugging).
+**Date of initial structure:** 2026-06-13
+**Source repo:** xaelistic/EverDream
+**Active branch for recent changes:** chore/cleanup-defunct-to-DEV-20260613 (see PR #65)
 
-**Date of cleanup:** 2026-06-13
-**Source repo:** xaelistic/EverDream (main branch at f775aa8)
-**Branch for changes:** chore/cleanup-defunct-to-DEV-20260613
+## Layout
 
-## Organization
+- `DEV/README.md` (this file) - Index and quick reference.
+- `DEV/archive/2026-06-13/` - Defunct files from the big cleanup (legacy code, old summaries, trackers, dups). See the sub-README or the historical list below.
+- `DEV/daily/` - One file per day (YYYY-MM-DD.md). Use for session notes, what was accomplished, findings, and immediate next actions. Template in `DEV/plans/daily-template.md`.
+- `DEV/plans/` - Longer-lived documents:
+  - `next-steps.md` - Prioritized roadmap (P0/P1/P2/P3).
+  - `daily-template.md` - Copy this when creating a new daily note.
+  - (Add security-followup.md, deploy-checklist.md, etc. as needed.)
 
-- `DEV/archive/legacy/` : Old prototype HTML/TSX files and mockups (pre-rebuild monolith, dream economy experiments, galleries).
-- `DEV/archive/dev-docs/` : Accumulated implementation logs, security audits, quick fixes summaries, setup guides, status reports, feature-specific notes from rapid development. Grouped by origin (root vs ed.app.new).
-- `DEV/archive/dev-screenshots/` : Tracker/preview images used during development (non-user assets).
-- `DEV/archive/other/` : Duplicates, test scripts, priority notes etc.
+## Quick Start for Daily Work
+1. At the end of each day (or session), create or update `DEV/daily/2026-MM-DD.md`.
+2. Summarize progress and capture next steps (pull from / update `DEV/plans/next-steps.md`).
+3. Commit + push (or let the MCP tools handle it).
+4. Update this README if the structure evolves.
 
-## Full List of Defunct Files Removed from Active Tree
+## Historical Cleanup List (2026-06-13)
+(Kept here for reference; full details moved to the archive subdir + git history.)
 
 ### Legacy Code (ed.app.new/legacy/)
-- dream_economy_full_app.html (64k, duplicate of " copy" version)
-- dream_economy_full_app copy.html (identical dup)
-- dream-journal-mvp2.tsx (87b old mvp)
+- dream_economy_full_app.html + copy (dups)
+- dream-journal-mvp2.tsx
 - journal-mockups-gallery.html
 - MOCKUPS-GALLERY.md
-- src_DreamJournalApp_backup.tsx (113k+ old monolith backup - had the CRITICAL vulns from old audit: direct Anthropic calls)
+- src_DreamJournalApp_backup.tsx (old monolith with original audit vulns)
 
-### Root-level Dev Docs & Scripts (clutter at repo root)
-(Last touched dates from git)
-- 2026-06-12: FIXES.md, VIDEO_JOURNAL_PRIORITY.md
-- 2026-06-05/06: BUG_FIXES_SUMMARY.md, QUICK_FIXES_SUMMARY.md, SECURITY_AUDIT_REPORT.md, SECURITY_FIXES_APPLIED.md, DREAM_ANALYSIS_SETUP.md, QUICK_START.md
-- Earlier: IMPLEMENTATION_LOG.md (May 25), IMPLEMENTATION_PLAN.md (May 29), and others
-- test-dream-analysis.js
+### Root + ed.app.new Dev Clutter (logs, audits, notes, trackers)
+See the original DEV/README content in git history or the archive for the exhaustive list with dates. All removed from active paths in the cleanup PR.
 
-### ed.app.new/ Dev Notes & Clutter (inside the app dir, not served to prod)
-- ANALYTICS_NEXT_STEPS.md, BACKEND_STATUS.md, DEPLOY.md, MVP_DEMO_READY.md, REBUILD_COMPLETE.md
-- Multiple IMAGE_GENERATION_*.md , DREAM_IMAGE_GENERATION.md , POLLINATIONS_REMOVAL_SUMMARY.md
-- ENCRYPTION_AUDIT.md, SECURITY_FIXES.md, UX_RECOMMENDATIONS.md
-- VIDEO_JOURNAL_IMPLEMENTATION.md, VOICE_VIDEO_MEMO_IMPLEMENTATION.md, HYBRID_SCORING_MERGE.md
-- SETUP_INSTRUCTIONS.md, QUICKSTART.md
-- tracker-*.png (5 dev preview screenshots)
-- ed.app.new/docs/IMAGE_GENERATION_SETUP.md (duplicate of root-level note)
+## Post-Cleanup State (as of 2026-06-13)
+- Main tree cleaned of process noise.
+- Active development continues in `ed.app.new/src/`, `supabase/`, `docs/specs/`, etc.
+- Deploy remains healthy at https://everdream.n1g3.com.
+- Security posture significantly improved (see archived reports + SECURITY_FIXES.md).
 
-(Full ~35+ items; see git history for exact prior paths and contents.)
+## How to Recover Anything
+- Git history on main (pre-merge) or the cleanup branch.
+- Everything under `DEV/archive/` or `DEV/daily/` is the living reference.
 
-## Why These Were Defunct
-- Development process artifacts from "yolo" + feature-branch heavy workflow (15+ branches, many merged or abandoned).
-- Superseded by REBUILD_COMPLETE, SECURITY_FIXES_APPLIED, current src/ structure and supabase/ edge functions.
-- Legacy/ contains pre-rebuild code with known critical issues (hardcoded keys, direct browser API calls to Anthropic) - now isolated.
-- Root and ed.app.new MDs made repo noisy; not part of built PWA or user docs.
-- Duplicates and old trackers no longer referenced.
+## Next Suggested Work (see DEV/plans/next-steps.md for full prioritized list)
+- Merge the cleanup PR.
+- npm audit + local verification.
+- Execute specs (decompose monolith, a11y...).
+- Continue security hardening + branch hygiene.
+- Use daily/ for all future planning.
 
-## Post-Cleanup State
-- Active code: ed.app.new/src/ (components broken down, lib/, supabase/functions for secure AI proxying, PWA + Capacitor config, Vite build)
-- Specs kept in docs/specs/ (active decomposition, a11y etc work remaining)
-- Security: Old audit issues addressed per SECURITY_FIXES.md (device keys, CSP in index.html, input validation, IndexedDB primary, Supabase auth ready). Confirmed no old vulns in active src/ (only in archived legacy/).
-- Deploy: Healthy at https://everdream.n1g3.com (coolify, base /ed.app.new, production env of Everdream Foundation project)
-
-## How to Recover
-- Git history on main (before this PR merge) or this branch has full prior contents.
-- Legacy files can be re-examined in DEV/archive/legacy/ if needed for reference.
-
-## Next Suggested Cleanups (not in this batch)
-- Stale feature branches (delete merged ones like dream-share-and-mint-improvements-a672c after confirm)
-- Prune more old specs once implemented
-- Consider moving active user-facing docs to /docs or separate wiki
-- npm audit + dependabot for deps in ed.app.new/package.json (react, three, supabase etc)
-- Review src/components/dev/ and debug/ for prod strip
-
-Maintained by cleanup automation + manual review 2026-06-13.
+Maintained daily. Update this file when adding new plan categories.
