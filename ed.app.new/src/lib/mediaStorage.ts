@@ -149,6 +149,7 @@ class MediaStorageManager {
       const store = transaction.objectStore(STORE_NAME);
       
       const record = {
+        id,  // top-level for keyPath: 'id'
         metadata: fullMetadata,
         blob: blob,
         savedAt: new Date().toISOString(),

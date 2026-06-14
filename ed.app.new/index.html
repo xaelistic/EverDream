@@ -15,14 +15,14 @@
                style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com; 
                font-src 'self' https://fonts.gstatic.com; 
                img-src 'self' data: blob: https: http:; 
+               media-src 'self' blob: data:; 
                connect-src 'self' http: https://api.openrouter.ai https://text.pollinations.ai https://*.supabase.co https://*.n8n.io wss://*.supabase.co; 
                worker-src 'self' blob:; 
                manifest-src 'self';" 
     />
     
-    <!-- Additional security headers via meta tags -->
+    <!-- Additional security headers via meta tags (X-Frame-Options should prefer HTTP header) -->
     <meta http-equiv="X-Content-Type-Options" content="nosniff" />
-    <meta http-equiv="X-Frame-Options" content="DENY" />
     <meta http-equiv="X-XSS-Protection" content="1; mode=block" />
     <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin" />
     
