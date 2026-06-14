@@ -503,3 +503,15 @@ export async function isWhisperAvailable(): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Feature detection for browser SpeechRecognition API (Web Speech).
+ * Returns true if the browser supports live mic transcription via SpeechRecognition.
+ */
+export function isSpeechRecognitionSupported(): boolean {
+  if (typeof window === 'undefined') return false;
+  return !!(
+    (window as any).SpeechRecognition ||
+    (window as any).webkitSpeechRecognition
+  );
+}

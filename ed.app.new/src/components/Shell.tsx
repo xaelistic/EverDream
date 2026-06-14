@@ -1,6 +1,7 @@
 import {
   BookOpen,
   CalendarDays,
+  Camera,
   Menu,
   Moon,
   Sparkles,
@@ -23,9 +24,10 @@ const navItems: { screen: RouteScreen; label: string; icon: typeof Moon }[] = [
   { screen: 'more', label: 'More', icon: Menu },
 ];
 
-// Center Dream button toggles between home and record
-function getDreamButtonTarget(active: RouteScreen): RouteScreen {
-  if (active === 'home') {
+// Center Record button (the primary action for capturing new dreams, video-first)
+// Toggles between overview (home/journal) and the record/capture flow
+function getRecordButtonTarget(active: RouteScreen): RouteScreen {
+  if (active === 'home' || active === 'journal') {
     return 'record';
   }
   return 'home';
@@ -40,7 +42,7 @@ function isNavActive(active: RouteScreen, screen: RouteScreen): boolean {
 
 export default function Shell({ active, onNavigate, onOpenProfile, children }: ShellProps) {
   const { isPearl } = useSkinFull();
-  const dreamTarget = getDreamButtonTarget(active);
+  const recordTarget = getRecordButtonTarget(active);
 
   return (
     <div className={`min-h-screen flex flex-col font-sans ${isPearl ? 'text-[var(--text-primary)]' : 'text-ink'}`}>
@@ -111,19 +113,19 @@ export default function Shell({ active, onNavigate, onOpenProfile, children }: S
             );
           })}
 
-          {/* Center Dream button - larger, elevated, gradient background */}
+          {/* Center Record button - larger, elevated, the prominent CTA for video/text dream capture (video-first) */}
           <button
             type="button"
-            onClick={() => onNavigate(dreamTarget)}
+            onClick={() => onNavigate(recordTarget)}
             className={`flex flex-col items-center gap-0.5 px-1.5 py-1 rounded-xl transition-colors min-w-[64px] ${
-              active === 'home' || active === 'record'
+              active === 'home' || active === 'record' || active === 'capture'
                 ? isPearl ? 'text-[var(--aqua-deep)]' : 'text-sageDark'
                 : isPearl ? 'text-[var(--text-label)] hover:text-[var(--text-primary)]' : 'text-muted hover:text-ink'
             }`}
           >
             <span
               className={`flex items-center justify-center rounded-full transition-all shadow-lift ${
-                (active === 'home' || active === 'record')
+                (active === 'home' || active === 'record' || active === 'capture')
                   ? isPearl
                     ? 'w-14 h-14 -mt-5 bg-gradient-to-br from-[var(--aqua-deep)] to-[var(--aqua)] text-white border border-[var(--aqua-deep)]/20'
                     : 'w-14 h-14 -mt-5 bg-gradient-to-br from-sage to-sageDark text-cream border border-sageDark/20'
@@ -132,9 +134,9 @@ export default function Shell({ active, onNavigate, onOpenProfile, children }: S
                     : 'w-13 h-13 -mt-4 bg-gradient-to-br from-parchment to-cream border border-line text-ink shadow-paper'
               }`}
             >
-              <Moon className="w-6 h-6" strokeWidth={1.75} />
+              <Camera className="w-6 h-6" strokeWidth={1.75} />
             </span>
-            <span className="text-[10px] font-medium uppercase tracking-wide">Dream</span>
+            <span className="text-[10px] font-medium uppercase tracking-wide">Record</span>
           </button>
 
           {/* Right nav items: Tracker, More */}
