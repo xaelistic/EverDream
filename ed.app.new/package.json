@@ -29,6 +29,7 @@
     "@supabase/supabase-js": "^2.106.0",
     "@types/three": "^0.184.1",
     "face-api.js": "^0.20.0",
+    "framer-motion": "^11.18.2",
     "lucide-react": "^0.468.0",
     "puter-sdk": "^1.5.0",
     "react": "^18.3.1",
