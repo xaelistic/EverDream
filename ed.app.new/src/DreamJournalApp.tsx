@@ -22,6 +22,8 @@ import {
   Camera,
   Check,
   LineChart,
+  Copy,
+  Share2,
 } from 'lucide-react';
 import Shell from './components/Shell';
 import { TrackerScreen } from './components/tracker/TrackerScreen';
@@ -1367,9 +1369,113 @@ const DreamJournalApp = () => {
     }
   };
 
-  const generateShareableImage = () => {
-    alert(`✅ Dream shared to Instagram Stories!\n\n"${selectedDream.nugget}"\n\n📱 In production, this creates a beautiful story card image.`);
+  const generateShareableImage = async () => {
+    if (!selectedDream) return;
+
+    const canvas = document.createElement('canvas');
+    const size = 1080;
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+
+    // Dreamy gradient background
+    const grad = ctx.createLinearGradient(0, 0, 0, size);
+    grad.addColorStop(0, '#0f172a');
+    grad.addColorStop(0.5, '#1e1b4b');
+    grad.addColorStop(1, '#312e81');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+
+    // If we have a generated image, draw it as the hero visual (with overlay)
+    const hasImage = !!selectedDream.generatedImage?.url;
+    if (hasImage) {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      await new Promise((resolve) => {
+        img.onload = () => {
+          // Draw image covering most of the card, with dark gradient overlay at bottom
+          ctx.drawImage(img, 0, 0, size, size * 0.75);
+          const overlay = ctx.createLinearGradient(0, size * 0.55, 0, size);
+          overlay.addColorStop(0, 'rgba(15,23,42,0.1)');
+          overlay.addColorStop(1, 'rgba(15,23,42,0.95)');
+          ctx.fillStyle = overlay;
+          ctx.fillRect(0, 0, size, size);
+          resolve();
+        };
+        img.onerror = () => resolve(); // fallback if load fails
+        img.src = selectedDream.generatedImage.url;
+      });
+    } else {
+      // Decorative orb for non-image dreams
+      ctx.save();
+      ctx.fillStyle = 'rgba(167, 139, 250, 0.12)';
+      ctx.beginPath();
+      ctx.arc(size * 0.22, size * 0.22, 160, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // Top branding
+    ctx.fillStyle = hasImage ? '#e0e7ff' : '#c4b5fd';
+    ctx.font = 'bold 38px system-ui, sans-serif';
+    ctx.fillText('EVERDREAM', 70, 85);
+    ctx.font = '24px system-ui, sans-serif';
+    ctx.fillStyle = hasImage ? '#c7d2fe' : '#a5b4fc';
+    ctx.fillText('🌙 Dream Journal', 70, 120);
+
+    // Main content area
+    const nugget = selectedDream.nugget || selectedDream.content || 'A dream remembered...';
+    ctx.fillStyle = '#f1e7ff';
+    ctx.font = 'bold 48px Georgia, serif';
+
+    // Word wrap the nugget
+    const maxWidth = 860;
+    const lineHeight = 62;
+    let y = hasImage ? 620 : 380;
+    const words = nugget.split(' ');
+    let line = '';
+    for (let n = 0; n < words.length; n++) {
+      const testLine = line + words[n] + ' ';
+      const metrics = ctx.measureText(testLine);
+      if (metrics.width > maxWidth && n > 0) {
+        ctx.fillText(line, 70, y);
+        line = words[n] + ' ';
+        y += lineHeight;
+      } else {
+        line = testLine;
+      }
+    }
+    ctx.fillText(line, 70, y);
+
+    // Date + details bar
+    ctx.fillStyle = hasImage ? '#e0e7ff' : '#c4b5fd';
+    ctx.font = '28px system-ui, sans-serif';
+    const dateStr = new Date(selectedDream.date).toLocaleDateString(undefined, { 
+      month: 'short', day: 'numeric' 
+    });
+    ctx.fillText(dateStr, 70, y + 55);
+
+    if (selectedDream.emotion) {
+      ctx.fillStyle = 'rgba(167, 139, 250, 0.25)';
+      ctx.fillRect(70, y + 70, 260, 42);
+      ctx.fillStyle = '#e0e7ff';
+      ctx.font = '24px system-ui, sans-serif';
+      ctx.fillText(`✨ ${selectedDream.emotion}`, 82, y + 98);
+    }
+
+    // Bottom subtle branding
+    ctx.fillStyle = '#64748b';
+    ctx.font = '22px system-ui, sans-serif';
+    ctx.fillText('EverDream • Yours forever', 70, size - 70);
+
+    // Download
+    const link = document.createElement('a');
+    link.download = `everdream-${selectedDream.date}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+
     setShowShareModal(false);
+    alert('✅ Card downloaded! Ready to post to Stories or your feed.');
   };
 
   const saveSettingsToStorage = async (settingsToSave) => {
@@ -1556,21 +1662,7 @@ const DreamJournalApp = () => {
       onNavigate={navigate}
       onOpenProfile={() => setShowProfile(true)}
     >
-      {hasAcceptedTerms && (
-        <div className="mb-6 rounded-2xl border border-line bg-parchment/90 px-4 py-3 flex flex-wrap items-center justify-between gap-3 text-sm text-muted shadow-paper">
-          <div className="flex items-start gap-2">
-            <Shield className="w-4 h-4 text-sage shrink-0 mt-0.5" strokeWidth={1.75} />
-            <span>Your journal stays on this device. Export or erase whenever you like.</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => navigate('privacy')}
-            className="text-sageDark font-semibold underline underline-offset-4 decoration-sage/40 hover:text-ink"
-          >
-            Privacy
-          </button>
-        </div>
-      )}
+
 
       {(isProcessing || isGeneratingImage) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/20 backdrop-blur-sm p-4">
@@ -1658,6 +1750,33 @@ const DreamJournalApp = () => {
             settings={settings}
             wearableData={wearableData}
             onOpenDream={(dreamId) => navigate('dream', dreamId)}
+            onLogDream={(dateKey) => {
+              // Actually log a dream for this tracker date (fixes non-working + symbol / log from tracker)
+              const dreamId = `dream-tracker-${dateKey}-${Date.now()}`;
+              const newDream: any = {
+                id: dreamId,
+                date: dateKey,
+                content: `Dream logged via tracker on ${dateKey}`,
+                category: 'personal',
+                themes: [],
+                emotion: 'neutral',
+                symbols: ['🌙'],
+                narrative: 'Dream entry created from sleep tracker.',
+                nugget: 'Tracked dream',
+                interpretation: {
+                  symbols: {},
+                  meaning: 'Logged directly from the sleep performance tracker.',
+                  commonPattern: '',
+                },
+                isSample: false,
+                captureMode: 'text',
+              };
+              const updatedDreams = [newDream, ...dreams];
+              setDreams(updatedDreams);
+              saveDreamsToStorage(updatedDreams).catch(console.error);
+              // Attach to summary if possible (via hook logic on next render)
+              navigate('dream', dreamId);
+            }}
           />
         )}
 
@@ -2489,6 +2608,7 @@ const DreamJournalApp = () => {
         <RecordScreen
           captureMode="video"
           onComplete={async (result, text) => {
+            // Video journal
             if (result.videoUrl) {
               const newDream = {
                 id: `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -2520,6 +2640,45 @@ const DreamJournalApp = () => {
                       source: 'video-capture',
                     }
                   : null,
+                isSample: false,
+              };
+
+              const updatedDreams = [newDream, ...dreams];
+              setDreams(updatedDreams);
+              await saveDreamsToStorage(updatedDreams);
+              syncDreamToSupabase(newDream).catch((err: unknown) => {
+                console.warn('[RecordScreen] Supabase sync error:', err);
+              });
+              navigate('dream', newDream.id);
+              return;
+            }
+
+            // Audio journal (new dedicated support)
+            if (result.audioUrl || result.audioBlob) {
+              const audioDuration = result.duration || 0;
+              const newDream = {
+                id: `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                date: new Date().toISOString(),
+                content: text || 'Audio journal entry - listen to the dream details',
+                category: 'audio-journal',
+                themes: ['audio', 'voice-note', 'personal-recording'],
+                emotion: 'neutral',
+                symbols: [],
+                narrative: 'Audio journal recording',
+                nugget: `Audio journal (${Math.floor(audioDuration / 60)}:${(audioDuration % 60).toString().padStart(2, '0')})`,
+                interpretation: {
+                  symbols: {},
+                  meaning: 'Voice journal - personal reflection',
+                  commonPattern: '',
+                },
+                captureMode: 'audio' as const,
+                // Store audio similar to videoCapture for consistency
+                audioCapture: {
+                  url: result.audioUrl,
+                  capturedAt: new Date().toISOString(),
+                  duration: audioDuration,
+                  mediaId: result.mediaId,
+                },
                 isSample: false,
               };
 
@@ -2832,49 +2991,126 @@ const DreamJournalApp = () => {
         <ProfileHub onClose={() => setShowProfile(false)} navigate={navigate} />
       )}
 
-      {/* Share Modal */}
+      {/* Share Modal - polished, functional share dream screen */}
       {showShareModal && selectedDream && (
         <Modal onClose={() => setShowShareModal(false)}>
-          <h2 className="text-xl font-semibold mb-4">Share Dream</h2>
-          
-          {selectedDream.generatedImage ? (
-            <img 
-              src={selectedDream.generatedImage.url} 
-              alt="Dream visualization"
-              className="w-full h-64 object-cover rounded-xl mb-4"
-            />
-          ) : (
-            <div className="bg-gradient-to-br from-purple-600 to-indigo-600 rounded-xl p-6 mb-4 aspect-square flex items-center justify-center">
-              <div className="text-center">
-                <div className="text-3xl mb-4">🌙</div>
-                <p className="text-white italic text-lg leading-relaxed">
-                  "{selectedDream.nugget}"
-                </p>
-                <div className="mt-4 text-purple-200 text-sm">
-                  {new Date(selectedDream.date).toLocaleDateString()}
+          <div className="space-y-5">
+            <div>
+              <h2 className="text-2xl font-serif font-medium text-ink">Share this dream</h2>
+              <p className="text-sm text-muted mt-1">Create a beautiful card or quick copy.</p>
+            </div>
+
+            {/* Refined light preview card — matches the app's parchment/cream aesthetic */}
+            <div className="rounded-3xl border border-line bg-parchment p-5 shadow-paper">
+              {selectedDream.generatedImage?.url ? (
+                <img 
+                  src={selectedDream.generatedImage.url} 
+                  alt="Dream visualization" 
+                  className="w-full h-52 object-cover rounded-2xl border border-line mb-4" 
+                />
+              ) : selectedDream.videoCapture?.url ? (
+                <div className="relative mb-4 rounded-2xl overflow-hidden border border-line">
+                  <video 
+                    src={selectedDream.videoCapture.url} 
+                    className="w-full h-52 object-cover" 
+                    muted 
+                    controls
+                  />
+                  <div className="absolute top-3 right-3 bg-ink/70 text-cream text-[10px] px-2 py-0.5 rounded">VIDEO DREAM</div>
                 </div>
+              ) : selectedDream.audioCapture?.url ? (
+                <div className="mb-4 rounded-2xl border border-line bg-cream p-4 flex items-center gap-3">
+                  <div className="text-4xl">🎙️</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-ink">Audio journal</div>
+                    <div className="text-xs text-muted">{selectedDream.audioCapture.duration || 0}s • {new Date(selectedDream.date).toLocaleDateString()}</div>
+                  </div>
+                </div>
+              ) : (
+                <div className="mb-4 rounded-2xl border border-line bg-cream p-6 text-center">
+                  <div className="text-6xl mb-3 opacity-70">🌙</div>
+                  <p className="text-lg font-serif italic text-ink leading-tight">"{selectedDream.nugget}"</p>
+                </div>
+              )}
+
+              <div className="text-sm text-ink leading-snug mb-2">
+                {selectedDream.nugget || selectedDream.content?.slice(0, 120) + (selectedDream.content?.length > 120 ? '...' : '')}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+                <span>{new Date(selectedDream.date).toLocaleDateString()}</span>
+                {selectedDream.emotion && <span>• {selectedDream.emotion}</span>}
+                {selectedDream.symbols?.length > 0 && <span>• {selectedDream.symbols.slice(0, 2).join(' ')}</span>}
+                {selectedDream.category && <span>• {selectedDream.category}</span>}
               </div>
             </div>
-          )}
 
-          <div className="space-y-3">
-            <button
-              onClick={generateShareableImage}
-              className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 py-3 rounded-lg transition flex items-center justify-center gap-2"
-            >
-              <Upload className="w-5 h-5" />
-              Share to Instagram Stories
-            </button>
-            
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(`"${selectedDream.nugget}" - From my DreamScape journal 🌙`);
-                alert('Dream copied to clipboard!');
-              }}
-              className="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg transition"
-            >
-              Copy Dream Text
-            </button>
+            <div className="space-y-2">
+              <button
+                onClick={generateShareableImage}
+                className="w-full bg-sage hover:bg-sageDark active:bg-ink text-cream py-3.5 rounded-2xl font-semibold transition flex items-center justify-center gap-2 shadow-sm"
+              >
+                <Download className="w-5 h-5" />
+                Download share card
+              </button>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <button
+                  onClick={() => {
+                    const text = `"${selectedDream.nugget || selectedDream.content}"\n\n— from my EverDream journal`;
+                    navigator.clipboard.writeText(text);
+                    setShowShareModal(false);
+                  }}
+                  className="flex items-center justify-center gap-2 py-3 rounded-2xl border border-line bg-white/80 hover:bg-white active:bg-parchment text-sm font-medium transition"
+                >
+                  <Copy className="w-4 h-4" /> Copy text
+                </button>
+
+                <button
+                  onClick={() => {
+                    if (navigator.share) {
+                      navigator.share({
+                        title: selectedDream.nugget || 'My dream',
+                        text: selectedDream.nugget || selectedDream.content,
+                      }).catch(() => {});
+                    } else {
+                      alert("Your browser doesn't support native sharing — use Copy or Download.");
+                    }
+                    setShowShareModal(false);
+                  }}
+                  className="flex items-center justify-center gap-2 py-3 rounded-2xl border border-line bg-white/80 hover:bg-white active:bg-parchment text-sm font-medium transition"
+                >
+                  <Share2 className="w-4 h-4" /> Device share
+                </button>
+
+                <button
+                  onClick={() => {
+                    const text = encodeURIComponent(`"${selectedDream.nugget || selectedDream.content}" — from my dream journal 🌙`);
+                    window.open(`https://twitter.com/intent/tweet?text=${text}`, '_blank');
+                    setShowShareModal(false);
+                  }}
+                  className="flex items-center justify-center gap-2 py-3 rounded-2xl border border-line bg-white/80 hover:bg-white active:bg-parchment text-sm font-medium transition"
+                >
+                  <span>𝕏</span> Post to X
+                </button>
+              </div>
+            </div>
+
+            {selectedDream.videoCapture?.url && (
+              <p className="text-center text-[10px] text-muted">Video dreams work best with the downloaded card (or export the original recording from the entry).</p>
+            )}
+          </div>
+        </Modal>
+      )}
+
+            <div className="pt-2 text-center">
+              <button 
+                onClick={() => setShowShareModal(false)} 
+                className="text-xs text-muted hover:text-ink underline"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </Modal>
       )}

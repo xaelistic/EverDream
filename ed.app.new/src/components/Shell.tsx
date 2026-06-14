@@ -134,7 +134,7 @@ export default function Shell({ active, onNavigate, onOpenProfile, children }: S
                     : 'w-13 h-13 -mt-4 bg-gradient-to-br from-parchment to-cream border border-line text-ink shadow-paper'
               }`}
             >
-              <Camera className="w-6 h-6" strokeWidth={1.75} />
+              <Moon className="w-6 h-6" strokeWidth={1.75} />
             </span>
             <span className="text-[10px] font-medium uppercase tracking-wide">Record</span>
           </button>

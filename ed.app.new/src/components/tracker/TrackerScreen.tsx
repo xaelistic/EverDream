@@ -12,6 +12,7 @@ type TrackerScreenProps = {
   settings?: TrackerSettings;
   wearableData?: WearableSleepLike[];
   onOpenDream: (dreamId: string) => void;
+  onLogDream?: (dateKey: string) => void;
 };
 
 export function TrackerScreen({
@@ -19,15 +20,10 @@ export function TrackerScreen({
   settings,
   wearableData,
   onOpenDream,
+  onLogDream,
 }: TrackerScreenProps) {
   const [showMonthly, setShowMonthly] = useState(false);
   const tracker = useSleepTracker({ dreams, settings, wearableData });
-
-  const handleLogDream = (dateKey: string) => {
-    // In a real app, this would navigate to dream logging or open a modal
-    console.log('Log dream for date:', dateKey);
-    alert(`Would you like to log a dream or experience for ${dateKey}?`);
-  };
 
   return (
     <div className="space-y-6">
@@ -53,7 +49,7 @@ export function TrackerScreen({
         days={tracker.weekDays}
         selectedDate={tracker.selectedDate}
         onSelectDate={tracker.setSelectedDate}
-        onLogDream={handleLogDream}
+        onLogDream={onLogDream}
       />
 
       {/* Emotional themes spider diagram */}

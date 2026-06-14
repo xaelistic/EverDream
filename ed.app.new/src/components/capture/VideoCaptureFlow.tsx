@@ -281,6 +281,10 @@ export function VideoCaptureFlow({
       } catch (error) {
         console.error('[VideoCapture] Error in onComplete callback:', error);
       }
+
+      // Clean up live preview stream + video element immediately
+      // Prevents "weird doubling of the video" (lingering preview + playback/overlay)
+      stopAll();
       
       setIsProcessing(false);
     };

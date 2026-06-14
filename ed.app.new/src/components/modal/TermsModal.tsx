@@ -74,6 +74,9 @@ export function TermsModal({ isOpen, onClose, onAccept, hasAccepted = false }: T
           <p className="text-sm text-muted">
             Your privacy and data sovereignty are our highest priority. Please review how we handle your dream data.
           </p>
+          <p className="text-[10px] text-muted/70 mt-1 italic">
+            Your journal stays on this device. Export or erase whenever you like.
+          </p>
         </div>
 
         <div className="space-y-3 text-sm">

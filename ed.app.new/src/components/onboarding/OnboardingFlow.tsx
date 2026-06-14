@@ -111,6 +111,9 @@ export function OnboardingFlow({ onComplete, onSkip }: OnboardingFlowProps) {
           <div>Step {step + 1} of {STEPS}</div>
           <button onClick={onSkip || (() => {})} className="hover:underline">Skip for now</button>
         </div>
+        <p className="text-[10px] text-center text-muted/70 -mt-6 mb-4 italic">
+          Your journal stays on this device. Export or erase whenever you like.
+        </p>
 
         <AnimatePresence mode="wait">
           {/* STEP 0: Welcome */}
