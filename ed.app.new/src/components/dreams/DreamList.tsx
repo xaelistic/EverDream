@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { Card, Badge, Spinner, Skeleton } from '../ui';
+import { Badge, Spinner, Skeleton } from '../ui';
+import { Card } from '../ui/Card';
 import { Search, Filter, Moon, Sparkles } from 'lucide-react';
 import { getEmotionEmoji } from '../../utils/dreamPresentation';
 

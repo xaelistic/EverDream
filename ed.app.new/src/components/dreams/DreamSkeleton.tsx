@@ -1,5 +1,6 @@
 import React from 'react';
-import { Card, Skeleton } from '../ui';
+import { Skeleton } from '../ui';
+import { Card } from '../ui/Card';
 
 export interface DreamSkeletonProps {
   count?: number;

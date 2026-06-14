@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { Sparkles, Wand2, Image, Brain, Type, Camera, Mic, Video } from 'lucide-react';
-import { Button, Card, Modal } from '../ui';
+import { Button, Modal } from '../ui';
+import { Card } from '../ui/Card';
 import PipelineProgress from './PipelineProgress';
 import { analyzeDream } from '../../lib/dream-analyzer';
 import { generateDreamImage } from '../../modules/sleep/dreamAssetGenerator';

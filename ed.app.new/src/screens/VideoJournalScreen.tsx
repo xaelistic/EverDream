@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Video, Camera, Mic, Square, Play, Pause, X, Check, Sparkles } from 'lucide-react';
-import { Button, Card } from '../components/ui';
+import { Button } from '../components/ui';
+import { Card } from '../components/ui/Card';
 import FacialEmotionDetector, { EmotionCapture } from '../components/face/FacialEmotionDetector';
 
 interface VideoJournalScreenProps {

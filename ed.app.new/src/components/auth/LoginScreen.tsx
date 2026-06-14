@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Moon, Mail, Lock, Eye, EyeOff, AlertCircle, Sparkles, Loader2, Phone } from 'lucide-react';
 import { useAuth } from '../../hooks/use-auth';
-import { Button, Input, Card } from '../ui';
+import { Button, Input } from '../ui';
+import { Card } from '../ui/Card';
 import { supabase } from '../../lib/supabase/client';
 
 /**

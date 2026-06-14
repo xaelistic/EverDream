@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Card, Badge, Button, Spinner, Modal } from '../ui';
+import { Badge, Button, Spinner, Modal } from '../ui';
+import { Card } from '../ui/Card';
 import { ArrowLeft, Share2, Download, Sparkles, Brain, Eye, Image, Copy, Check } from 'lucide-react';
 import { getEmotionEmoji } from '../../utils/dreamPresentation';
 import type { Dream } from './DreamList';
