@@ -3103,18 +3103,6 @@ const DreamJournalApp = () => {
         </Modal>
       )}
 
-            <div className="pt-2 text-center">
-              <button 
-                onClick={() => setShowShareModal(false)} 
-                className="text-xs text-muted hover:text-ink underline"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </Modal>
-      )}
-
       {/* Achievement Popup */}
       {showAchievement && (
         <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-[70] max-w-sm w-[calc(100%-2rem)]">
