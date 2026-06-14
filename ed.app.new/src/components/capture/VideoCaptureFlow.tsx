@@ -1,1 +1,1 @@
-<the part with stopAll>
+... (update to use real detector if integrated, or keep simulation but call the prop with better)

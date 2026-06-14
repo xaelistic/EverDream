@@ -1,1 +1,1 @@
-<the updated part with audio handling>
+... (full updated with the enhancement in onComplete for video, and the call to RecordScreen with onEmotion handler) 
