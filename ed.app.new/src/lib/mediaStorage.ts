@@ -137,19 +137,22 @@ class MediaStorageManager {
   ): Promise<string> {
     await this.initialize();
 
-    const id = this.generateId();
+    let id = this.generateId();
+    if (!id || typeof id !== 'string') {
+      id = 'media_' + Date.now() + '_' + Math.random().toString(36).slice(2, 11);
+    }
     const fullMetadata: MediaMetadata = {
       ...metadata,
       id,
       expiresAt: this.generateExpirationDate(),
-    };
+    } as MediaMetadata;
 
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction([STORE_NAME], 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
       
       const record = {
-        id,  // top-level for keyPath: 'id'
+        id,  // top-level for keyPath: 'id' — always guaranteed primitive string
         metadata: fullMetadata,
         blob: blob,
         savedAt: new Date().toISOString(),

@@ -203,6 +203,17 @@ const DreamJournalApp = () => {
   const [capturedEmotions, setCapturedEmotions] = useState<EmotionCapture | null>(null);
   const [wearableData, setWearableData] = useState<WearableSleepRecord[]>([]);
   const [showOnboarding, setShowOnboarding] = useState(false);
+
+  // Auto-show onboarding for first-time users (after terms). 
+  // Triggered if no onboarded_at in profile or for testing by clearing storage + profile.
+  useEffect(() => {
+    // If you want to force for testing, you can also do localStorage.setItem('forceOnboarding', '1')
+    const force = localStorage.getItem('forceOnboarding') === '1';
+    if (force && !showOnboarding) {
+      setShowOnboarding(true);
+      localStorage.removeItem('forceOnboarding');
+    }
+  }, [showOnboarding]);
   const [wearableConfigs, setWearableConfigs] = useState<WearableConfig[]>([
     { provider: 'oura', auth: { provider: 'oura', accessToken: '' }, enabled: false },
     { provider: 'apple_health', auth: { provider: 'apple_health', accessToken: '' }, enabled: false },
@@ -2162,28 +2173,91 @@ const DreamJournalApp = () => {
             // Handle both video and text capture results
             let newDream;
             
-            if (result.videoUrl) {
-              // Video capture result
+            if (result.videoUrl || result.videoBlob) {
+              // Video capture result — now with transcription, analysis, and optional Supabase Storage upload
+              const videoDuration = result.duration || 0;
+              const nuggetTime = `${Math.floor(videoDuration / 60)}:${(videoDuration % 60).toString().padStart(2, '0')}`;
+
+              let transcriptText = 'Video journal entry.';
+              let finalAnalysis: any = null;
+
+              // 1. Try to transcribe the audio track from the video blob (if we have the blob)
+              const videoBlobForTranscribe = result.videoBlob;
+              if (videoBlobForTranscribe) {
+                try {
+                  console.log('[VideoRecord] Transcribing video audio...');
+                  const transResult = await transcribeAudio(videoBlobForTranscribe as any, {
+                    onProgress: (s: string) => console.log('[VideoRecord] Transcribe:', s),
+                  });
+                  if (transResult?.text && transResult.text.length > 5) {
+                    transcriptText = transResult.text;
+                  }
+                } catch (e) {
+                  console.warn('[VideoRecord] Transcription failed, using placeholder:', e);
+                }
+              }
+
+              // 2. Run dream analysis on the transcript (or placeholder)
+              try {
+                finalAnalysis = await analyzeDream(transcriptText);
+              } catch (e) {
+                console.warn('[VideoRecord] Analysis failed, using fallback');
+                finalAnalysis = {
+                  category: 'video-journal',
+                  themes: ['video', 'personal-recording'],
+                  emotion: 'neutral',
+                  symbols: [],
+                  narrative: transcriptText,
+                  nugget: transcriptText.substring(0, 90) + (transcriptText.length > 90 ? '...' : ''),
+                  interpretation: { symbols: {}, meaning: 'Personal video reflection captured on waking.', commonPattern: 'Video journals capture rich immediate emotional context.' },
+                };
+              }
+
+              // 3. Optional: upload the actual video file to Supabase Storage so it persists beyond this device/session
+              let persistentVideoUrl = result.videoUrl;
+              if (result.videoBlob && supabaseClient) {
+                try {
+                  const user = await getCurrentUser();
+                  if (user) {
+                    const path = `${user.id || 'anon'}/video-${Date.now()}.webm`;
+                    const { error: uploadErr } = await supabaseClient.storage
+                      .from('dream-media')
+                      .upload(path, result.videoBlob, { contentType: result.videoBlob.type || 'video/webm', upsert: true });
+                    if (!uploadErr) {
+                      const { data: pub } = supabaseClient.storage.from('dream-media').getPublicUrl(path);
+                      if (pub?.publicUrl) {
+                        persistentVideoUrl = pub.publicUrl;
+                        console.log('[VideoRecord] Video uploaded to Supabase Storage:', persistentVideoUrl);
+                      }
+                    } else {
+                      console.warn('[VideoRecord] Supabase Storage upload failed (will keep local/blob URL). Bucket "dream-media" may need to be created + policies set for authenticated users.');
+                    }
+                  }
+                } catch (e) {
+                  console.warn('[VideoRecord] Supabase video upload error (non-fatal):', e);
+                }
+              }
+
               newDream = {
                 id: `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
                 date: new Date().toISOString(),
-                content: 'Video journal entry - watch to hear the dream details',
-                category: 'video-journal',
-                themes: ['video', 'personal-recording'],
-                emotion: 'neutral',
-                symbols: [],
-                narrative: 'Video journal recording',
-                nugget: `Video journal (${Math.floor(result.duration / 60)}:${(result.duration % 60).toString().padStart(2, '0')})`,
-                interpretation: {
+                content: transcriptText,
+                category: finalAnalysis.category || 'video-journal',
+                themes: finalAnalysis.themes || ['video', 'personal-recording'],
+                emotion: finalAnalysis.emotion || 'neutral',
+                symbols: finalAnalysis.symbols || [],
+                narrative: finalAnalysis.narrative || transcriptText,
+                nugget: finalAnalysis.nugget || `Video journal (${nuggetTime})`,
+                interpretation: finalAnalysis.interpretation || {
                   symbols: {},
                   meaning: 'Video journal - personal reflection',
                   commonPattern: '',
                 },
                 captureMode: 'video',
                 videoCapture: {
-                  url: result.videoUrl,
+                  url: persistentVideoUrl,
                   capturedAt: new Date().toISOString(),
-                  duration: result.duration,
+                  duration: videoDuration,
                 },
                 generatedImage: result.thumbnail
                   ? {
@@ -3216,6 +3290,17 @@ const DreamJournalApp = () => {
         onAccept={acceptTerms}
         hasAccepted={hasAcceptedTerms}
       />
+
+      {/* Onboarding Flow (full screen for first-run setup / goals / sleep profile) */}
+      {showOnboarding && (
+        <OnboardingFlow
+          onComplete={() => {
+            setShowOnboarding(false);
+            // Persisted in Supabase profile via the flow itself + local flag cleared
+          }}
+          onSkip={() => setShowOnboarding(false)}
+        />
+      )}
     </Shell>
     </>
   );

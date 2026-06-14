@@ -122,6 +122,7 @@ export function VideoCaptureFlow({
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<number | null>(null);
+  const durationRef = useRef(0); // reliable current duration (avoids stale closure in onstop)
   
   const [isRecording, setIsRecording] = useState(false);
   const [duration, setDuration] = useState(0);
@@ -227,23 +228,29 @@ export function VideoCaptureFlow({
       const videoBlob = new Blob(chunksRef.current, { type: recorder.mimeType });
       console.log('[VideoCapture] Video blob created:', videoBlob.size, 'bytes, type:', videoBlob.type);
       
+      // Use ref for accurate duration at stop time (state may be stale in closure)
+      const finalDuration = durationRef.current || duration || 0;
+      
       let thumbnail: string | undefined;
       try {
+        // Note: blob: URLs for <video> can be blocked by page CSP on some deploys.
+        // We catch and continue — thumbnail is optional.
         thumbnail = await getVideoThumbnail(videoBlob);
         console.log('[VideoCapture] Thumbnail generated successfully');
       } catch (e) {
-        console.warn('[VideoCapture] Failed to generate thumbnail:', e);
+        console.warn('[VideoCapture] Failed to generate thumbnail (CSP or load issue — non-fatal):', e);
       }
       
-      // Save to IndexedDB
+      // Ensure IndexedDB is ready then save (defensive against keyPath/id issues)
       let mediaId: string | null = null;
       try {
+        await mediaStorageManager.initialize?.();
         mediaId = await mediaStorageManager.saveMedia(videoBlob, {
           dreamId: undefined, // Will be linked later if associated with a dream
           type: 'video',
           mimeType: recorder.mimeType || 'video/webm',
           size: videoBlob.size,
-          duration,
+          duration: finalDuration,
           recordedAt: new Date().toISOString(),
           emotion: currentEmotion || undefined,
           emotionConfidence: 0.75,
@@ -260,7 +267,7 @@ export function VideoCaptureFlow({
       
       const data: VideoCaptureData = {
         videoBlob,
-        duration,
+        duration: finalDuration,
         thumbnail,
         timestamp: new Date().toISOString(),
         hasAudio: audioEnabled,
@@ -292,11 +299,13 @@ export function VideoCaptureFlow({
     recorder.start(1000); // Collect data every second
     setIsRecording(true);
     setDuration(0);
+    durationRef.current = 0;
     
-    // Start timer
+    // Start timer (also keep ref in sync for reliable value in onstop closure)
     timerRef.current = window.setInterval(() => {
       setDuration(prev => {
         const newDuration = prev + 1;
+        durationRef.current = newDuration;
         if (newDuration >= maxDuration) {
           stopRecording();
           return maxDuration;

@@ -35,22 +35,27 @@ RUN echo 'server { \
         try_files $uri =404; \
     } \
 \
-    # Manifest and icons \
-    location ~* \.(?:json|png|ico|svg)$ { \
+    # Vite hashed assets (/assets/*.js, *.css etc) + other static files — MUST come before the SPA catch-all \
+    location /assets { \
+        expires 1y; \
+        add_header Cache-Control "public, immutable"; \
+        try_files $uri =404; \
+    } \
+    location ~* \.(?:js|css|json|png|ico|svg|webmanifest|woff2?)$ { \
         expires 1d; \
         add_header Cache-Control "public"; \
         try_files $uri =404; \
     } \
 \
-    # SPA fallback for client routes (do NOT catch /sw.js or /registerSW.js) \
+    # SPA fallback for client routes (after all explicit static locations) \
     location / { \
         try_files $uri $uri/ /index.html; \
     } \
 \
-    # Security + CSP headers (override meta for strength) \
+    # Security + CSP headers (media-src blob: data: is REQUIRED for local recorded video/audio + thumbnails to play) \
     add_header X-Content-Type-Options "nosniff" always; \
     add_header Referrer-Policy "strict-origin-when-cross-origin" always; \
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://fonts.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https: http:; media-src 'self' blob: data:; connect-src 'self' http: https: wss:; worker-src 'self' blob:; manifest-src 'self';" always; \
+    add_header Content-Security-Policy "default-src '\''self'\''; script-src '\''self'\'' '\''unsafe-inline'\'' '\''unsafe-eval'\'' https://*.supabase.co; style-src '\''self'\'' '\''unsafe-inline'\''; img-src '\''self'\'' data: blob: https:; media-src '\''self'\'' blob: data: https:; connect-src '\''self'\'' https://*.supabase.co wss://*.supabase.co https://image.pollinations.ai http: https: wss:; worker-src '\''self'\'' blob:; manifest-src '\''self'\''; frame-ancestors '\''none'\'';" always; \
 }' > /etc/nginx/conf.d/default.conf
 
 EXPOSE 80

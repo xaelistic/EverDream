@@ -11,20 +11,16 @@
     <meta 
       http-equiv="Content-Security-Policy" 
       content="default-src 'self'; 
-               script-src 'self' 'unsafe-inline' https://fonts.googleapis.com; 
-               style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com; 
-               font-src 'self' https://fonts.gstatic.com; 
-               img-src 'self' data: blob: https: http:; 
-               media-src 'self' blob: data:; 
-               connect-src 'self' http: https://api.openrouter.ai https://text.pollinations.ai https://*.supabase.co https://*.n8n.io wss://*.supabase.co; 
+               script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.supabase.co; 
+               style-src 'self' 'unsafe-inline'; 
+               img-src 'self' data: blob: https:; 
+               media-src 'self' blob: data: https:; 
+               connect-src 'self' https://*.supabase.co wss://*.supabase.co https://image.pollinations.ai http: https: wss:; 
                worker-src 'self' blob:; 
                manifest-src 'self';" 
     />
     
-    <!-- Additional security headers via meta tags (X-Frame-Options should prefer HTTP header) -->
-    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
-    <meta http-equiv="X-XSS-Protection" content="1; mode=block" />
-    <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin" />
+    <!-- Note: Strong CSP + security headers are now also set via nginx (see Dockerfile). Meta versions are fallbacks. X-Frame-Options etc. must be HTTP headers only. -->
     
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" type="image/png" href="/icons/icon-192.png" />

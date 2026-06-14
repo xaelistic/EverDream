@@ -4,6 +4,17 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { DreamAsset } from './types';
 export type { DreamAsset };
 
+// Local getSupabase (modeled after other modules to avoid "not defined" at runtime)
+let _supabase: SupabaseClient | null = null;
+function getSupabase(): SupabaseClient | null {
+  if (_supabase) return _supabase;
+  const url = (import.meta as any).env?.VITE_SUPABASE_URL || '';
+  const key = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
+  if (!url || !key || url.includes('placeholder')) return null;
+  _supabase = createClient(url, key);
+  return _supabase;
+}
+
 // Helpers (ensure they exist for the reliable path)
 function makeId() { return 'asset-' + Date.now() + '-' + Math.random().toString(36).slice(2, 9); }
 function buildDreamPrompt(base: string) { return `${base}, surreal dreamlike visualization, cinematic lighting, ethereal atmosphere, high detail`; }
