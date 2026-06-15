@@ -1,0 +1,134 @@
+/**
+ * Everdream — Midnight Skin
+ * Deep indigo night sky with silver-blue accents.
+ * Applied via class "skin-midnight" on <html>.
+ */
+
+.skin-midnight {
+  --bg-pearl: #0a0f1e;
+  --bg-deep: #111827;
+  --bg-cream: #151d2e;
+  --bg-aqua-wash: rgba(74, 111, 165, 0.12);
+  --bg-lav-wash: rgba(139, 157, 195, 0.08);
+  --bg-warm-wash: rgba(196, 212, 232, 0.04);
+
+  --aqua-deep: #5b8fd4;
+  --aqua-light: #8bafd8;
+  --lav-mid: #6b7fa8;
+  --lav-light: #a8b8d8;
+  --gold-soft: #c4d4e8;
+  --rose: #9aafc8;
+
+  --text-primary: #e8edf5;
+  --text-body: #a8b8cc;
+  --text-label: #6b7f99;
+  --text-dream: #8a9cb0;
+  --text-whisper: rgba(232, 237, 245, 0.18);
+
+  --glass-bg: rgba(17, 24, 39, 0.78);
+  --glass-blur: 12px;
+  --glass-border: rgba(91, 143, 212, 0.15);
+  --glass-shadow: 0 1px 8px rgba(0, 0, 0, 0.35), 0 0 20px rgba(74, 111, 165, 0.06);
+  --header-bg: rgba(10, 15, 30, 0.94);
+  --nav-bg: rgba(10, 15, 30, 0.98);
+
+  --font-ui: 'Inter', system-ui, sans-serif;
+  --font-dream: 'Playfair Display', Georgia, serif;
+}
+
+.skin-midnight {
+  --color-paper: var(--bg-pearl);
+  --color-cream: var(--bg-cream);
+  --color-parchment: var(--glass-bg);
+  --color-ink: var(--text-primary);
+  --color-muted: var(--text-label);
+  --color-line: var(--glass-border);
+  --color-sage: var(--aqua-light);
+  --color-sageDark: var(--aqua-deep);
+  --color-dusk: var(--lav-light);
+  --color-duskDeep: var(--lav-mid);
+  --color-blush: var(--rose);
+  --color-moon: var(--lav-light);
+}
+
+.skin-midnight .bg-paper,
+.skin-midnight main {
+  background:
+    radial-gradient(ellipse 120% 70% at 20% 0%, var(--bg-aqua-wash), transparent 55%),
+    radial-gradient(ellipse 80% 50% at 85% 10%, var(--bg-lav-wash), transparent 50%),
+    radial-gradient(ellipse 60% 40% at 50% 100%, var(--bg-warm-wash), transparent 60%),
+    var(--bg-pearl) !important;
+}
+
+.skin-midnight .bg-cream {
+  background: var(--bg-cream) !important;
+}
+
+.skin-midnight header {
+  background: var(--header-bg) !important;
+  border-bottom: 1px solid var(--glass-border) !important;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.skin-midnight header .font-serif,
+.skin-midnight header p {
+  color: var(--text-primary) !important;
+}
+
+.skin-midnight header .text-muted {
+  color: var(--text-label) !important;
+}
+
+.skin-midnight header .bg-parchment,
+.skin-midnight header button {
+  background: var(--glass-bg) !important;
+  border-color: var(--glass-border) !important;
+}
+
+.skin-midnight nav {
+  background: linear-gradient(to top, var(--nav-bg) 70%, transparent 100%) !important;
+  border-top: 1px solid var(--glass-border) !important;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.skin-midnight nav button.text-sageDark {
+  color: var(--aqua-light) !important;
+}
+
+.skin-midnight .bg-white,
+.skin-midnight [class*="bg-white/"] {
+  background: var(--glass-bg) !important;
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border-color: var(--glass-border) !important;
+  box-shadow: var(--glass-shadow) !important;
+}
+
+.skin-midnight .text-ink,
+.skin-midnight h1, .skin-midnight h2, .skin-midnight h3 {
+  color: var(--text-primary) !important;
+}
+
+.skin-midnight .text-muted {
+  color: var(--text-label) !important;
+}
+
+.skin-midnight .font-serif,
+.skin-midnight .italic {
+  font-family: var(--font-dream) !important;
+  color: var(--text-dream) !important;
+}
+
+.skin-midnight input,
+.skin-midnight textarea {
+  background: var(--bg-deep) !important;
+  border-color: var(--glass-border) !important;
+  color: var(--text-body) !important;
+}
+
+.skin-midnight ::selection {
+  background: rgba(91, 143, 212, 0.35);
+  color: var(--text-primary);
+}

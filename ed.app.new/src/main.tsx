@@ -7,6 +7,9 @@ import { ToastProvider } from './components/ui/Toast';
 import App from './App';
 import './index.css';
 import './skins/pearl-light.css';
+import './skins/pearl-dark.css';
+import './skins/midnight.css';
+import './skins/sakura.css';
 import { initEnvValidation } from './lib/env';
 
 // Validate environment variables early (prints clear warnings/errors for missing

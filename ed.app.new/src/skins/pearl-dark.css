@@ -41,6 +41,8 @@
   --glass-blur: 12px;
   --glass-border: rgba(168, 237, 220, 0.12);
   --glass-shadow: 0 1px 6px rgba(0, 0, 0, 0.30), 0 1px 3px rgba(0, 0, 0, 0.20);
+  --header-bg: rgba(13, 13, 26, 0.92);
+  --nav-bg: rgba(13, 13, 26, 0.98);
 
   /* Starlight */
   --starlight: rgba(168, 237, 220, 0.04);

@@ -1,0 +1,133 @@
+/**
+ * Everdream — Sakura Skin
+ * Soft cherry blossom blush with warm rose accents.
+ * Applied via class "skin-sakura" on <html>.
+ */
+
+.skin-sakura {
+  --bg-pearl: #fff5f7;
+  --bg-cream: #fffaf9;
+  --bg-aqua-wash: rgba(244, 168, 184, 0.22);
+  --bg-lav-wash: rgba(232, 196, 208, 0.18);
+  --bg-warm-wash: rgba(255, 228, 220, 0.15);
+
+  --aqua-deep: #c87888;
+  --aqua-light: #f4a8b8;
+  --lav-mid: #d4a0a8;
+  --lav-light: #e8c4d0;
+  --gold-soft: #b88878;
+  --rose: #e87898;
+
+  --text-primary: #3a2830;
+  --text-body: #6a5058;
+  --text-label: #8a7078;
+  --text-dream: #9a8088;
+  --text-whisper: rgba(58, 40, 48, 0.18);
+
+  --glass-bg: rgba(255, 250, 249, 0.72);
+  --glass-blur: 10px;
+  --glass-border: rgba(244, 168, 184, 0.28);
+  --glass-shadow: 0 1px 8px rgba(244, 168, 184, 0.12), 0 1px 3px rgba(0, 0, 0, 0.03);
+  --header-bg: rgba(255, 245, 247, 0.94);
+  --nav-bg: rgba(255, 245, 247, 0.98);
+
+  --font-ui: 'Inter', system-ui, sans-serif;
+  --font-dream: 'Playfair Display', Georgia, serif;
+}
+
+.skin-sakura {
+  --color-paper: var(--bg-pearl);
+  --color-cream: var(--bg-cream);
+  --color-parchment: var(--bg-pearl);
+  --color-ink: var(--text-primary);
+  --color-muted: var(--text-label);
+  --color-line: var(--glass-border);
+  --color-sage: var(--aqua-light);
+  --color-sageDark: var(--aqua-deep);
+  --color-dusk: var(--lav-mid);
+  --color-duskDeep: var(--lav-mid);
+  --color-blush: var(--rose);
+  --color-moon: var(--lav-light);
+}
+
+.skin-sakura .bg-paper,
+.skin-sakura main {
+  background:
+    radial-gradient(ellipse 130% 75% at 15% 0%, var(--bg-aqua-wash), transparent 55%),
+    radial-gradient(ellipse 90% 55% at 90% 8%, var(--bg-lav-wash), transparent 50%),
+    radial-gradient(ellipse 70% 45% at 50% 100%, var(--bg-warm-wash), transparent 60%),
+    var(--bg-pearl) !important;
+}
+
+.skin-sakura .bg-cream {
+  background: var(--bg-cream) !important;
+}
+
+.skin-sakura header {
+  background: var(--header-bg) !important;
+  border-bottom: 1px solid var(--glass-border) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.skin-sakura header .font-serif,
+.skin-sakura header p {
+  color: var(--text-primary) !important;
+}
+
+.skin-sakura header .text-muted {
+  color: var(--text-label) !important;
+}
+
+.skin-sakura header .bg-parchment,
+.skin-sakura header button {
+  background: var(--glass-bg) !important;
+  border-color: var(--glass-border) !important;
+}
+
+.skin-sakura nav {
+  background: linear-gradient(to top, var(--nav-bg) 70%, transparent 100%) !important;
+  border-top: 1px solid var(--glass-border) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.skin-sakura nav button.text-sageDark {
+  color: var(--aqua-deep) !important;
+}
+
+.skin-sakura .bg-white,
+.skin-sakura [class*="bg-white/"] {
+  background: var(--glass-bg) !important;
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border-color: var(--glass-border) !important;
+  box-shadow: var(--glass-shadow) !important;
+}
+
+.skin-sakura .text-ink,
+.skin-sakura h1, .skin-sakura h2, .skin-sakura h3 {
+  color: var(--text-primary) !important;
+}
+
+.skin-sakura .text-muted {
+  color: var(--text-label) !important;
+}
+
+.skin-sakura .font-serif,
+.skin-sakura .italic {
+  font-family: var(--font-dream) !important;
+  color: var(--text-dream) !important;
+}
+
+.skin-sakura input,
+.skin-sakura textarea {
+  background: rgba(255, 255, 255, 0.6) !important;
+  border-color: var(--glass-border) !important;
+  color: var(--text-body) !important;
+}
+
+.skin-sakura ::selection {
+  background: rgba(244, 168, 184, 0.35);
+  color: var(--text-primary);
+}

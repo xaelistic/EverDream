@@ -25,6 +25,8 @@ import {
   Globe
 } from 'lucide-react';
 import { useSkinFull } from '../contexts/SkinContext';
+import { getSkinMeta } from '../lib/skins';
+import { SkinPickerModal } from '../components/settings/SkinPickerModal';
 
 interface ProfileHubProps {
   onClose: () => void;
@@ -47,8 +49,9 @@ interface Friend {
 }
 
 export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
-  const { isPearl, setSkin } = useSkinFull();
-  
+  const { skin, isThemed } = useSkinFull();
+  const [skinPickerOpen, setSkinPickerOpen] = useState(false);
+
   const [activeTab, setActiveTab] = useState<'profile' | 'integrations' | 'network' | 'settings'>('profile');
   const [pseudonym, setPseudonym] = useState('DreamWalker');
   const [bio, setBio] = useState('Exploring the landscapes of sleep and subconscious...');
@@ -87,9 +90,9 @@ export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
   const renderProfileTab = () => (
     <div className="space-y-6">
       {/* Avatar & Pseudonym */}
-      <div className={`rounded-3xl border p-6 text-center ${isPearl ? 'border-[var(--glass-border)] bg-[var(--glass-bg)]' : 'border-line bg-cream'}`}>
+      <div className={`rounded-3xl border p-6 text-center ${isThemed ? 'border-[var(--glass-border)] bg-[var(--glass-bg)]' : 'border-line bg-cream'}`}>
         <div className="relative inline-block">
-          <div className={`w-24 h-24 rounded-full border-4 flex items-center justify-center overflow-hidden ${isPearl ? 'border-[var(--aqua-deep)]/30 bg-gradient-to-br from-[var(--aqua-light)] to-white' : 'border-sage/30 bg-gradient-to-br from-sage/20 to-parchment'}`}>
+          <div className={`w-24 h-24 rounded-full border-4 flex items-center justify-center overflow-hidden ${isThemed ? 'border-[var(--aqua-deep)]/30 bg-gradient-to-br from-[var(--aqua-light)] to-white' : 'border-sage/30 bg-gradient-to-br from-sage/20 to-parchment'}`}>
             <User className="w-12 h-12 text-muted" strokeWidth={1.5} />
           </div>
           <button className="absolute bottom-0 right-0 p-2 rounded-full bg-sage text-cream shadow-lift hover:bg-sageDark transition">
@@ -107,7 +110,7 @@ export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
       </div>
 
       {/* Bio */}
-      <div className={`rounded-2xl border p-4 ${isPearl ? 'border-[var(--glass-border)] bg-[var(--glass-bg)]' : 'border-line bg-cream'}`}>
+      <div className={`rounded-2xl border p-4 ${isThemed ? 'border-[var(--glass-border)] bg-[var(--glass-bg)]' : 'border-line bg-cream'}`}>
         <label className="text-xs uppercase tracking-wider text-muted font-medium">Bio</label>
         <textarea
           value={bio}
@@ -119,18 +122,18 @@ export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
       </div>
 
       {/* Interests */}
-      <div className={`rounded-2xl border p-4 ${isPearl ? 'border-[var(--glass-border)] bg-[var(--glass-bg)]' : 'border-line bg-cream'}`}>
+      <div className={`rounded-2xl border p-4 ${isThemed ? 'border-[var(--glass-border)] bg-[var(--glass-bg)]' : 'border-line bg-cream'}`}>
         <label className="text-xs uppercase tracking-wider text-muted font-medium">Interests</label>
         <div className="mt-3 flex flex-wrap gap-2">
           {interests.map((interest) => (
             <span
               key={interest}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium ${isPearl ? 'bg-[var(--aqua-light)]/30 text-[var(--aqua-deep)]' : 'bg-sage/20 text-sageDark'}`}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium ${isThemed ? 'bg-[var(--aqua-light)]/30 text-[var(--aqua-deep)]' : 'bg-sage/20 text-sageDark'}`}
             >
               {interest}
             </span>
           ))}
-          <button className={`px-3 py-1.5 rounded-full text-xs font-medium border-2 border-dashed ${isPearl ? 'border-[var(--glass-border)] text-muted hover:text-[var(--text-primary)]' : 'border-line text-muted hover:text-ink'}`}>
+          <button className={`px-3 py-1.5 rounded-full text-xs font-medium border-2 border-dashed ${isThemed ? 'border-[var(--glass-border)] text-muted hover:text-[var(--text-primary)]' : 'border-line text-muted hover:text-ink'}`}>
             <Plus className="w-3 h-3 inline mr-1" />
             Add
           </button>
@@ -138,7 +141,7 @@ export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
       </div>
 
       {/* Dream Goals */}
-      <div className={`rounded-2xl border p-4 ${isPearl ? 'border-[var(--glass-border)] bg-[var(--glass-bg)]' : 'border-line bg-cream'}`}>
+      <div className={`rounded-2xl border p-4 ${isThemed ? 'border-[var(--glass-border)] bg-[var(--glass-bg)]' : 'border-line bg-cream'}`}>
         <label className="text-xs uppercase tracking-wider text-muted font-medium flex items-center gap-2">
           <Sparkles className="w-4 h-4" />
           Dream Goals
@@ -146,11 +149,11 @@ export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
         <div className="mt-3 space-y-2">
           {dreamGoals.map((goal) => (
             <div key={goal} className="flex items-center gap-3">
-              <div className={`w-2 h-2 rounded-full ${isPearl ? 'bg-[var(--aqua-deep)]' : 'bg-sage'}`} />
+              <div className={`w-2 h-2 rounded-full ${isThemed ? 'bg-[var(--aqua-deep)]' : 'bg-sage'}`} />
               <span className="text-sm text-ink">{goal}</span>
             </div>
           ))}
-          <button className={`mt-2 flex items-center gap-2 text-xs font-medium ${isPearl ? 'text-[var(--aqua-deep)]' : 'text-sage'}`}>
+          <button className={`mt-2 flex items-center gap-2 text-xs font-medium ${isThemed ? 'text-[var(--aqua-deep)]' : 'text-sage'}`}>
             <Plus className="w-3 h-3" />
             Add a goal
           </button>
@@ -165,7 +168,7 @@ export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
       {integrations.map((integration) => (
         <div
           key={integration.id}
-          className={`flex items-center gap-4 rounded-2xl border p-4 transition ${isPearl ? 'border-[var(--glass-border)] bg-[var(--glass-bg)] hover:bg-white/60' : 'border-line bg-cream hover:bg-parchment/80'}`}
+          className={`flex items-center gap-4 rounded-2xl border p-4 transition ${isThemed ? 'border-[var(--glass-border)] bg-[var(--glass-bg)] hover:bg-white/60' : 'border-line bg-cream hover:bg-parchment/80'}`}
         >
           <div
             className="w-12 h-12 rounded-full flex items-center justify-center"
@@ -185,8 +188,8 @@ export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
             onClick={() => handleConnectIntegration(integration.id)}
             className={`px-4 py-2 rounded-xl text-sm font-medium transition ${
               integration.connected
-                ? isPearl ? 'bg-[var(--glass-border)] text-[var(--text-primary)]' : 'bg-parchment text-ink'
-                : isPearl ? 'bg-[var(--aqua-deep)] text-white hover:bg-[var(--aqua)]' : 'bg-sage text-cream hover:bg-sageDark'
+                ? isThemed ? 'bg-[var(--glass-border)] text-[var(--text-primary)]' : 'bg-parchment text-ink'
+                : isThemed ? 'bg-[var(--aqua-deep)] text-white hover:bg-[var(--aqua)]' : 'bg-sage text-cream hover:bg-sageDark'
             }`}
           >
             {integration.connected ? 'Manage' : 'Connect'}
@@ -199,12 +202,12 @@ export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
   const renderNetworkTab = () => (
     <div className="space-y-4">
       {/* Add Friend */}
-      <div className={`rounded-2xl border p-4 ${isPearl ? 'border-[var(--glass-border)] bg-[var(--glass-bg)]' : 'border-line bg-cream'}`}>
+      <div className={`rounded-2xl border p-4 ${isThemed ? 'border-[var(--glass-border)] bg-[var(--glass-bg)]' : 'border-line bg-cream'}`}>
         <div className="flex items-center justify-between mb-3">
           <h4 className="font-medium text-ink">Friends</h4>
           <button
             onClick={() => setShowAddFriend(!showAddFriend)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium ${isPearl ? 'bg-[var(--aqua-deep)] text-white' : 'bg-sage text-cream'}`}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium ${isThemed ? 'bg-[var(--aqua-deep)] text-white' : 'bg-sage text-cream'}`}
           >
             <Plus className="w-3 h-3" />
             Add Friend
@@ -218,11 +221,11 @@ export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
               value={friendCode}
               onChange={(e) => setFriendCode(e.target.value)}
               placeholder="Enter friend code"
-              className={`flex-1 px-3 py-2 rounded-xl text-sm border outline-none focus:ring-2 ${isPearl ? 'bg-white/60 border-[var(--glass-border)] focus:ring-[var(--aqua-deep)]/30' : 'bg-parchment border-line focus:ring-sage/30'}`}
+              className={`flex-1 px-3 py-2 rounded-xl text-sm border outline-none focus:ring-2 ${isThemed ? 'bg-white/60 border-[var(--glass-border)] focus:ring-[var(--aqua-deep)]/30' : 'bg-parchment border-line focus:ring-sage/30'}`}
             />
             <button
               onClick={handleAddFriend}
-              className={`px-4 py-2 rounded-xl text-sm font-medium ${isPearl ? 'bg-[var(--aqua-deep)] text-white' : 'bg-sage text-cream'}`}
+              className={`px-4 py-2 rounded-xl text-sm font-medium ${isThemed ? 'bg-[var(--aqua-deep)] text-white' : 'bg-sage text-cream'}`}
             >
               Send
             </button>
@@ -233,14 +236,14 @@ export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
         <div className="mt-4 space-y-3">
           {friends.map((friend) => (
             <div key={friend.id} className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isPearl ? 'bg-[var(--aqua-light)]/30' : 'bg-sage/20'}`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isThemed ? 'bg-[var(--aqua-light)]/30' : 'bg-sage/20'}`}>
                 <User className="w-5 h-5 text-muted" strokeWidth={1.5} />
               </div>
               <div className="flex-1 min-w-0">
                 <h5 className="text-sm font-medium text-ink truncate">{friend.name}</h5>
                 <p className="text-xs text-muted">{friend.sharedDreams} shared dreams</p>
               </div>
-              <button className={`p-2 rounded-full ${isPearl ? 'hover:bg-[var(--glass-border)]' : 'hover:bg-parchment'}`}>
+              <button className={`p-2 rounded-full ${isThemed ? 'hover:bg-[var(--glass-border)]' : 'hover:bg-parchment'}`}>
                 <Share2 className="w-4 h-4 text-muted" strokeWidth={1.5} />
               </button>
             </div>
@@ -249,14 +252,14 @@ export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
       </div>
 
       {/* Public Dreams Feed */}
-      <div className={`rounded-2xl border p-4 ${isPearl ? 'border-[var(--glass-border)] bg-[var(--glass-bg)]' : 'border-line bg-cream'}`}>
+      <div className={`rounded-2xl border p-4 ${isThemed ? 'border-[var(--glass-border)] bg-[var(--glass-bg)]' : 'border-line bg-cream'}`}>
         <h4 className="font-medium text-ink mb-3">Shared Dreams</h4>
         <p className="text-sm text-muted">Dreams shared by your network</p>
         <div className="mt-4 space-y-3">
           {[1, 2, 3].map((i) => (
-            <div key={i} className={`p-3 rounded-xl ${isPearl ? 'bg-white/40' : 'bg-parchment/60'}`}>
+            <div key={i} className={`p-3 rounded-xl ${isThemed ? 'bg-white/40' : 'bg-parchment/60'}`}>
               <div className="flex items-center gap-2 mb-2">
-                <div className={`w-6 h-6 rounded-full ${isPearl ? 'bg-[var(--aqua-light)]/50' : 'bg-sage/30'}`} />
+                <div className={`w-6 h-6 rounded-full ${isThemed ? 'bg-[var(--aqua-light)]/50' : 'bg-sage/30'}`} />
                 <span className="text-xs font-medium text-ink">Luna shared a dream</span>
               </div>
               <p className="text-xs text-muted line-clamp-2">
@@ -272,29 +275,30 @@ export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
   const renderSettingsTab = () => (
     <div className="space-y-4">
       {/* Appearance */}
-      <div className={`rounded-2xl border overflow-hidden ${isPearl ? 'border-[var(--glass-border)] bg-[var(--glass-bg)]' : 'border-line bg-cream'}`}>
-        <div className={`px-4 py-3 border-b ${isPearl ? 'border-[var(--glass-border)]' : 'border-line'}`}>
+      <div className={`rounded-2xl border overflow-hidden ${isThemed ? 'border-[var(--glass-border)] bg-[var(--glass-bg)]' : 'border-line bg-cream'}`}>
+        <div className={`px-4 py-3 border-b ${isThemed ? 'border-[var(--glass-border)]' : 'border-line'}`}>
           <h4 className="text-xs uppercase tracking-wider text-muted font-medium">Appearance</h4>
         </div>
-        <div className="divide-y divide-[var(--glass-border)]">
-          <div className="flex items-center justify-between p-4">
-            <div className="flex items-center gap-3">
-              <Palette className="w-5 h-5 text-muted" strokeWidth={1.5} />
-              <span className="text-sm text-ink">Pearl Theme</span>
+        <button
+          type="button"
+          onClick={() => setSkinPickerOpen(true)}
+          className={`w-full flex items-center justify-between p-4 transition ${isThemed ? 'hover:bg-white/60' : 'hover:bg-parchment/80'}`}
+        >
+          <div className="flex items-center gap-3">
+            <Palette className="w-5 h-5 text-muted" strokeWidth={1.5} />
+            <div className="text-left">
+              <span className="text-sm text-ink block">App Skin</span>
+              <span className="text-xs text-muted">{getSkinMeta(skin).name}</span>
             </div>
-            <button
-              onClick={() => setSkin(isPearl ? 'default' : 'pearl')}
-              className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${isPearl ? 'bg-[var(--aqua-deep)]' : 'bg-sage'}`}
-            >
-              <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${isPearl ? 'translate-x-6' : 'translate-x-1'}`} />
-            </button>
           </div>
-        </div>
+          <ChevronRight className="w-4 h-4 text-muted" strokeWidth={1.75} />
+        </button>
+        <SkinPickerModal isOpen={skinPickerOpen} onClose={() => setSkinPickerOpen(false)} />
       </div>
 
       {/* Notifications */}
-      <div className={`rounded-2xl border overflow-hidden ${isPearl ? 'border-[var(--glass-border)] bg-[var(--glass-bg)]' : 'border-line bg-cream'}`}>
-        <div className={`px-4 py-3 border-b ${isPearl ? 'border-[var(--glass-border)]' : 'border-line'}`}>
+      <div className={`rounded-2xl border overflow-hidden ${isThemed ? 'border-[var(--glass-border)] bg-[var(--glass-bg)]' : 'border-line bg-cream'}`}>
+        <div className={`px-4 py-3 border-b ${isThemed ? 'border-[var(--glass-border)]' : 'border-line'}`}>
           <h4 className="text-xs uppercase tracking-wider text-muted font-medium">Notifications</h4>
         </div>
         <div className="divide-y divide-[var(--glass-border)]">
@@ -304,7 +308,7 @@ export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
                 <Bell className="w-5 h-5 text-muted" strokeWidth={1.5} />
                 <span className="text-sm text-ink">{setting}</span>
               </div>
-              <button className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${isPearl ? 'bg-[var(--aqua-deep)]' : 'bg-sage'}`}>
+              <button className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${isThemed ? 'bg-[var(--aqua-deep)]' : 'bg-sage'}`}>
                 <span className="inline-block h-5 w-5 transform rounded-full bg-white shadow translate-x-6" />
               </button>
             </div>
@@ -313,8 +317,8 @@ export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
       </div>
 
       {/* Privacy & Data */}
-      <div className={`rounded-2xl border overflow-hidden ${isPearl ? 'border-[var(--glass-border)] bg-[var(--glass-bg)]' : 'border-line bg-cream'}`}>
-        <div className={`px-4 py-3 border-b ${isPearl ? 'border-[var(--glass-border)]' : 'border-line'}`}>
+      <div className={`rounded-2xl border overflow-hidden ${isThemed ? 'border-[var(--glass-border)] bg-[var(--glass-bg)]' : 'border-line bg-cream'}`}>
+        <div className={`px-4 py-3 border-b ${isThemed ? 'border-[var(--glass-border)]' : 'border-line'}`}>
           <h4 className="text-xs uppercase tracking-wider text-muted font-medium">Privacy & Data</h4>
         </div>
         <div className="divide-y divide-[var(--glass-border)]">
@@ -327,7 +331,7 @@ export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
             <button
               key={label}
               onClick={action}
-              className={`w-full flex items-center justify-between p-4 transition ${danger ? 'text-rose-600' : ''} ${isPearl ? 'hover:bg-white/60' : 'hover:bg-parchment/80'}`}
+              className={`w-full flex items-center justify-between p-4 transition ${danger ? 'text-rose-600' : ''} ${isThemed ? 'hover:bg-white/60' : 'hover:bg-parchment/80'}`}
             >
               <div className="flex items-center gap-3">
                 <Icon className="w-5 h-5 text-muted" strokeWidth={1.5} />
@@ -340,8 +344,8 @@ export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
       </div>
 
       {/* About */}
-      <div className={`rounded-2xl border overflow-hidden ${isPearl ? 'border-[var(--glass-border)] bg-[var(--glass-bg)]' : 'border-line bg-cream'}`}>
-        <div className={`px-4 py-3 border-b ${isPearl ? 'border-[var(--glass-border)]' : 'border-line'}`}>
+      <div className={`rounded-2xl border overflow-hidden ${isThemed ? 'border-[var(--glass-border)] bg-[var(--glass-bg)]' : 'border-line bg-cream'}`}>
+        <div className={`px-4 py-3 border-b ${isThemed ? 'border-[var(--glass-border)]' : 'border-line'}`}>
           <h4 className="text-xs uppercase tracking-wider text-muted font-medium">About</h4>
         </div>
         <div className="divide-y divide-[var(--glass-border)]">
@@ -350,7 +354,7 @@ export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
             { icon: Share2, label: 'Share App' },
             { icon: Moon, label: 'Version 1.0.0 (MVP)' },
           ].map(({ icon: Icon, label }) => (
-            <div key={label} className={`flex items-center justify-between p-4 ${isPearl ? 'hover:bg-white/60' : 'hover:bg-parchment/80'}`}>
+            <div key={label} className={`flex items-center justify-between p-4 ${isThemed ? 'hover:bg-white/60' : 'hover:bg-parchment/80'}`}>
               <div className="flex items-center gap-3">
                 <Icon className="w-5 h-5 text-muted" strokeWidth={1.5} />
                 <span className="text-sm text-ink">{label}</span>
@@ -370,9 +374,9 @@ export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
   );
 
   return (
-    <div className={`fixed inset-0 z-50 ${isPearl ? 'bg-[rgba(247,245,255,0.98)]' : 'bg-cream/98'} backdrop-blur-md`}>
+    <div className={`fixed inset-0 z-50 ${isThemed ? 'bg-[rgba(247,245,255,0.98)]' : 'bg-cream/98'} backdrop-blur-md`}>
       {/* Header */}
-      <div className={`sticky top-0 z-10 border-b ${isPearl ? 'border-[var(--glass-border)] bg-[rgba(247,245,255,0.92)]' : 'border-line bg-cream/95'} backdrop-blur-md`}>
+      <div className={`sticky top-0 z-10 border-b ${isThemed ? 'border-[var(--glass-border)] bg-[rgba(247,245,255,0.92)]' : 'border-line bg-cream/95'} backdrop-blur-md`}>
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
           <button onClick={onClose} className="p-2 rounded-full hover:bg-sage/10 transition">
             <ChevronRight className="w-6 h-6 text-ink rotate-180" strokeWidth={1.75} />
@@ -383,7 +387,7 @@ export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
       </div>
 
       {/* Tab Navigation */}
-      <div className={`sticky top-[61px] z-10 border-b ${isPearl ? 'border-[var(--glass-border)] bg-[rgba(247,245,255,0.98)]' : 'border-line bg-cream/98'} backdrop-blur-md`}>
+      <div className={`sticky top-[61px] z-10 border-b ${isThemed ? 'border-[var(--glass-border)] bg-[rgba(247,245,255,0.98)]' : 'border-line bg-cream/98'} backdrop-blur-md`}>
         <div className="max-w-lg mx-auto px-4">
           <div className="flex gap-1 py-2">
             {[
@@ -397,8 +401,8 @@ export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
                 onClick={() => setActiveTab(id as typeof activeTab)}
                 className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-medium transition ${
                   activeTab === id
-                    ? isPearl ? 'bg-[var(--aqua-deep)] text-white' : 'bg-sage text-cream'
-                    : isPearl ? 'text-[var(--text-label)] hover:text-[var(--text-primary)]' : 'text-muted hover:text-ink'
+                    ? isThemed ? 'bg-[var(--aqua-deep)] text-white' : 'bg-sage text-cream'
+                    : isThemed ? 'text-[var(--text-label)] hover:text-[var(--text-primary)]' : 'text-muted hover:text-ink'
                 }`}
               >
                 <Icon className="w-4 h-4" strokeWidth={1.75} />

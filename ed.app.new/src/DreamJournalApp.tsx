@@ -77,7 +77,7 @@ import { getCurrentUser } from './lib/supabase/client';
 
 const DreamJournalApp = () => {
   const { route, navigate } = useHashRoute();
-  const { isPearl, setSkin } = useSkinFull();
+  const { skin, isThemed } = useSkinFull();
 
   // ── Dream type ──────────────────────────────────────────────
   type Dream = {
@@ -2643,8 +2643,8 @@ const DreamJournalApp = () => {
 
       {route.screen === 'more' && (
         <MoreScreen
-          isPearl={isPearl}
-          setSkin={setSkin}
+          skin={skin}
+          isThemed={isThemed}
           navigate={navigate}
         />
       )}

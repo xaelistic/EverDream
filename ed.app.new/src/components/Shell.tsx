@@ -43,19 +43,19 @@ function isNavActive(active: RouteScreen, screen: RouteScreen): boolean {
 }
 
 export default function Shell({ active, onNavigate, onOpenProfile, children }: ShellProps) {
-  const { isPearl } = useSkinFull();
+  const { isThemed } = useSkinFull();
   const recordTarget = getRecordButtonTarget(active);
 
   return (
-    <div className={`min-h-screen flex flex-col font-sans ${isPearl ? 'text-[var(--text-primary)]' : 'text-ink'}`}>
-      <header className={`sticky top-0 z-40 border-b backdrop-blur-md ${isPearl ? 'border-[var(--glass-border)] bg-[rgba(247,245,255,0.92)]' : 'border-line bg-cream/95'}`}>
+    <div className={`min-h-screen flex flex-col font-sans ${isThemed ? 'text-[var(--text-primary)]' : 'text-ink'}`}>
+      <header className={`sticky top-0 z-40 border-b backdrop-blur-md ${isThemed ? 'border-[var(--glass-border)] bg-[var(--header-bg)]' : 'border-line bg-cream/95'}`}>
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
-            <div className={`w-9 h-9 rounded-full border flex items-center justify-center shadow-paper shrink-0 ${isPearl ? 'bg-[var(--glass-bg)] border-[var(--glass-border)]' : 'bg-parchment border-line'}`}>
+            <div className={`w-9 h-9 rounded-full border flex items-center justify-center shadow-paper shrink-0 ${isThemed ? 'bg-[var(--glass-bg)] border-[var(--glass-border)]' : 'bg-parchment border-line'}`}>
               <Moon className="w-4 h-4 text-duskDeep" strokeWidth={1.75} />
             </div>
             <div className="min-w-0">
-              {isPearl ? (
+              {isThemed ? (
                 <>
                   <p className="text-[18px] font-light tracking-[6px] uppercase text-[var(--text-primary)] truncate">
                     EVERDREAM
@@ -79,7 +79,7 @@ export default function Shell({ active, onNavigate, onOpenProfile, children }: S
           <button
             type="button"
             onClick={onOpenProfile}
-            className={`p-2.5 rounded-full border transition-colors shrink-0 ${isPearl ? 'border-[var(--glass-border)] bg-[var(--glass-bg)] hover:bg-white/80' : 'border-line bg-cream hover:bg-parchment'}`}
+            className={`p-2.5 rounded-full border transition-colors shrink-0 ${isThemed ? 'border-[var(--glass-border)] bg-[var(--glass-bg)] hover:bg-white/80' : 'border-line bg-cream hover:bg-parchment'}`}
             aria-label="Profile"
           >
             <User className="w-5 h-5 text-muted" strokeWidth={1.5} />
@@ -89,7 +89,7 @@ export default function Shell({ active, onNavigate, onOpenProfile, children }: S
 
       <main className="flex-1 w-full max-w-lg mx-auto px-4 py-5 pb-28">{children}</main>
 
-      <nav className={`fixed bottom-0 inset-x-0 z-40 border-t backdrop-blur-md pb-[env(safe-area-inset-bottom,0px)] ${isPearl ? 'border-[var(--glass-border)] bg-[rgba(247,245,255,0.98)]' : 'border-line bg-cream/98'}`}>
+      <nav className={`fixed bottom-0 inset-x-0 z-40 border-t backdrop-blur-md pb-[env(safe-area-inset-bottom,0px)] ${isThemed ? 'border-[var(--glass-border)] bg-[var(--nav-bg)]' : 'border-line bg-cream/98'}`}>
         <div className="max-w-lg mx-auto px-2 pt-2 pb-3 flex justify-around items-end">
           {/* Left nav items: Home, Journal */}
           {navItems.slice(0, 2).map(({ screen, label, icon: Icon }) => {
@@ -101,8 +101,8 @@ export default function Shell({ active, onNavigate, onOpenProfile, children }: S
                 onClick={() => onNavigate(screen)}
                 className={`flex flex-col items-center gap-0.5 px-1.5 py-1 rounded-xl transition-colors min-w-[44px] ${
                   on
-                    ? isPearl ? 'text-[var(--aqua-deep)]' : 'text-sageDark'
-                    : isPearl ? 'text-[var(--text-label)] hover:text-[var(--text-primary)]' : 'text-muted hover:text-ink'
+                    ? isThemed ? 'text-[var(--aqua-deep)]' : 'text-sageDark'
+                    : isThemed ? 'text-[var(--text-label)] hover:text-[var(--text-primary)]' : 'text-muted hover:text-ink'
                 }`}
               >
                 <span
@@ -121,17 +121,17 @@ export default function Shell({ active, onNavigate, onOpenProfile, children }: S
             onClick={() => onNavigate(recordTarget)}
             className={`flex flex-col items-center gap-0.5 px-1.5 py-1 rounded-xl transition-colors min-w-[64px] ${
               active === 'home' || active === 'record' || active === 'capture'
-                ? isPearl ? 'text-[var(--aqua-deep)]' : 'text-sageDark'
-                : isPearl ? 'text-[var(--text-label)] hover:text-[var(--text-primary)]' : 'text-muted hover:text-ink'
+                ? isThemed ? 'text-[var(--aqua-deep)]' : 'text-sageDark'
+                : isThemed ? 'text-[var(--text-label)] hover:text-[var(--text-primary)]' : 'text-muted hover:text-ink'
             }`}
           >
             <span
               className={`flex items-center justify-center rounded-full transition-all shadow-lift ${
                 (active === 'home' || active === 'record' || active === 'capture')
-                  ? isPearl
+                  ? isThemed
                     ? 'w-14 h-14 -mt-5 bg-gradient-to-br from-[var(--aqua-deep)] to-[var(--aqua)] text-white border border-[var(--aqua-deep)]/20'
                     : 'w-14 h-14 -mt-5 bg-gradient-to-br from-sage to-sageDark text-cream border border-sageDark/20'
-                  : isPearl
+                  : isThemed
                     ? 'w-13 h-13 -mt-4 bg-gradient-to-br from-[var(--glass-bg)] to-white border border-[var(--glass-border)] text-[var(--text-primary)] shadow-paper'
                     : 'w-13 h-13 -mt-4 bg-gradient-to-br from-parchment to-cream border border-line text-ink shadow-paper'
               }`}
@@ -151,8 +151,8 @@ export default function Shell({ active, onNavigate, onOpenProfile, children }: S
                 onClick={() => onNavigate(screen)}
                 className={`flex flex-col items-center gap-0.5 px-1.5 py-1 rounded-xl transition-colors min-w-[44px] ${
                   on
-                    ? isPearl ? 'text-[var(--aqua-deep)]' : 'text-sageDark'
-                    : isPearl ? 'text-[var(--text-label)] hover:text-[var(--text-primary)]' : 'text-muted hover:text-ink'
+                    ? isThemed ? 'text-[var(--aqua-deep)]' : 'text-sageDark'
+                    : isThemed ? 'text-[var(--text-label)] hover:text-[var(--text-primary)]' : 'text-muted hover:text-ink'
                 }`}
               >
                 <span
