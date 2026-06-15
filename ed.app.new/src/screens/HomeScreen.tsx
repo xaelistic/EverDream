@@ -1,5 +1,7 @@
-import { Moon, Sparkles, Cpu, Camera, Shield } from 'lucide-react';
-import type { WearableSleepRecord } from '../../lib/wearables';
+import { Moon, Sparkles, BookOpen, ChevronRight, BedDouble, PenLine } from 'lucide-react';
+import type { WearableSleepRecord } from '../lib/wearables';
+import type { DailyQuote } from '../lib/dailyContent';
+import type { EducationModule } from '../lib/sleepEducation';
 
 interface Dream {
   id: string;
@@ -8,9 +10,9 @@ interface Dream {
   category: string;
   emotion: string;
   nugget: string;
-  assetMetadata?: {
-    rarityScore: number;
-  };
+  narrative?: string;
+  generatedImage?: { url: string } | null;
+  assetMetadata?: { rarityScore: number };
   isSample?: boolean;
 }
 
@@ -23,12 +25,14 @@ interface HomeScreenProps {
     totalAssetValue: string;
   } | null;
   filteredDreams: Dream[];
-  reflectionQuote: { text: string; source: string };
+  lastDream: Dream | null;
+  reflectionQuote: DailyQuote;
   reflectionMood: string;
   setReflectionMood: (mood: string) => void;
   reflectionEnergy: number;
   setReflectionEnergy: (energy: number) => void;
   reflectionSleepData: WearableSleepRecord | null;
+  dailyEducation: EducationModule;
   getCategoryBadgeClass: (category: string) => string;
   getEmotionEmoji: (emotion: string) => string;
 }
@@ -37,83 +41,138 @@ export function HomeScreen({
   navigate,
   insights,
   filteredDreams,
+  lastDream,
   reflectionQuote,
   reflectionMood,
   setReflectionMood,
   reflectionEnergy,
   setReflectionEnergy,
   reflectionSleepData,
-  getCategoryBadgeClass,
+  dailyEducation,
   getEmotionEmoji,
 }: HomeScreenProps) {
+  const formatSleepDuration = (minutes: number) => {
+    const h = Math.floor(minutes / 60);
+    const m = Math.round(minutes % 60);
+    return `${h}h ${m}m`;
+  };
+
   return (
-    <div className="space-y-6">
-      {/* Hero */}
-      <div className="rounded-3xl border border-line bg-cream p-6 shadow-lift relative overflow-hidden">
-        <div className="absolute -right-10 -top-10 h-36 w-36 rounded-full bg-moon/35 blur-2xl pointer-events-none" />
-        <div className="relative flex items-start justify-between gap-4 mb-5">
-          <div>
-            <p className="text-[11px] uppercase tracking-[0.2em] text-muted mb-2">Today</p>
-            <h2 className="font-serif text-2xl sm:text-[1.65rem] font-medium text-ink leading-tight">
-              A quiet moment for <em className="text-duskDeep not-italic">your dreams</em>
-            </h2>
+    <div className="space-y-5">
+      {/* ── Daily reflection (top) ── */}
+      <section className="rounded-3xl border border-line bg-gradient-to-br from-parchment via-cream to-moon/20 p-5 shadow-lift relative overflow-hidden">
+        <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-dusk/10 blur-2xl pointer-events-none" />
+        <p className="text-[10px] uppercase tracking-[0.22em] text-muted mb-2">Daily reflection</p>
+        <blockquote className="font-serif text-xl sm:text-2xl leading-snug text-ink">
+          &ldquo;{reflectionQuote.text}&rdquo;
+        </blockquote>
+        <p className="text-sm text-muted mt-3">— {reflectionQuote.source}</p>
+        <p className="text-sm text-ink/75 mt-4 leading-relaxed italic">{reflectionQuote.prompt}</p>
+
+        <button
+          type="button"
+          onClick={() => navigate('record')}
+          className="mt-5 w-full bg-sage hover:bg-sageDark text-cream font-semibold py-3.5 rounded-2xl transition flex items-center justify-center gap-2 text-sm shadow-paper"
+        >
+          <PenLine className="w-4 h-4" strokeWidth={2} />
+          Journal about this
+        </button>
+      </section>
+
+      {/* ── Last night + last dream ── */}
+      <section className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="rounded-2xl border border-line bg-cream p-4 shadow-paper">
+          <div className="flex items-center gap-2 mb-3">
+            <BedDouble className="w-4 h-4 text-duskDeep" strokeWidth={1.75} />
+            <p className="text-xs uppercase tracking-[0.18em] text-muted">Last night&apos;s sleep</p>
           </div>
-          <div className="text-right shrink-0 rounded-2xl border border-line bg-parchment px-4 py-3 shadow-paper">
-            <div className="text-2xl font-serif font-semibold text-ink">{insights?.currentStreak || 0}</div>
-            <div className="text-[10px] uppercase tracking-wide text-muted">day streak</div>
+          {reflectionSleepData ? (
+            <>
+              <p className="text-2xl font-semibold text-ink">
+                {formatSleepDuration(reflectionSleepData.sleepDuration || 0)}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted">
+                <span>{reflectionSleepData.estimatedREM || 0}m REM</span>
+                <span>·</span>
+                <span>{reflectionSleepData.quality || reflectionSleepData.sleepQuality || 0}% quality</span>
+                {reflectionSleepData.source && (
+                  <>
+                    <span>·</span>
+                    <span className="capitalize">{reflectionSleepData.source}</span>
+                  </>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate('tracker')}
+                className="mt-3 text-xs font-semibold text-sageDark inline-flex items-center gap-1"
+              >
+                Sleep details <ChevronRight className="w-3 h-3" />
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-muted leading-relaxed">No sleep data yet.</p>
+              <button
+                type="button"
+                onClick={() => navigate('tracker')}
+                className="mt-2 text-xs font-semibold text-sageDark"
+              >
+                Open sleep tracker →
+              </button>
+            </>
+          )}
+        </div>
+
+        <div className="rounded-2xl border border-line bg-cream p-4 shadow-paper">
+          <div className="flex items-center gap-2 mb-3">
+            <Moon className="w-4 h-4 text-duskDeep" strokeWidth={1.75} />
+            <p className="text-xs uppercase tracking-[0.18em] text-muted">Last dream</p>
           </div>
+          {lastDream ? (
+            <button
+              type="button"
+              onClick={() => navigate('dream', lastDream.id)}
+              className="w-full text-left group"
+            >
+              {lastDream.generatedImage?.url && (
+                <img
+                  src={lastDream.generatedImage.url}
+                  alt=""
+                  className="w-full h-20 object-cover rounded-xl mb-2"
+                />
+              )}
+              <p className="text-sm text-ink line-clamp-2 leading-relaxed group-hover:text-sageDark transition">
+                {lastDream.nugget || lastDream.narrative || lastDream.content}
+              </p>
+              <p className="text-xs text-muted mt-1 flex items-center gap-1">
+                <span>{getEmotionEmoji(lastDream.emotion)}</span>
+                <span>{formatDreamDate(lastDream.date)}</span>
+              </p>
+            </button>
+          ) : (
+            <>
+              <p className="text-sm text-muted">Nothing captured yet.</p>
+              <button
+                type="button"
+                onClick={() => navigate('record')}
+                className="mt-2 text-xs font-semibold text-sageDark"
+              >
+                Record a dream →
+              </button>
+            </>
+          )}
         </div>
-        <div className="space-y-3">
-          <button
-            type="button"
-            onClick={() => navigate('record')}
-            className="relative w-full bg-sage hover:bg-sageDark text-cream font-semibold py-3.5 rounded-2xl transition flex items-center justify-center gap-2 shadow-paper text-sm"
-          >
-            <Moon className="w-5 h-5" strokeWidth={1.75} />
-            I had a dream…
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate('import-photos')}
-            className="relative w-full border border-sage/30 bg-sage/5 hover:bg-sage/10 text-sageDark font-semibold py-3.5 rounded-2xl transition flex items-center justify-center gap-2 text-sm"
-          >
-            <Camera className="w-5 h-5" strokeWidth={1.75} />
-            Import journal photos
-          </button>
+      </section>
 
-        </div>
-      </div>
-
-      {/* Quick Stats */}
-      {insights && (
-        <div className="grid grid-cols-3 gap-3">
-          <StatCard icon={Moon} value={insights.totalDreams} label="Entries" />
-          <StatCard icon={Sparkles} value={`${insights.avgRarity}`} label="Avg depth" />
-          <StatCard icon={Sparkles} value={`${insights.totalAssetValue}`} label="Glow index" />
-        </div>
-      )}
-
-      {/* Quote of the Day */}
-      <div className="rounded-3xl border border-line bg-parchment p-4">
-        <p className="text-xs uppercase tracking-[0.2em] text-muted mb-3">Quote of the day</p>
-        <p className="text-lg font-serif leading-relaxed text-ink">"{reflectionQuote.text}"</p>
-        <p className="text-sm text-muted mt-4">— {reflectionQuote.source}</p>
-      </div>
-
-      {/* Mood & Energy Check-in */}
-      <div className="rounded-3xl border border-line bg-parchment p-4">
+      {/* ── Mood check-in ── */}
+      <section className="rounded-2xl border border-line bg-parchment p-4">
         <p className="text-xs uppercase tracking-[0.2em] text-muted mb-3">How are you feeling?</p>
-        
-        {/* Compact Mood Selector */}
         <div className="flex items-center justify-center gap-2 flex-wrap mb-4">
           {['peaceful', 'anxious', 'excited', 'tired', 'curious', 'reflective'].map((mood) => {
             const emojis: Record<string, string> = {
-              peaceful: '😌',
-              anxious: '😰',
-              excited: '🤩',
-              tired: '😴',
-              curious: '🤔',
-              reflective: '✨',
+              peaceful: '😌', anxious: '😰', excited: '🤩',
+              tired: '😴', curious: '🤔', reflective: '✨',
             };
             const isSelected = reflectionMood === mood;
             return (
@@ -122,9 +181,7 @@ export function HomeScreen({
                 type="button"
                 onClick={() => setReflectionMood(mood)}
                 className={`w-11 h-11 rounded-full flex items-center justify-center transition-all ${
-                  isSelected
-                    ? 'bg-sage shadow-md scale-110 ring-2 ring-white/20'
-                    : 'bg-white/5 hover:bg-white/10 hover:scale-105'
+                  isSelected ? 'bg-sage shadow-md scale-110 ring-2 ring-sage/30' : 'bg-white hover:bg-cream'
                 }`}
                 title={mood}
               >
@@ -133,8 +190,6 @@ export function HomeScreen({
             );
           })}
         </div>
-
-        {/* Energy Slider */}
         <div>
           <div className="flex items-center justify-between text-xs uppercase tracking-[0.18em] text-muted mb-2">
             <span>Energy</span>
@@ -149,112 +204,81 @@ export function HomeScreen({
             className="w-full accent-sage"
           />
         </div>
-      </div>
+      </section>
 
-      {/* Sleep Summary (if wearable data available) */}
-      {reflectionSleepData && (
-        <div className="rounded-3xl border border-line bg-parchment p-4">
-          <div className="flex items-center justify-between mb-4">
-            <p className="text-xs uppercase tracking-[0.2em] text-muted">Last night's sleep</p>
-            <span className="text-[11px] text-muted uppercase tracking-[0.18em]">{reflectionSleepData.source ?? 'No sync'}</span>
-          </div>
-          <div className="space-y-3 text-sm text-ink">
-            <div className="rounded-2xl bg-white/90 p-4 shadow-sm">
-              <div className="text-xs uppercase tracking-[0.18em] text-muted">Duration</div>
-              <div className="text-lg font-semibold">{Math.round((reflectionSleepData.sleepDuration || 0) / 60)}h {Math.round((reflectionSleepData.sleepDuration || 0) % 60)}m</div>
-            </div>
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="rounded-2xl bg-white/90 p-3">
-                <div className="text-xs uppercase tracking-[0.18em] text-muted">Deep/REM</div>
-                <div className="font-semibold">{reflectionSleepData.estimatedREM || 0}m REM</div>
-              </div>
-              <div className="rounded-2xl bg-white/90 p-3">
-                <div className="text-xs uppercase tracking-[0.18em] text-muted">Quality</div>
-                <div className="font-semibold">{reflectionSleepData.quality || reflectionSleepData.sleepQuality || 0}%</div>
-              </div>
-            </div>
+      {/* ── Sleep education snippet ── */}
+      <section className="rounded-2xl border border-line bg-parchment/80 p-4">
+        <div className="flex items-start gap-3">
+          <span className="text-2xl shrink-0" aria-hidden>{dailyEducation.icon}</span>
+          <div className="min-w-0">
+            <p className="text-[10px] uppercase tracking-[0.18em] text-muted mb-1">Sleep & wellness</p>
+            <h3 className="font-semibold text-ink text-sm">{dailyEducation.title}</h3>
+            <p className="text-sm text-muted mt-1 leading-relaxed line-clamp-2">{dailyEducation.content}</p>
+            <button
+              type="button"
+              onClick={() => navigate('tracker')}
+              className="mt-2 text-xs font-semibold text-sageDark inline-flex items-center gap-1"
+            >
+              Learn more in Tracker <ChevronRight className="w-3 h-3" />
+            </button>
           </div>
         </div>
-      )}
+      </section>
 
-      {/* Gentle capabilities */}
-      <div className="rounded-2xl border border-line bg-parchment/70 p-5">
-        <h3 className="font-semibold mb-3 flex items-center gap-2 text-sm text-ink">
-          <Cpu className="w-4 h-4 text-sageDark" strokeWidth={1.75} />
-          Designed for reflection first
-        </h3>
-        <ul className="text-sm text-muted space-y-2 leading-relaxed">
-          <li>Optional AI interpretation & soft imagery — always yours to disable.</li>
-          <li>Wearable-friendly sleep context when you want it.</li>
-          <li>Local storage, exports, and GDPR-minded controls.</li>
-        </ul>
-      </div>
+      {/* ── Quick capture + streak ── */}
+      <section className="rounded-2xl border border-line bg-cream p-4 flex items-center justify-between gap-4">
+        <div>
+          <p className="text-2xl font-serif font-semibold text-ink">{insights?.currentStreak || 0}</p>
+          <p className="text-[10px] uppercase tracking-wide text-muted">day streak</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate('record')}
+          className="flex-1 max-w-[200px] bg-sage/10 hover:bg-sage/20 border border-sage/30 text-sageDark font-semibold py-2.5 px-4 rounded-xl text-sm transition flex items-center justify-center gap-2"
+        >
+          <Moon className="w-4 h-4" />
+          Capture dream
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('journal')}
+          className="p-2.5 rounded-xl border border-line hover:bg-parchment transition"
+          aria-label="Open journal"
+        >
+          <BookOpen className="w-5 h-5 text-muted" />
+        </button>
+      </section>
 
-      {/* Recent Dreams */}
-      <div>
-        <h3 className="font-serif text-lg font-medium text-ink mb-3 flex items-center gap-2">
-          <Sparkles className="w-5 h-5 text-dusk" strokeWidth={1.5} />
-          Recent in your journal
-        </h3>
-        {filteredDreams.length === 0 ? (
-          <div className="text-center py-12 text-muted border border-dashed border-line rounded-3xl bg-parchment/40">
-            <Moon className="w-14 h-14 mx-auto mb-4 opacity-35 text-duskDeep" strokeWidth={1.25} />
-            <p className="text-ink font-medium">Nothing here yet</p>
-            <p className="text-sm mt-2 max-w-xs mx-auto leading-relaxed">When you wake with images still vivid, tap Record — even one sentence counts.</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {filteredDreams.slice(0, 3).map(dream => (
-              <DreamNuggetCard 
-                key={dream.id} 
-                dream={dream}
-                getCategoryBadgeClass={getCategoryBadgeClass}
-                getEmotionEmoji={getEmotionEmoji}
+      {/* ── Recent entries ── */}
+      {filteredDreams.length > 0 && (
+        <section>
+          <h3 className="font-serif text-lg font-medium text-ink mb-3 flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-dusk" strokeWidth={1.5} />
+            Recent in your journal
+          </h3>
+          <div className="space-y-2">
+            {filteredDreams.slice(0, 3).map((dream) => (
+              <button
+                key={dream.id}
+                type="button"
                 onClick={() => navigate('dream', dream.id)}
-              />
+                className="w-full text-left rounded-2xl border border-line bg-parchment/60 hover:bg-parchment p-3 transition"
+              >
+                <p className="text-[10px] uppercase tracking-wider text-muted mb-0.5">
+                  {formatDreamDate(dream.date)}
+                </p>
+                <p className="text-sm text-ink line-clamp-1">{dream.nugget || dream.content}</p>
+              </button>
             ))}
           </div>
-        )}
-      </div>
+        </section>
+      )}
     </div>
   );
 }
 
-// Helper Components
-function StatCard({ icon: Icon, value, label }: { icon: any; value: string | number; label: string }) {
-  return (
-    <div className="rounded-2xl border border-line bg-parchment/70 p-3 text-center">
-      <Icon className="w-4 h-4 mx-auto mb-1 text-sageDark" strokeWidth={1.75} />
-      <div className="text-lg font-semibold text-ink">{value}</div>
-      <div className="text-[10px] uppercase tracking-wide text-muted">{label}</div>
-    </div>
-  );
-}
-
-function DreamNuggetCard({ dream, getCategoryBadgeClass, getEmotionEmoji, onClick }: { 
-  dream: Dream; 
-  getCategoryBadgeClass: (category: string) => string;
-  getEmotionEmoji: (emotion: string) => string;
-  onClick: () => void;
-}) {
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-  };
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="w-full text-left rounded-2xl border border-line bg-parchment/60 hover:bg-parchment p-4 transition"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          <p className="text-xs uppercase tracking-[0.18em] text-muted mb-1">{formatDate(dream.date)}</p>
-          <p className="text-sm text-ink line-clamp-2 leading-relaxed">{dream.nugget || dream.content}</p>
-        </div>
-        <span className="text-lg">{getEmotionEmoji(dream.emotion)}</span>
-      </div>
-    </button>
-  );
+function formatDreamDate(dateString: string) {
+  return new Date(dateString).toLocaleDateString('en-GB', {
+    weekday: 'short', day: 'numeric', month: 'short',
+  });
 }

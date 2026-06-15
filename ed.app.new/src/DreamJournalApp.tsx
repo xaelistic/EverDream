@@ -61,6 +61,14 @@ import DreamCapture from './components/dreams/DreamCapture';
 import { VideoJournalScreen } from './screens/VideoJournalScreen';
 import { analyzeDream, type DreamAnalysis } from './lib/dream-analyzer';
 import OnboardingFlow from './components/onboarding/OnboardingFlow';
+import { DailyReflectionCard } from './components/reflection/DailyReflectionCard';
+import { getDailyQuote, getDailyEducation } from './lib/dailyContent';
+import {
+  shouldShowDailyReflection,
+  shouldRouteToJournalOnOpen,
+  incrementTodayOpenCount,
+  dismissReflectionForToday,
+} from './lib/dailySession';
 import LoadingScreen from './components/loading-screen';
 import type { DreamAsset } from './modules/sleep/types';
 import { initDreamService, syncFromSupabase } from './lib/dreamService';
@@ -173,17 +181,15 @@ const DreamJournalApp = () => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [reflectionMood, setReflectionMood] = useState('');
   const [reflectionEnergy, setReflectionEnergy] = useState(50);
-  const reflectionQuote = useMemo(() => {
-    const quotes = [
-      { text: 'Dreams are the touchstones of our character.', source: 'Henry David Thoreau' },
-      { text: 'The best bridge between despair and hope is a good night’s sleep.', source: 'E. Joseph Cossman' },
-      { text: 'Morning is wonderful. Its only drawback is that it comes at such an inconvenient time of day.', source: 'Glen Cook' },
-      { text: 'A dream you dream alone is only a dream. A dream you dream together is reality.', source: 'John Lennon' },
-      { text: 'Sleep is the best meditation.', source: 'Dalai Lama' },
-    ];
-    const index = Math.floor(Date.now() / 86400000) % quotes.length;
-    return quotes[index];
-  }, []);
+  const reflectionQuote = useMemo(() => getDailyQuote(), []);
+  const dailyEducation = useMemo(() => getDailyEducation(), []);
+  const [showDailyReflection, setShowDailyReflection] = useState(false);
+  const [hasRoutedToday, setHasRoutedToday] = useState(false);
+
+  const lastDream = useMemo(
+    () => dreams.find((d) => !d.isSample) ?? null,
+    [dreams],
+  );
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [achievements, setAchievements] = useState([]);
@@ -425,6 +431,30 @@ const DreamJournalApp = () => {
   useEffect(() => {
     trackScreenView(route.screen);
   }, [route.screen]);
+
+  // Daily routing: first open → journal; return visit or dream today → reflection card
+  useEffect(() => {
+    if (isAppLoading || !hasAcceptedTerms || showOnboarding || hasRoutedToday) return;
+
+    const hash = window.location.hash.replace(/^#\/?/, '').trim();
+    const isColdStart = !hash || hash === 'home' || hash === 'reflection';
+
+    if (!isColdStart) {
+      setHasRoutedToday(true);
+      incrementTodayOpenCount();
+      return;
+    }
+
+    if (shouldShowDailyReflection(dreams)) {
+      setShowDailyReflection(true);
+      navigate('home');
+    } else if (shouldRouteToJournalOnOpen(dreams)) {
+      navigate('journal');
+    }
+
+    incrementTodayOpenCount();
+    setHasRoutedToday(true);
+  }, [isAppLoading, hasAcceptedTerms, showOnboarding, hasRoutedToday, dreams, navigate]);
 
   // Save dreams to Supabase cloud (non-blocking helper)
   const syncDreamToSupabase = async (dream: Dream): Promise<void> => {
@@ -1708,14 +1738,51 @@ const DreamJournalApp = () => {
             navigate={navigate}
             insights={insights}
             filteredDreams={filteredDreams}
+            lastDream={lastDream}
             reflectionQuote={reflectionQuote}
             reflectionMood={reflectionMood}
             setReflectionMood={setReflectionMood}
             reflectionEnergy={reflectionEnergy}
             setReflectionEnergy={setReflectionEnergy}
             reflectionSleepData={reflectionSleepData}
+            dailyEducation={dailyEducation}
             getCategoryBadgeClass={getCategoryBadgeClass}
             getEmotionEmoji={getEmotionEmoji}
+          />
+        )}
+
+        {showDailyReflection && (
+          <DailyReflectionCard
+            quote={reflectionQuote}
+            education={dailyEducation}
+            lastDream={lastDream}
+            sleep={
+              reflectionSleepData
+                ? {
+                    durationMinutes: reflectionSleepData.sleepDuration,
+                    quality: reflectionSleepData.quality || reflectionSleepData.sleepQuality,
+                    remMinutes: reflectionSleepData.estimatedREM,
+                    source: reflectionSleepData.source,
+                  }
+                : null
+            }
+            onDismiss={() => {
+              dismissReflectionForToday();
+              setShowDailyReflection(false);
+            }}
+            onOpenDream={(dreamId) => {
+              setShowDailyReflection(false);
+              navigate('dream', dreamId);
+            }}
+            onJournalAboutQuote={() => {
+              setShowDailyReflection(false);
+              navigate('record');
+            }}
+            onGoHome={() => {
+              dismissReflectionForToday();
+              setShowDailyReflection(false);
+              navigate('home');
+            }}
           />
         )}
 
