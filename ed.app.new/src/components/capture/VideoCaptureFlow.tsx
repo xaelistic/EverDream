@@ -39,6 +39,8 @@ export interface VideoCaptureData {
   timestamp: string;
   /** Whether audio was included */
   hasAudio: boolean;
+  /** IndexedDB media ID for persistent playback after refresh */
+  mediaId?: string;
 }
 
 export interface VideoCaptureFlowProps {
@@ -271,6 +273,7 @@ export function VideoCaptureFlow({
         thumbnail,
         timestamp: new Date().toISOString(),
         hasAudio: audioEnabled,
+        mediaId: mediaId || undefined,
       };
       
       console.log('[VideoCapture] Calling onComplete with video data:', {

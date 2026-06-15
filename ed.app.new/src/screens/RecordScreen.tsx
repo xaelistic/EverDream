@@ -228,6 +228,7 @@ export function RecordScreen({ onComplete, onCancel, captureMode = 'video' }: Re
             duration: data.duration,
             timestamp: data.timestamp,
             hasAudio: data.hasAudio,
+            mediaId: data.mediaId,
           }, '');
         }}
         onCancel={onCancel}

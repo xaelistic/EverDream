@@ -1,6 +1,8 @@
+import { useEffect, useState } from 'react';
 import { ArrowLeft, Upload, Award, Shield, Eye, Camera, MessageCircle } from 'lucide-react';
 import DreamVisualizer from '../components/dreams/DreamVisualizer';
 import type { EmotionCapture } from './face/FacialEmotionDetector';
+import { mediaStorageManager } from '../lib/mediaStorage';
 
 interface DreamInterpretation {
   symbols: Record<string, string>;
@@ -48,7 +50,7 @@ interface Dream {
   capturedEmotions?: EmotionCapture | null;
   isSample?: boolean;
   sourcePhotos?: string[];
-  videoCapture?: { url: string; capturedAt: string; duration?: number } | null;
+  videoCapture?: { url: string; capturedAt: string; duration?: number; thumbnail?: string; mediaId?: string } | null;
 }
 
 interface SimilarDream {
@@ -77,6 +79,40 @@ export function DreamDetailScreen({
   getEmotionEmoji,
   onImageGenerated,
 }: DreamDetailScreenProps) {
+  const [resolvedVideoUrl, setResolvedVideoUrl] = useState<string | null>(
+    detailDream.videoCapture?.url ?? null,
+  );
+
+  useEffect(() => {
+    let objectUrl: string | null = null;
+
+    const resolveVideo = async () => {
+      const mediaId = detailDream.videoCapture?.mediaId;
+      if (!mediaId) {
+        setResolvedVideoUrl(detailDream.videoCapture?.url ?? null);
+        return;
+      }
+
+      try {
+        const media = await mediaStorageManager.getMedia(mediaId);
+        if (media) {
+          objectUrl = URL.createObjectURL(media.blob);
+          setResolvedVideoUrl(objectUrl);
+        } else {
+          setResolvedVideoUrl(detailDream.videoCapture?.url ?? null);
+        }
+      } catch {
+        setResolvedVideoUrl(detailDream.videoCapture?.url ?? null);
+      }
+    };
+
+    resolveVideo();
+
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [detailDream.id, detailDream.videoCapture?.mediaId, detailDream.videoCapture?.url]);
+
   return (
     <div className="space-y-5">
       <button
@@ -163,10 +199,10 @@ export function DreamDetailScreen({
               </div>
               <div className="rounded-2xl border border-line bg-black overflow-hidden">
                 <video
-                  src={detailDream.videoCapture.url}
+                  src={resolvedVideoUrl || detailDream.videoCapture.url}
                   controls
                   className="w-full"
-                  poster={detailDream.generatedImage?.url}
+                  poster={detailDream.videoCapture.thumbnail || detailDream.generatedImage?.url}
                 />
               </div>
               {detailDream.videoCapture.duration && (

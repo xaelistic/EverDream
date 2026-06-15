@@ -40,7 +40,12 @@ import type { ExtractedDreamEntry } from './components/photo-upload/PhotoUploadF
 import { generateDreamImage } from './modules/sleep/dreamAssetGenerator';
 import { generateParallaxVideo } from './lib/assets/pipeline';
 import type { EmotionCapture } from './components/face/FacialEmotionDetector';
-import { transcribeAudio, isSpeechRecognitionSupported } from './lib/transcriptionWhisper';  // use robust Whisper + fallback version
+import {
+  transcribeAudio as transcribeWithWhisper,
+  transcribeWithWebSpeech,
+  isSpeechRecognitionSupported,
+} from './lib/transcriptionWhisper';
+import { processVideoJournal } from './lib/videoJournalProcessor';
 import { WearableSettings } from './components/wearables/WearableSettings';
 import type { WearableConfig, WearableSleepRecord } from './lib/wearables';
 import AdminDashboard from './components/admin/AdminDashboard';
@@ -126,7 +131,7 @@ const DreamJournalApp = () => {
       potentialValue: string;
     };
     sourceAudio?: string | null;
-    videoCapture?: { url: string; capturedAt: string; duration?: number } | null;
+    videoCapture?: { url: string; capturedAt: string; duration?: number; thumbnail?: string; mediaId?: string } | null;
     captureMode?: string;
     capturedEmotions?: EmotionCapture | null;
     context?: {
@@ -785,7 +790,7 @@ const DreamJournalApp = () => {
           console.error('Audio storage error:', error);
         }
 
-        await transcribeAudio(audioData);
+        await transcribeImportedAudio(audioData);
       };
       reader.readAsDataURL(file);
     } catch (error) {
@@ -795,25 +800,23 @@ const DreamJournalApp = () => {
     }
   };
 
-  const transcribeAudio = async (audioData: any) => {
+  const transcribeImportedAudio = async (audioData: { name: string; size: number; data: string; type: string }) => {
     console.log('[DreamJournal] Starting audio transcription for:', audioData.name, 'size:', audioData.size);
     try {
-      // Convert data URL to Blob for transcription
       console.log('[DreamJournal] Fetching audio data...');
       const response = await fetch(audioData.data);
       const blob = await response.blob();
       console.log('[DreamJournal] Audio blob created:', blob.size, 'bytes, type:', blob.type);
 
-      // Try HF Whisper first (real transcription, free)
       try {
         console.log('[DreamJournal] Attempting Whisper transcription...');
-        const result = await transcribeAudio(blob, {
+        const result = await transcribeWithWhisper(blob, {
           language: 'en',
           onProgress: (status) => console.log('[Transcription]', status),
         });
 
         console.log('[DreamJournal] Whisper result:', result.text?.length, 'chars, source:', result.source);
-        
+
         if (result.text && result.text.length > 5) {
           setPendingTranscription({
             text: result.text,
@@ -823,22 +826,20 @@ const DreamJournalApp = () => {
           setCurrentEntry(result.text);
           setIsTranscribing(false);
           return;
-        } else {
-          console.warn('[DreamJournal] Whisper returned empty or short text');
         }
+        console.warn('[DreamJournal] Whisper returned empty or short text');
       } catch (err) {
         console.warn('[DreamJournal] Whisper failed:', err);
       }
 
-      // Fallback: Web Speech API (browser-based, plays audio through mic)
       if (isSpeechRecognitionSupported()) {
         try {
           console.log('[DreamJournal] Falling back to Web Speech API...');
           const file = new File([blob], audioData.name, { type: audioData.type });
-          const result = await transcribeAudioFile(file);
+          const result = await transcribeWithWebSpeech(file);
 
           console.log('[DreamJournal] Web Speech result:', result.text?.length, 'chars');
-          
+
           setPendingTranscription({
             text: result.text,
             audioFile: audioData.name,
@@ -854,7 +855,6 @@ const DreamJournalApp = () => {
         console.warn('[DreamJournal] Web Speech API not supported');
       }
 
-      // Last resort: ask user to type manually
       console.warn('[DreamJournal] All transcription methods failed');
       setPendingTranscription({
         text: '',
@@ -2166,108 +2166,101 @@ const DreamJournalApp = () => {
         )}
 
       {/* Record (full page) — uses DreamCapture with pipeline progress */}
-      {route.screen === 'record' && (
+      {(route.screen === 'record' || route.screen === 'capture') && (
         <RecordScreen
           captureMode="video"
           onComplete={async (result, text) => {
-            // Handle both video and text capture results
             let newDream;
-            
+
             if (result.videoUrl || result.videoBlob) {
-              // Video capture result — now with transcription, analysis, and optional Supabase Storage upload
-              const videoDuration = result.duration || 0;
-              const nuggetTime = `${Math.floor(videoDuration / 60)}:${(videoDuration % 60).toString().padStart(2, '0')}`;
-
-              let transcriptText = 'Video journal entry.';
-              let finalAnalysis: any = null;
-
-              // 1. Try to transcribe the audio track from the video blob (if we have the blob)
-              const videoBlobForTranscribe = result.videoBlob;
-              if (videoBlobForTranscribe) {
-                try {
-                  console.log('[VideoRecord] Transcribing video audio...');
-                  const transResult = await transcribeAudio(videoBlobForTranscribe as any, {
-                    onProgress: (s: string) => console.log('[VideoRecord] Transcribe:', s),
-                  });
-                  if (transResult?.text && transResult.text.length > 5) {
-                    transcriptText = transResult.text;
-                  }
-                } catch (e) {
-                  console.warn('[VideoRecord] Transcription failed, using placeholder:', e);
-                }
-              }
-
-              // 2. Run dream analysis on the transcript (or placeholder)
+              setIsProcessing(true);
               try {
-                finalAnalysis = await analyzeDream(transcriptText);
-              } catch (e) {
-                console.warn('[VideoRecord] Analysis failed, using fallback');
-                finalAnalysis = {
+                const { dream } = await processVideoJournal({
+                  videoBlob: result.videoBlob,
+                  videoUrl: result.videoUrl,
+                  thumbnail: result.thumbnail,
+                  duration: result.duration,
+                  mediaId: result.mediaId,
+                  hasAudio: result.hasAudio,
+                });
+                newDream = dream;
+
+                if (result.videoBlob && supabaseClient) {
+                  try {
+                    const user = await getCurrentUser();
+                    if (user) {
+                      const path = `${user.id || 'anon'}/video-${Date.now()}.webm`;
+                      const { error: uploadErr } = await supabaseClient.storage
+                        .from('dream-media')
+                        .upload(path, result.videoBlob, { contentType: result.videoBlob.type || 'video/webm', upsert: true });
+                      if (!uploadErr) {
+                        const { data: pub } = supabaseClient.storage.from('dream-media').getPublicUrl(path);
+                        if (pub?.publicUrl && newDream.videoCapture) {
+                          newDream.videoCapture.url = pub.publicUrl;
+                          console.log('[VideoRecord] Video uploaded to Supabase Storage:', pub.publicUrl);
+                        }
+                      } else {
+                        console.warn('[VideoRecord] Supabase Storage upload failed:', uploadErr.message);
+                      }
+                    }
+                  } catch (e) {
+                    console.warn('[VideoRecord] Supabase video upload error (non-fatal):', e);
+                  }
+                }
+              } catch (error) {
+                console.error('[RecordScreen] Video journal processing failed:', error);
+                alert('Saved your video but transcription/analysis failed. You can edit the entry in your journal.');
+                newDream = {
+                  id: `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                  date: new Date().toISOString(),
+                  content: 'Video journal entry - processing failed, watch video for details',
                   category: 'video-journal',
                   themes: ['video', 'personal-recording'],
                   emotion: 'neutral',
                   symbols: [],
-                  narrative: transcriptText,
-                  nugget: transcriptText.substring(0, 90) + (transcriptText.length > 90 ? '...' : ''),
-                  interpretation: { symbols: {}, meaning: 'Personal video reflection captured on waking.', commonPattern: 'Video journals capture rich immediate emotional context.' },
+                  narrative: 'Video journal recording (processing failed)',
+                  nugget: `Video journal (${Math.floor(result.duration / 60)}:${(result.duration % 60).toString().padStart(2, '0')})`,
+                  interpretation: { symbols: {}, meaning: 'Video saved but AI processing failed', commonPattern: '' },
+                  captureMode: 'video',
+                  videoCapture: {
+                    url: result.videoUrl,
+                    capturedAt: new Date().toISOString(),
+                    duration: result.duration,
+                    thumbnail: result.thumbnail,
+                    mediaId: result.mediaId,
+                  },
+                  generatedImage: result.thumbnail
+                    ? { url: result.thumbnail, prompt: 'Video thumbnail', style: 'photo', generatedAt: new Date().toISOString(), source: 'video-capture' }
+                    : null,
+                  isSample: false,
                 };
+              } finally {
+                setIsProcessing(false);
               }
-
-              // 3. Optional: upload the actual video file to Supabase Storage so it persists beyond this device/session
-              let persistentVideoUrl = result.videoUrl;
-              if (result.videoBlob && supabaseClient) {
-                try {
-                  const user = await getCurrentUser();
-                  if (user) {
-                    const path = `${user.id || 'anon'}/video-${Date.now()}.webm`;
-                    const { error: uploadErr } = await supabaseClient.storage
-                      .from('dream-media')
-                      .upload(path, result.videoBlob, { contentType: result.videoBlob.type || 'video/webm', upsert: true });
-                    if (!uploadErr) {
-                      const { data: pub } = supabaseClient.storage.from('dream-media').getPublicUrl(path);
-                      if (pub?.publicUrl) {
-                        persistentVideoUrl = pub.publicUrl;
-                        console.log('[VideoRecord] Video uploaded to Supabase Storage:', persistentVideoUrl);
-                      }
-                    } else {
-                      console.warn('[VideoRecord] Supabase Storage upload failed (will keep local/blob URL). Bucket "dream-media" may need to be created + policies set for authenticated users.');
-                    }
-                  }
-                } catch (e) {
-                  console.warn('[VideoRecord] Supabase video upload error (non-fatal):', e);
-                }
-              }
-
+            } else if (result.audioUrl || result.audioBlob) {
+              const audioDuration = result.duration || 0;
               newDream = {
                 id: `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
                 date: new Date().toISOString(),
-                content: transcriptText,
-                category: finalAnalysis.category || 'video-journal',
-                themes: finalAnalysis.themes || ['video', 'personal-recording'],
-                emotion: finalAnalysis.emotion || 'neutral',
-                symbols: finalAnalysis.symbols || [],
-                narrative: finalAnalysis.narrative || transcriptText,
-                nugget: finalAnalysis.nugget || `Video journal (${nuggetTime})`,
-                interpretation: finalAnalysis.interpretation || {
+                content: text || 'Audio journal entry - listen to the dream details',
+                category: 'audio-journal',
+                themes: ['audio', 'voice-note', 'personal-recording'],
+                emotion: 'neutral',
+                symbols: [],
+                narrative: 'Audio journal recording',
+                nugget: `Audio journal (${Math.floor(audioDuration / 60)}:${(audioDuration % 60).toString().padStart(2, '0')})`,
+                interpretation: {
                   symbols: {},
-                  meaning: 'Video journal - personal reflection',
+                  meaning: 'Voice journal - personal reflection',
                   commonPattern: '',
                 },
-                captureMode: 'video',
-                videoCapture: {
-                  url: persistentVideoUrl,
+                captureMode: 'audio',
+                audioCapture: {
+                  url: result.audioUrl,
                   capturedAt: new Date().toISOString(),
-                  duration: videoDuration,
+                  duration: audioDuration,
+                  mediaId: result.mediaId,
                 },
-                generatedImage: result.thumbnail
-                  ? {
-                      url: result.thumbnail,
-                      prompt: 'Video journal thumbnail',
-                      style: 'photo',
-                      generatedAt: new Date().toISOString(),
-                      source: 'video-capture',
-                    }
-                  : null,
                 isSample: false,
               };
             } else {
@@ -2326,109 +2319,34 @@ const DreamJournalApp = () => {
       {route.screen === 'video-journal' && (
         <VideoJournalScreen
           onComplete={async (videoUrl, thumbnailUrl, duration, videoBlob, capturedEmotionFromVideo) => {
-            console.log('[VideoJournal] Processing video journal with transcription + analysis...');
+            if (!videoBlob) {
+              alert('Video data missing — please try recording again.');
+              return;
+            }
 
-            let transcriptText = 'Video journal entry - watch the video for the full dream description.';
-            let finalEmotion = 'neutral';
-            let finalAnalysis: DreamAnalysis | null = null;
-
-            // Transcribe video/audio (prefer blob for accuracy)
-            const transcriptionSource = videoBlob || videoUrl;
+            setIsProcessing(true);
             try {
-              const transResult = await transcribeAudio(transcriptionSource as any, {
-                onProgress: (status) => console.log('[VideoJournal] Transcribe progress:', status),
-              });
-              transcriptText = transResult.text || transcriptText;
-              console.log('[VideoJournal] Transcription succeeded, length:', transcriptText.length);
-            } catch (e) {
-              console.warn('[VideoJournal] Transcription failed (will use placeholder + analysis):', e);
-            }
-
-            // Run dream analysis to get narrative, emotion, symbols, etc.
-            try {
-              finalAnalysis = await analyzeDream(transcriptText);
-              finalEmotion = finalAnalysis.emotion || 'neutral';
-              console.log('[VideoJournal] Analysis succeeded, narrative length:', finalAnalysis.narrative?.length);
-            } catch (e) {
-              console.warn('[VideoJournal] Analysis failed, using fallback:', e);
-              finalAnalysis = {
-                category: 'video-journal',
-                themes: ['video', 'personal-recording'],
-                emotion: 'neutral',
-                symbols: [],
-                narrative: transcriptText.length > 50 ? transcriptText : 'The dreamer recorded a video description of their dream.',
-                nugget: transcriptText.substring(0, 90) + (transcriptText.length > 90 ? '...' : ''),
-                interpretation: { symbols: {}, meaning: 'Personal video reflection captured immediately upon waking.', commonPattern: 'Video journals provide rich emotional context.' },
-              };
-            }
-
-            // Feed emotional recognition outputs into the analysis flow
-            if (capturedEmotionFromVideo?.dominantEmotion) {
-              finalEmotion = capturedEmotionFromVideo.dominantEmotion;
-              const emoNote = ` (Facial rec during video: ${capturedEmotionFromVideo.dominantEmotion}, conf ${Math.round((capturedEmotionFromVideo.confidence || 0)*100)}%)`;
-              if (finalAnalysis.interpretation?.meaning) {
-                finalAnalysis.interpretation.meaning += emoNote;
-              }
-              finalAnalysis.narrative = (finalAnalysis.narrative || '') + emoNote;
-              console.log('[VideoJournal] Emotional recog output fed into analysis/narrative:', capturedEmotionFromVideo.dominantEmotion);
-            }
-
-            // Persist video blob if available (for reliable playback after refresh)
-            let persistentVideoUrl = videoUrl;
-            if (videoBlob) {
-              try {
-                // Use existing media storage if available, else keep object URL (dev)
-                const mediaId = await (typeof (window as any).mediaStorageManager?.saveMedia === 'function'
-                  ? (window as any).mediaStorageManager.saveMedia(videoBlob, { type: 'video', duration, recordedAt: new Date().toISOString() })
-                  : null);
-                console.log('[VideoJournal] Video blob persisted with id:', mediaId);
-              } catch (e) {
-                console.warn('[VideoJournal] Blob persistence skipped (object URL will be used):', e);
-              }
-            }
-
-            // Build rich dream
-            const newDream = {
-              id: `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-              date: new Date().toISOString(),
-              content: transcriptText,
-              category: finalAnalysis.category,
-              themes: finalAnalysis.themes,
-              emotion: finalEmotion,
-              symbols: finalAnalysis.symbols,
-              narrative: finalAnalysis.narrative,
-              nugget: finalAnalysis.nugget,
-              interpretation: finalAnalysis.interpretation,
-              capturedEmotions: capturedEmotionFromVideo || null,
-              captureMode: 'video',
-              videoCapture: {
-                url: persistentVideoUrl,
-                capturedAt: new Date().toISOString(),
-                duration: duration || 0,
+              const { dream: newDream } = await processVideoJournal({
+                videoBlob,
+                videoUrl,
                 thumbnail: thumbnailUrl || undefined,
-              },
-              generatedImage: thumbnailUrl
-                ? {
-                    url: thumbnailUrl,
-                    prompt: 'Video journal thumbnail',
-                    style: 'photo',
-                    generatedAt: new Date().toISOString(),
-                    source: 'video-capture',
-                  }
-                : null,
-              isSample: false,
-            };
+                duration,
+                capturedEmotion: capturedEmotionFromVideo,
+              });
 
-            // Save
-            const updatedDreams = [newDream, ...dreams];
-            setDreams(updatedDreams);
-            await saveDreamsToStorage(updatedDreams);
-            syncDreamToSupabase(newDream).catch((err: unknown) => {
-              console.warn('[VideoJournal] Supabase sync error:', err);
-            });
-
-            // Navigate to the new dream detail
-            navigate('dream', newDream.id);
+              const updatedDreams = [newDream, ...dreams];
+              setDreams(updatedDreams);
+              await saveDreamsToStorage(updatedDreams);
+              syncDreamToSupabase(newDream).catch((err: unknown) => {
+                console.warn('[VideoJournal] Supabase sync error:', err);
+              });
+              navigate('dream', newDream.id);
+            } catch (error) {
+              console.error('[VideoJournal] Processing failed:', error);
+              alert('Failed to process video journal. Please try again.');
+            } finally {
+              setIsProcessing(false);
+            }
           }}
           onCancel={() => navigate('record')}
         />
@@ -2674,133 +2592,6 @@ const DreamJournalApp = () => {
           isPearl={isPearl}
           setSkin={setSkin}
           navigate={navigate}
-        />
-      )}
-
-      {/* Dream Capture / Record — video-first capture flow */}
-      {(route.screen === 'capture' || route.screen === 'record') && (
-        <RecordScreen
-          captureMode="video"
-          onComplete={async (result, text) => {
-            // Video journal
-            if (result.videoUrl) {
-              const newDream = {
-                id: `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                date: new Date().toISOString(),
-                content: 'Video journal entry - watch to hear the dream details',
-                category: 'video-journal',
-                themes: ['video', 'personal-recording'],
-                emotion: 'neutral',
-                symbols: [],
-                narrative: 'Video journal recording',
-                nugget: `Video journal (${Math.floor(result.duration / 60)}:${(result.duration % 60).toString().padStart(2, '0')})`,
-                interpretation: {
-                  symbols: {},
-                  meaning: 'Video journal - personal reflection',
-                  commonPattern: '',
-                },
-                captureMode: 'video' as const,
-                videoCapture: {
-                  url: result.videoUrl,
-                  capturedAt: new Date().toISOString(),
-                  duration: result.duration,
-                },
-                generatedImage: result.thumbnail
-                  ? {
-                      url: result.thumbnail,
-                      prompt: 'Video journal thumbnail',
-                      style: 'photo',
-                      generatedAt: new Date().toISOString(),
-                      source: 'video-capture',
-                    }
-                  : null,
-                isSample: false,
-              };
-
-              const updatedDreams = [newDream, ...dreams];
-              setDreams(updatedDreams);
-              await saveDreamsToStorage(updatedDreams);
-              syncDreamToSupabase(newDream).catch((err: unknown) => {
-                console.warn('[RecordScreen] Supabase sync error:', err);
-              });
-              navigate('dream', newDream.id);
-              return;
-            }
-
-            // Audio journal (new dedicated support)
-            if (result.audioUrl || result.audioBlob) {
-              const audioDuration = result.duration || 0;
-              const newDream = {
-                id: `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                date: new Date().toISOString(),
-                content: text || 'Audio journal entry - listen to the dream details',
-                category: 'audio-journal',
-                themes: ['audio', 'voice-note', 'personal-recording'],
-                emotion: 'neutral',
-                symbols: [],
-                narrative: 'Audio journal recording',
-                nugget: `Audio journal (${Math.floor(audioDuration / 60)}:${(audioDuration % 60).toString().padStart(2, '0')})`,
-                interpretation: {
-                  symbols: {},
-                  meaning: 'Voice journal - personal reflection',
-                  commonPattern: '',
-                },
-                captureMode: 'audio' as const,
-                // Store audio similar to videoCapture for consistency
-                audioCapture: {
-                  url: result.audioUrl,
-                  capturedAt: new Date().toISOString(),
-                  duration: audioDuration,
-                  mediaId: result.mediaId,
-                },
-                isSample: false,
-              };
-
-              const updatedDreams = [newDream, ...dreams];
-              setDreams(updatedDreams);
-              await saveDreamsToStorage(updatedDreams);
-              syncDreamToSupabase(newDream).catch((err: unknown) => {
-                console.warn('[RecordScreen] Supabase sync error:', err);
-              });
-              navigate('dream', newDream.id);
-              return;
-            }
-
-            const analysis = result.analysis;
-            const imageAsset = result.image;
-            const dreamId = Date.now().toString();
-            const newDream = {
-              id: dreamId,
-              date: new Date().toISOString(),
-              content: text,
-              category: analysis.category,
-              themes: analysis.themes,
-              emotion: analysis.emotion,
-              symbols: analysis.symbols,
-              narrative: analysis.narrative || text,
-              nugget: analysis.nugget || text.substring(0, 100),
-              interpretation: analysis.interpretation || {
-                symbols: {},
-                meaning: 'Analysis unavailable',
-                commonPattern: '',
-              },
-              generatedImage: imageAsset ? {
-                url: imageAsset.url,
-                prompt: imageAsset.prompt,
-                style: imageAsset.style,
-                generatedAt: imageAsset.generatedAt,
-                source: imageAsset.source,
-              } : null,
-              moodValence: analysis.valence ?? null,
-              captureMode: 'text' as const,
-              isSample: false,
-            };
-            const updatedDreams = [newDream, ...dreams.filter(d => !d.isSample)];
-            setDreams(updatedDreams);
-            await saveDreamsToStorage(updatedDreams);
-            navigate('dream', dreamId);
-          }}
-          onCancel={() => navigate('record')}
         />
       )}
 
