@@ -28,7 +28,7 @@ import {
 import Shell from './components/Shell';
 import { TrackerScreen } from './components/tracker/TrackerScreen';
 import { HomeScreen } from './screens/HomeScreen';
-import { ReflectionScreen } from './screens/ReflectionScreen';
+
 import { JournalScreen } from './screens/JournalScreen';
 import { InsightsScreen } from './screens/InsightsScreen';
 import { MoreScreen } from './screens/MoreScreen';
@@ -45,7 +45,7 @@ import {
   transcribeWithWebSpeech,
   isSpeechRecognitionSupported,
 } from './lib/transcriptionWhisper';
-import { processVideoJournal } from './lib/videoJournalProcessor';
+import { processVideoJournal, processTextJournal } from './lib/videoJournalProcessor';
 import { WearableSettings } from './components/wearables/WearableSettings';
 import type { WearableConfig, WearableSleepRecord } from './lib/wearables';
 import AdminDashboard from './components/admin/AdminDashboard';
@@ -1719,18 +1719,6 @@ const DreamJournalApp = () => {
           />
         )}
 
-        {route.screen === 'reflection' && (
-          <ReflectionScreen
-            navigate={navigate}
-            reflectionSleepData={reflectionSleepData}
-            reflectionQuote={reflectionQuote}
-            reflectionMood={reflectionMood}
-            setReflectionMood={setReflectionMood}
-            reflectionEnergy={reflectionEnergy}
-            setReflectionEnergy={setReflectionEnergy}
-          />
-        )}
-
         {route.screen === 'journal' && (
           <JournalScreen
             dreams={dreams}
@@ -2168,11 +2156,36 @@ const DreamJournalApp = () => {
       {/* Record (full page) — uses DreamCapture with pipeline progress */}
       {(route.screen === 'record' || route.screen === 'capture') && (
         <RecordScreen
-          captureMode="video"
           onComplete={async (result, text) => {
             let newDream;
 
-            if (result.videoUrl || result.videoBlob) {
+            // Audio pipeline already built the XAEL (record or audio upload)
+            if (result.id && result.captureMode === 'audio' && result.narrative) {
+              newDream = result;
+            } else if (result.uploadedText && text.trim().length >= 10) {
+              setIsProcessing(true);
+              try {
+                const { analysis, generatedImage } = await processTextJournal(text.trim());
+                newDream = {
+                  id: `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                  date: new Date().toISOString(),
+                  content: text.trim(),
+                  category: analysis.category,
+                  themes: analysis.themes,
+                  emotion: analysis.emotion,
+                  symbols: analysis.symbols,
+                  narrative: analysis.narrative,
+                  nugget: analysis.nugget,
+                  interpretation: analysis.interpretation,
+                  captureMode: 'text',
+                  sourceFile: result.fileName,
+                  generatedImage,
+                  isSample: false,
+                };
+              } finally {
+                setIsProcessing(false);
+              }
+            } else if (result.videoUrl || result.videoBlob) {
               setIsProcessing(true);
               try {
                 const { dream } = await processVideoJournal({
@@ -2237,32 +2250,6 @@ const DreamJournalApp = () => {
               } finally {
                 setIsProcessing(false);
               }
-            } else if (result.audioUrl || result.audioBlob) {
-              const audioDuration = result.duration || 0;
-              newDream = {
-                id: `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                date: new Date().toISOString(),
-                content: text || 'Audio journal entry - listen to the dream details',
-                category: 'audio-journal',
-                themes: ['audio', 'voice-note', 'personal-recording'],
-                emotion: 'neutral',
-                symbols: [],
-                narrative: 'Audio journal recording',
-                nugget: `Audio journal (${Math.floor(audioDuration / 60)}:${(audioDuration % 60).toString().padStart(2, '0')})`,
-                interpretation: {
-                  symbols: {},
-                  meaning: 'Voice journal - personal reflection',
-                  commonPattern: '',
-                },
-                captureMode: 'audio',
-                audioCapture: {
-                  url: result.audioUrl,
-                  capturedAt: new Date().toISOString(),
-                  duration: audioDuration,
-                  mediaId: result.mediaId,
-                },
-                isSample: false,
-              };
             } else {
               // Text capture result from DreamCapture
               const analysis = result.analysis;

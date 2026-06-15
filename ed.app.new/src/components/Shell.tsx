@@ -1,10 +1,9 @@
 import {
   BookOpen,
   CalendarDays,
-  Camera,
+  Home,
   Menu,
   Moon,
-  Sparkles,
   User,
 } from 'lucide-react';
 import type { RouteScreen } from '../hooks/useHashRoute';
@@ -17,8 +16,8 @@ type ShellProps = {
   children: React.ReactNode;
 };
 
-const navItems: { screen: RouteScreen; label: string; icon: typeof Moon }[] = [
-  { screen: 'reflection', label: 'Reflect', icon: Moon },
+const navItems: { screen: RouteScreen; label: string; icon: typeof Home }[] = [
+  { screen: 'home', label: 'Home', icon: Home },
   { screen: 'journal', label: 'Journal', icon: BookOpen },
   { screen: 'tracker', label: 'Tracker', icon: CalendarDays },
   { screen: 'more', label: 'More', icon: Menu },
@@ -34,6 +33,9 @@ function getRecordButtonTarget(active: RouteScreen): RouteScreen {
 }
 
 function isNavActive(active: RouteScreen, screen: RouteScreen): boolean {
+  if (screen === 'home') {
+    return active === 'home' || active === 'reflection';
+  }
   if (screen === 'more') {
     return ['more', 'wearables', 'privacy', 'achievements', 'assets', 'import-photos', 'admin'].includes(active);
   }
@@ -89,7 +91,7 @@ export default function Shell({ active, onNavigate, onOpenProfile, children }: S
 
       <nav className={`fixed bottom-0 inset-x-0 z-40 border-t backdrop-blur-md pb-[env(safe-area-inset-bottom,0px)] ${isPearl ? 'border-[var(--glass-border)] bg-[rgba(247,245,255,0.98)]' : 'border-line bg-cream/98'}`}>
         <div className="max-w-lg mx-auto px-2 pt-2 pb-3 flex justify-around items-end">
-          {/* Left nav items: Reflect, Journal */}
+          {/* Left nav items: Home, Journal */}
           {navItems.slice(0, 2).map(({ screen, label, icon: Icon }) => {
             const on = isNavActive(active, screen);
             return (

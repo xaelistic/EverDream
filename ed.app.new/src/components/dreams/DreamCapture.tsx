@@ -1,11 +1,11 @@
 import React, { useState, useCallback } from 'react';
-import { Sparkles, Wand2, Image, Brain, Type, Camera, Mic, Video, Upload } from 'lucide-react';
+import { Sparkles, Wand2, Image, Brain, Type } from 'lucide-react';
 import { Button, Modal } from '../ui';
 import { Card } from '../ui/Card';
 import PipelineProgress from './PipelineProgress';
 import { analyzeDream } from '../../lib/dream-analyzer';
 import { generateDreamImage } from '../../modules/sleep/dreamAssetGenerator';
-import { mediaStorageManager } from '../../lib/mediaStorage';
+
 import type { DreamAnalysis } from '../../lib/dream-analyzer';
 import type { DreamAsset } from '../../modules/sleep/types';
 
@@ -158,60 +158,9 @@ export default function DreamCapture({
         </div>
       </Card>
 
-      {/* Audio Journal & Upload (ported/integrated from old versions) */}
-      {/* Placement: Quick actions alongside text entry. 
-          - "Record Voice Journal": opens dedicated audio mode (no camera, great for night/low light).
-          - Upload Audio: imports existing voice memo, saves via mediaStorage, can be transcribed/analyzed.
-          Main "Record" (Moon icon in Shell) is video-first immersive.
-          Audio journal is surfaced here and via RecordScreen with captureMode="audio".
-      */}
-      <div className="flex flex-wrap gap-2 text-xs mb-3">
-        <button
-          type="button"
-          onClick={() => {
-            // Navigate to audio journal (RecordScreen with audio mode)
-            // In parent this can trigger route with captureMode audio
-            if (window.location) {
-              // Simple: alert for now or parent can listen
-              alert('Audio journal: Use the Record flow with voice mode or call RecordScreen with captureMode="audio". Full integration ready.');
-            }
-            // TODO: onOpenAudio?.() or navigate('record-audio')
-          }}
-          className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-line bg-white/60 hover:bg-white text-sageDark active:bg-white/80"
-        >
-          <Mic className="w-3.5 h-3.5" /> Record Voice Journal
-        </button>
-
-        <label className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-line bg-white/60 hover:bg-white text-sageDark active:bg-white/80 cursor-pointer">
-          <Upload className="w-3.5 h-3.5" /> Upload Audio
-          <input
-            type="file"
-            accept="audio/*"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) {
-                // Save to mediaStorage and attach note
-                mediaStorageManager.saveMedia(file, {
-                  type: 'audio',
-                  mimeType: file.type,
-                  size: file.size,
-                  duration: 0,
-                  recordedAt: new Date().toISOString(),
-                  backedUp: false,
-                  cloudProviders: [],
-                  tags: ['audio-upload', 'journal'],
-                }).then((mediaId) => {
-                  const note = `\n[Audio upload: ${file.name} — ${Math.round(file.size/1024)}KB]`;
-                  setText(prev => (prev + note).trim());
-                  // In real flow this can be linked to the dream media
-                }).catch(console.error);
-              }
-              e.target.value = '';
-            }}
-          />
-        </label>
-      </div>
+      <p className="text-xs text-muted mb-3">
+        Use the mode bar above to switch to Video, Audio, or Upload. Type here, or paste from another app.
+      </p>
 
       {/* Pipeline Progress */}
       {isRunning && (

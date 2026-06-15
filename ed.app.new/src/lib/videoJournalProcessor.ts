@@ -15,8 +15,10 @@ import { mediaStorageManager } from './mediaStorage';
 import { trackEvent } from './analytics';
 import type { EmotionCapture } from '../components/face/FacialEmotionDetector';
 
-const PLACEHOLDER_TRANSCRIPT =
+const VIDEO_PLACEHOLDER =
   'Video journal entry - watch the video for the full dream description.';
+const AUDIO_PLACEHOLDER =
+  'Audio journal entry - listen to the recording for the full dream description.';
 
 export interface VideoJournalInput {
   videoBlob: Blob;
@@ -80,30 +82,42 @@ function logError(stage: string, error: unknown) {
 function prepareAudioForTranscription(blob: Blob): Blob {
   if (!blob.type.startsWith('video/')) return blob;
   const audioType = blob.type.includes('webm') ? 'audio/webm' : 'audio/ogg';
-  console.log(`[VideoJournal] Converting ${blob.type} → ${audioType} for transcription (${blob.size} bytes)`);
+  console.log(`[DreamCapture] Converting ${blob.type} → ${audioType} for transcription (${blob.size} bytes)`);
   return new Blob([blob], { type: audioType });
 }
 
-async function transcribeVideoJournal(
-  videoBlob: Blob,
+type TranscriptSource = VideoJournalProcessResult['transcriptSource'];
+
+async function transcribeMediaBlob(
+  blob: Blob,
+  placeholder: string,
+  logPrefix: string,
   onProgress?: (status: string) => void,
-): Promise<{ text: string; source: VideoJournalProcessResult['transcriptSource'] }> {
-  const audioBlob = prepareAudioForTranscription(videoBlob);
+): Promise<{ text: string; source: TranscriptSource }> {
+  const audioBlob = prepareAudioForTranscription(blob);
 
   try {
     const result = await transcribeWithWhisper(audioBlob, { onProgress, language: 'en' });
-    if (result.text && result.text.length > 5 && result.source !== 'fallback') {
+    const text = (result.text || '').trim();
+    const isRealSpeech =
+      text.length > 5 &&
+      result.source !== 'fallback' &&
+      !text.toLowerCase().includes('no speech detected') &&
+      !text.toLowerCase().includes('transcription unavailable');
+
+    if (isRealSpeech) {
       return {
-        text: result.text.trim(),
+        text,
         source: result.source === 'hf-whisper' ? 'whisper' : 'web-speech',
       };
     }
-    logStage('transcription_empty', { source: result.source, length: result.text?.length ?? 0 });
+    console.warn(`[${logPrefix}] Transcription empty or placeholder:`, text.slice(0, 80));
+    trackEvent('custom', `${logPrefix}_transcription_empty`, { source: result.source, length: text.length }, 'record');
   } catch (error) {
     logError('transcription', error);
   }
 
-  return { text: PLACEHOLDER_TRANSCRIPT, source: 'none' };
+  return { text: placeholder, source: 'none' };
 }
 
 function mergeEmotionIntoAnalysis(
@@ -162,8 +176,10 @@ export async function processVideoJournal(
 
   // 1. Transcribe
   logStage('transcription_start');
-  const { text: transcriptText, source: transcriptSource } = await transcribeVideoJournal(
+  const { text: transcriptText, source: transcriptSource } = await transcribeMediaBlob(
     input.videoBlob,
+    VIDEO_PLACEHOLDER,
+    'video_journal',
     (status) => logStage('transcription_progress', { status }),
   );
   logStage('transcription_complete', { source: transcriptSource, length: transcriptText.length });
@@ -271,4 +287,159 @@ export async function processVideoJournal(
     transcriptLength: transcriptText.length,
     imageSource,
   };
+}
+
+// ── Audio journal pipeline (same XAEL build: transcribe → analyse → image) ──
+
+export interface AudioJournalInput {
+  audioBlob: Blob;
+  audioUrl?: string;
+  duration: number;
+  mediaId?: string;
+}
+
+export interface AudioJournalDream {
+  id: string;
+  date: string;
+  content: string;
+  category: string;
+  themes: string[];
+  emotion: string;
+  symbols: string[];
+  narrative: string;
+  nugget: string;
+  interpretation: DreamAnalysis['interpretation'];
+  captureMode: 'audio';
+  audioCapture: {
+    url: string;
+    capturedAt: string;
+    duration: number;
+    mediaId?: string;
+  };
+  generatedImage: VideoJournalDream['generatedImage'];
+  isSample: false;
+}
+
+export async function processAudioJournal(
+  input: AudioJournalInput,
+): Promise<{
+  dream: AudioJournalDream;
+  transcriptSource: TranscriptSource;
+  transcriptLength: number;
+  imageSource: string;
+}> {
+  const logPrefix = 'audio_journal';
+  console.log(`[${logPrefix}] start`, { size: input.audioBlob.size, type: input.audioBlob.type });
+
+  trackEvent('custom', `${logPrefix}_start`, {
+    blobSize: input.audioBlob.size,
+    duration: input.duration,
+  }, 'record');
+
+  const { text: transcriptText, source: transcriptSource } = await transcribeMediaBlob(
+    input.audioBlob,
+    AUDIO_PLACEHOLDER,
+    logPrefix,
+    (status) => console.log(`[${logPrefix}]`, status),
+  );
+
+  let finalAnalysis: DreamAnalysis;
+  try {
+    finalAnalysis = await analyzeDream(transcriptText);
+  } catch (error) {
+    logError('analysis', error);
+    finalAnalysis = {
+      category: 'audio-journal',
+      themes: ['audio', 'voice-note', 'personal-recording'],
+      emotion: 'neutral',
+      symbols: [],
+      narrative: transcriptText.length > 50 ? transcriptText : 'Voice journal of a dream description.',
+      nugget: transcriptText.substring(0, 90) + (transcriptText.length > 90 ? '...' : ''),
+      interpretation: {
+        symbols: {},
+        meaning: 'Personal voice reflection captured on waking.',
+        commonPattern: 'Voice journals capture tone and immediacy.',
+      },
+    };
+  }
+
+  let generatedImage: AudioJournalDream['generatedImage'] = null;
+  let imageSource = 'none';
+  const imagePrompt = finalAnalysis.narrative || finalAnalysis.nugget || transcriptText;
+
+  try {
+    const asset = await generateDreamImage(imagePrompt);
+    generatedImage = {
+      url: asset.url,
+      prompt: asset.prompt,
+      style: asset.style,
+      generatedAt: asset.generatedAt,
+      source: asset.source,
+    };
+    imageSource = asset.source || 'generated';
+  } catch (error) {
+    logError('image_gen', error);
+  }
+
+  let audioUrl = input.audioUrl;
+  if (input.mediaId) {
+    try {
+      const media = await mediaStorageManager.getMedia(input.mediaId);
+      if (media) audioUrl = URL.createObjectURL(media.blob);
+    } catch { /* use provided url */ }
+  }
+  if (!audioUrl) audioUrl = URL.createObjectURL(input.audioBlob);
+
+  const dream: AudioJournalDream = {
+    id: `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    date: new Date().toISOString(),
+    content: transcriptText,
+    category: finalAnalysis.category,
+    themes: finalAnalysis.themes,
+    emotion: finalAnalysis.emotion || 'neutral',
+    symbols: finalAnalysis.symbols,
+    narrative: finalAnalysis.narrative,
+    nugget: finalAnalysis.nugget,
+    interpretation: finalAnalysis.interpretation,
+    captureMode: 'audio',
+    audioCapture: {
+      url: audioUrl,
+      capturedAt: new Date().toISOString(),
+      duration: input.duration || 0,
+      mediaId: input.mediaId,
+    },
+    generatedImage,
+    isSample: false,
+  };
+
+  trackEvent('custom', `${logPrefix}_complete`, {
+    transcriptSource,
+    transcriptLength: transcriptText.length,
+    imageSource,
+  }, 'record');
+
+  return { dream, transcriptSource, transcriptLength: transcriptText.length, imageSource };
+}
+
+/** Process typed or uploaded text through analyse → image (XAEL build) */
+export async function processTextJournal(text: string): Promise<{
+  analysis: DreamAnalysis;
+  generatedImage: VideoJournalDream['generatedImage'];
+}> {
+  const trimmed = text.trim();
+  const analysis = await analyzeDream(trimmed);
+  let generatedImage: VideoJournalDream['generatedImage'] = null;
+  try {
+    const asset = await generateDreamImage(analysis.narrative || analysis.nugget || trimmed);
+    generatedImage = {
+      url: asset.url,
+      prompt: asset.prompt,
+      style: asset.style,
+      generatedAt: asset.generatedAt,
+      source: asset.source,
+    };
+  } catch (error) {
+    console.warn('[text_journal] image gen failed:', error);
+  }
+  return { analysis, generatedImage };
 }

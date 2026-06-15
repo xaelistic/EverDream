@@ -133,8 +133,22 @@ export function VideoCaptureFlow({
   const [error, setError] = useState<string | null>(null);
   const [permissionGranted, setPermissionGranted] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isFinished, setIsFinished] = useState(false);
   const [currentEmotion, setCurrentEmotion] = useState<string | null>(null);
   const [savedMediaId, setSavedMediaId] = useState<string | null>(null);
+
+  /** Pick a mime type that includes an audio codec so Whisper can transcribe speech */
+  const pickVideoMimeType = useCallback((): string => {
+    const candidates = [
+      'video/webm;codecs=vp9,opus',
+      'video/webm;codecs=vp8,opus',
+      'video/webm;codecs=vp9',
+      'video/webm;codecs=vp8',
+      'video/webm',
+      'video/mp4',
+    ];
+    return candidates.find((m) => MediaRecorder.isTypeSupported(m)) || 'video/webm';
+  }, []);
 
   // Request camera permission and start preview
   useEffect(() => {
@@ -200,11 +214,8 @@ export function VideoCaptureFlow({
     
     chunksRef.current = [];
     
-    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') 
-      ? 'video/webm;codecs=vp9'
-      : MediaRecorder.isTypeSupported('video/webm')
-        ? 'video/webm'
-        : 'video/mp4';
+    const mimeType = pickVideoMimeType();
+    console.log('[VideoCapture] Using mime type:', mimeType);
     
     const options: MediaRecorderOptions = { mimeType };
     if (audioEnabled && !mimeType.includes('mp4')) {
@@ -285,6 +296,9 @@ export function VideoCaptureFlow({
         mediaId
       });
       
+      // Stop camera/mic immediately — never show live preview again after capture
+      stopAll();
+
       try {
         onComplete(data);
         console.log('[VideoCapture] onComplete executed successfully');
@@ -292,11 +306,8 @@ export function VideoCaptureFlow({
         console.error('[VideoCapture] Error in onComplete callback:', error);
       }
 
-      // Clean up live preview stream + video element immediately
-      // Prevents "weird doubling of the video" (lingering preview + playback/overlay)
-      stopAll();
-      
-      setIsProcessing(false);
+      // Stay on processing overlay until parent navigates away (fixes camera re-opening)
+      setIsFinished(true);
     };
     
     recorder.start(1000); // Collect data every second
@@ -329,7 +340,7 @@ export function VideoCaptureFlow({
       setCurrentEmotion(randomEmotion);
       onEmotionDetected(randomEmotion, 0.75);
     }
-  }, [audioEnabled, duration, maxDuration, onComplete, onEmotionDetected]);
+  }, [audioEnabled, duration, maxDuration, onComplete, onEmotionDetected, pickVideoMimeType, stopAll]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && isRecording) {
@@ -373,14 +384,18 @@ export function VideoCaptureFlow({
     return 'bg-rose-500';
   };
 
-  // Render loading/error states
-  if (isProcessing) {
+  // Stay on overlay while processing OR after handoff to parent pipeline
+  if (isProcessing || isFinished) {
     return (
       <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50">
         <div className="text-center text-white">
           <Loader2 className="w-12 h-12 animate-spin mx-auto mb-4" />
-          <p className="text-lg font-medium">Processing your dream...</p>
-          <p className="text-sm text-white/60 mt-2">This won&apos;t take long</p>
+          <p className="text-lg font-medium">
+            {isFinished ? 'Building your XAEL…' : 'Processing your dream...'}
+          </p>
+          <p className="text-sm text-white/60 mt-2">
+            {isFinished ? 'Transcribing, analysing emotions, generating image' : 'This won\u2019t take long'}
+          </p>
         </div>
       </div>
     );

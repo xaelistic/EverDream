@@ -1,52 +1,93 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import DreamCapture from '../components/dreams/DreamCapture';
 import VideoCaptureFlow from '../components/capture/VideoCaptureFlow';
-import type { ExtractedDreamEntry } from './PhotoUploadFlow';
 import type { VideoCaptureData } from '../components/capture/VideoCaptureFlow';
-import { Mic, Square, Loader2, X } from 'lucide-react';
+import { CaptureModeBar, type CaptureMode } from '../components/capture/CaptureModeBar';
+import { AudioWaveform } from '../components/capture/AudioWaveform';
+import { Mic, Square, Loader2, X, Upload, FileText, ArrowLeft } from 'lucide-react';
 import { mediaStorageManager } from '../lib/mediaStorage';
+import { processAudioJournal } from '../lib/videoJournalProcessor';
 
 interface RecordScreenProps {
   onComplete: (result: any, text: string) => Promise<void>;
   onCancel: () => void;
-  captureMode?: 'text' | 'video' | 'audio';
 }
 
-/**
- * Simple full-screen audio journal recorder.
- * Uses direct MediaRecorder for audio-only (no camera).
- * Saves to mediaStorage (IndexedDB) for consistency with video.
- * Ported/adapted from legacy audio journal features in old versions + current audioRecorder module.
- */
-function AudioJournalCapture({ 
-  onComplete, 
-  onCancel 
-}: { 
-  onComplete: (result: any, text: string) => Promise<void>; 
+function readTextFile(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(file);
+  });
+}
+
+/** Audio journal with live waveform (WhatsApp / Messenger style) */
+function AudioJournalCapture({
+  onComplete,
+  onCancel,
+  onModeChange,
+}: {
+  onComplete: (result: any, text: string) => Promise<void>;
   onCancel: () => void;
+  onModeChange: (mode: CaptureMode) => void;
 }) {
   const [isRecording, setIsRecording] = useState(false);
   const [duration, setDuration] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isFinished, setIsFinished] = useState(false);
+  const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
+
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<number | null>(null);
+  const durationRef = useRef(0);
+
+  const cleanup = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
+    }
+    setAnalyser(null);
+    mediaRecorderRef.current = null;
+    chunksRef.current = [];
+    setIsRecording(false);
+    setDuration(0);
+    durationRef.current = 0;
+  }, []);
+
+  useEffect(() => () => cleanup(), [cleanup]);
 
   const startAudioRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: { 
-          echoCancellation: true, 
-          noiseSuppression: true, 
-          autoGainControl: true 
-        } 
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       });
       streamRef.current = stream;
 
-      const mimeType = MediaRecorder.isTypeSupported('audio/webm') 
-        ? 'audio/webm' 
-        : 'audio/mp4';
+      const audioContext = new AudioContext();
+      audioContextRef.current = audioContext;
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyserNode = audioContext.createAnalyser();
+      analyserNode.fftSize = 256;
+      source.connect(analyserNode);
+      setAnalyser(analyserNode);
+
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm')
+          ? 'audio/webm'
+          : 'audio/mp4';
 
       const recorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = recorder;
@@ -58,11 +99,11 @@ function AudioJournalCapture({
 
       recorder.onstop = async () => {
         setIsProcessing(true);
-        
-        const audioBlob = new Blob(chunksRef.current, { type: mimeType });
-        const recordingDuration = duration;
+        cleanup();
 
-        // Save to IndexedDB via mediaStorage (consistent with video path)
+        const audioBlob = new Blob(chunksRef.current, { type: mimeType });
+        const recordingDuration = durationRef.current;
+
         let mediaId: string | null = null;
         try {
           mediaId = await mediaStorageManager.saveMedia(audioBlob, {
@@ -79,42 +120,48 @@ function AudioJournalCapture({
           console.error('[AudioJournal] Failed to save audio:', err);
         }
 
-        // Create audio URL for immediate use (like videoUrl)
         const audioUrl = URL.createObjectURL(audioBlob);
 
-        await onComplete({
-          audioBlob,
-          audioUrl,
-          duration: recordingDuration,
-          timestamp: new Date().toISOString(),
-          mediaId,
-          hasAudio: true,
-        }, '');
-
-        cleanup();
-        setIsProcessing(false);
+        try {
+          const { dream } = await processAudioJournal({
+            audioBlob,
+            audioUrl,
+            duration: recordingDuration,
+            mediaId: mediaId || undefined,
+          });
+          setIsFinished(true);
+          await onComplete({ ...dream, audioBlob, audioUrl, mediaId }, dream.content);
+        } catch (err) {
+          console.error('[AudioJournal] Pipeline failed:', err);
+          await onComplete({
+            audioBlob,
+            audioUrl,
+            duration: recordingDuration,
+            mediaId,
+            hasAudio: true,
+          }, '');
+        }
       };
 
-      recorder.start(1000);
+      recorder.start(250);
       setIsRecording(true);
       setDuration(0);
+      durationRef.current = 0;
 
-      // Timer
       timerRef.current = window.setInterval(() => {
-        setDuration(prev => {
+        setDuration((prev) => {
           const next = prev + 1;
-          if (next >= 300) { // 5 min max for audio journal
+          durationRef.current = next;
+          if (next >= 300) {
             stopAudioRecording();
             return 300;
           }
           return next;
         });
       }, 1000);
-
-      console.log('[AudioJournal] Audio recording started');
     } catch (error) {
-      console.error('[AudioJournal] Failed to start audio recording:', error);
-      alert('Unable to access microphone for audio journal. Please check permissions.');
+      console.error('[AudioJournal] Failed to start:', error);
+      alert('Unable to access microphone. Please check permissions.');
       cleanup();
     }
   };
@@ -130,33 +177,19 @@ function AudioJournalCapture({
     }
   };
 
-  const cleanup = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    mediaRecorderRef.current = null;
-    chunksRef.current = [];
-    setIsRecording(false);
-    setDuration(0);
-  };
-
   const handleCancel = () => {
     if (isRecording) stopAudioRecording();
     cleanup();
     onCancel();
   };
 
-  if (isProcessing) {
+  if (isProcessing || isFinished) {
     return (
       <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50">
-        <div className="text-center text-white">
+        <div className="text-center text-white px-6">
           <Loader2 className="w-12 h-12 animate-spin mx-auto mb-4" />
-          <p className="text-lg font-medium">Saving your audio journal...</p>
+          <p className="text-lg font-medium">Building your XAEL…</p>
+          <p className="text-sm text-white/60 mt-2">Transcribing voice, analysing tone, generating image</p>
         </div>
       </div>
     );
@@ -164,95 +197,244 @@ function AudioJournalCapture({
 
   return (
     <div className="fixed inset-0 bg-gradient-to-b from-slate-950 to-black z-50 flex flex-col">
-      {/* Top bar */}
-      <div className="p-4 flex justify-between items-center text-white">
-        <button onClick={handleCancel} className="p-2">
-          <X className="w-6 h-6" />
-        </button>
-        <div className="text-sm opacity-70">Audio Journal</div>
-        <div className="w-8" />
+      <div className="p-4 space-y-3">
+        <div className="flex justify-between items-center text-white">
+          <button type="button" onClick={handleCancel} className="p-2" aria-label="Cancel">
+            <X className="w-6 h-6" />
+          </button>
+          <span className="text-sm opacity-70">Audio journal</span>
+          <div className="w-10" />
+        </div>
+        {!isRecording && (
+          <CaptureModeBar active="audio" onChange={onModeChange} variant="dark" />
+        )}
       </div>
 
-      {/* Main content - big mic UI */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 text-center text-white">
-        <div className="mb-8">
-          <Mic className={`w-24 h-24 ${isRecording ? 'text-rose-400 animate-pulse' : 'text-white/80'}`} />
-        </div>
+        <AudioWaveform
+          analyser={analyser}
+          isActive={isRecording}
+          className="mb-8 opacity-90"
+        />
 
         <div className="text-5xl font-mono tracking-[4px] mb-2">
           {Math.floor(duration / 60)}:{(duration % 60).toString().padStart(2, '0')}
         </div>
-        <p className="text-white/60 mb-12">
-          {isRecording ? 'Recording your dream...' : 'Tap the microphone to begin'}
+        <p className="text-white/60 mb-10">
+          {isRecording ? 'Describe your dream…' : 'Tap to record your dream'}
         </p>
 
         <button
+          type="button"
           onClick={isRecording ? stopAudioRecording : startAudioRecording}
           className={`w-28 h-28 rounded-full flex items-center justify-center transition-all active:scale-95 ${
-            isRecording 
-              ? 'bg-rose-600 hover:bg-rose-700' 
-              : 'bg-white/10 hover:bg-white/20 border border-white/30'
+            isRecording ? 'bg-rose-600 hover:bg-rose-700' : 'bg-white/10 hover:bg-white/20 border border-white/30'
           }`}
         >
-          {isRecording ? (
-            <Square className="w-12 h-12" />
-          ) : (
-            <Mic className="w-12 h-12" />
-          )}
+          {isRecording ? <Square className="w-12 h-12" /> : <Mic className="w-12 h-12" />}
         </button>
-
-        <p className="mt-8 text-xs text-white/50 max-w-[260px]">
-          Speak clearly about your dream. Audio is saved privately to your device first.
-        </p>
-      </div>
-
-      {/* Bottom hint */}
-      <div className="p-6 text-center text-[10px] text-white/40">
-        Audio journals are great for quick voice notes without the camera
       </div>
     </div>
   );
 }
 
-export function RecordScreen({ onComplete, onCancel, captureMode = 'video' }: RecordScreenProps) {
-  // Full-screen video capture mode (immersive, camera)
-  if (captureMode === 'video') {
-    return (
-      <VideoCaptureFlow
-        onComplete={(data: VideoCaptureData) => {
-          const videoUrl = URL.createObjectURL(data.videoBlob);
-          onComplete({
-            videoBlob: data.videoBlob,
-            videoUrl,
-            thumbnail: data.thumbnail,
-            duration: data.duration,
-            timestamp: data.timestamp,
-            hasAudio: data.hasAudio,
-            mediaId: data.mediaId,
-          }, '');
-        }}
-        onCancel={onCancel}
-        maxDuration={180}
-        enableAudio={true}
-      />
-    );
-  }
+/** Upload text or audio files */
+function UploadCapturePanel({
+  onComplete,
+  onCancel,
+  onModeChange,
+}: {
+  onComplete: (result: any, text: string) => Promise<void>;
+  onCancel: () => void;
+  onModeChange: (mode: CaptureMode) => void;
+}) {
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Dedicated audio journal mode (mic / voice note)
-  if (captureMode === 'audio') {
-    return (
-      <AudioJournalCapture 
-        onComplete={onComplete} 
-        onCancel={onCancel} 
-      />
-    );
-  }
+  const handleTextUpload = async (file: File) => {
+    setIsProcessing(true);
+    setError(null);
+    try {
+      const text = await readTextFile(file);
+      if (text.trim().length < 10) {
+        setError('File is too short — need at least a few sentences about your dream.');
+        return;
+      }
+      await onComplete({ uploadedText: true, fileName: file.name }, text.trim());
+    } catch {
+      setError('Could not read that file. Try .txt or .md for now.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
-  // Text (or fallback) capture mode
+  const handleAudioUpload = async (file: File) => {
+    setIsProcessing(true);
+    setError(null);
+    try {
+      let mediaId: string | null = null;
+      try {
+        mediaId = await mediaStorageManager.saveMedia(file, {
+          type: 'audio',
+          mimeType: file.type,
+          size: file.size,
+          duration: 0,
+          recordedAt: new Date().toISOString(),
+          backedUp: false,
+          cloudProviders: [],
+          tags: ['audio-upload'],
+        });
+      } catch { /* continue */ }
+
+      const audioUrl = URL.createObjectURL(file);
+      const { dream } = await processAudioJournal({
+        audioBlob: file,
+        audioUrl,
+        duration: 0,
+        mediaId: mediaId || undefined,
+      });
+      await onComplete({ ...dream, audioBlob: file, audioUrl, mediaId }, dream.content);
+    } catch (err) {
+      console.error('[Upload] Audio pipeline failed:', err);
+      setError('Could not process audio file. Try a shorter clip or different format.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   return (
-    <DreamCapture
-      onComplete={onComplete}
-      onCancel={onCancel}
-    />
+    <div className="space-y-5">
+      <button
+        type="button"
+        onClick={onCancel}
+        className="inline-flex items-center gap-2 text-sm font-medium text-muted hover:text-ink"
+      >
+        <ArrowLeft className="w-4 h-4" /> Back
+      </button>
+
+      <CaptureModeBar active="upload" onChange={onModeChange} />
+
+      <div className="rounded-3xl border border-line bg-cream p-6 shadow-lift space-y-4">
+        <h2 className="font-serif text-xl text-ink">Upload a dream</h2>
+        <p className="text-sm text-muted">
+          Import a text file you wrote earlier, or an audio voice memo. We&apos;ll transcribe audio,
+          extract emotional tone, and build your XAEL narrative.
+        </p>
+
+        {error && (
+          <div className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-600">{error}</div>
+        )}
+
+        {isProcessing ? (
+          <div className="flex items-center justify-center gap-3 py-8 text-muted">
+            <Loader2 className="w-6 h-6 animate-spin" />
+            <span>Processing upload…</span>
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="flex flex-col items-center gap-3 p-6 rounded-2xl border-2 border-dashed border-line hover:border-sage/50 hover:bg-sage/5 cursor-pointer transition">
+              <FileText className="w-10 h-10 text-sage" />
+              <span className="font-semibold text-ink text-sm">Text file</span>
+              <span className="text-xs text-muted text-center">.txt, .md, .text</span>
+              <input
+                type="file"
+                accept=".txt,.md,.text,text/plain,text/markdown"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleTextUpload(file);
+                  e.target.value = '';
+                }}
+              />
+            </label>
+
+            <label className="flex flex-col items-center gap-3 p-6 rounded-2xl border-2 border-dashed border-line hover:border-sage/50 hover:bg-sage/5 cursor-pointer transition">
+              <Upload className="w-10 h-10 text-dusk" />
+              <span className="font-semibold text-ink text-sm">Audio file</span>
+              <span className="text-xs text-muted text-center">.m4a, .mp3, .ogg, .webm</span>
+              <input
+                type="file"
+                accept="audio/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleAudioUpload(file);
+                  e.target.value = '';
+                }}
+              />
+            </label>
+          </div>
+        )}
+
+        <p className="text-xs text-muted text-center">
+          PDF import coming soon — for now save as .txt or paste in Text mode.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+export function RecordScreen({ onComplete, onCancel }: RecordScreenProps) {
+  const [mode, setMode] = useState<CaptureMode>('video');
+
+  const handleModeChange = (next: CaptureMode) => {
+    setMode(next);
+  };
+
+  if (mode === 'video') {
+    return (
+      <div className="relative">
+        <div className="fixed top-16 left-0 right-0 z-[60] px-4 max-w-lg mx-auto pointer-events-none">
+          <div className="pointer-events-auto">
+            <CaptureModeBar active="video" onChange={handleModeChange} variant="dark" />
+          </div>
+        </div>
+        <VideoCaptureFlow
+          onComplete={(data: VideoCaptureData) => {
+            const videoUrl = URL.createObjectURL(data.videoBlob);
+            onComplete({
+              videoBlob: data.videoBlob,
+              videoUrl,
+              thumbnail: data.thumbnail,
+              duration: data.duration,
+              timestamp: data.timestamp,
+              hasAudio: data.hasAudio,
+              mediaId: data.mediaId,
+            }, '');
+          }}
+          onCancel={onCancel}
+          maxDuration={180}
+          enableAudio={true}
+        />
+      </div>
+    );
+  }
+
+  if (mode === 'audio') {
+    return (
+      <AudioJournalCapture
+        onComplete={onComplete}
+        onCancel={onCancel}
+        onModeChange={handleModeChange}
+      />
+    );
+  }
+
+  if (mode === 'upload') {
+    return (
+      <UploadCapturePanel
+        onComplete={onComplete}
+        onCancel={onCancel}
+        onModeChange={handleModeChange}
+      />
+    );
+  }
+
+  // Text mode
+  return (
+    <div className="space-y-4">
+      <CaptureModeBar active="text" onChange={handleModeChange} />
+      <DreamCapture onComplete={onComplete} onCancel={onCancel} />
+    </div>
   );
 }

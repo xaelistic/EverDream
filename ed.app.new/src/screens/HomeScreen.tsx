@@ -80,14 +80,7 @@ export function HomeScreen({
             <Camera className="w-5 h-5" strokeWidth={1.75} />
             Import journal photos
           </button>
-          <button
-            type="button"
-            onClick={() => navigate('reflection')}
-            className="relative w-full border border-line bg-parchment hover:bg-parchment/90 text-ink font-semibold py-3.5 rounded-2xl transition flex items-center justify-center gap-2 text-sm"
-          >
-            <Moon className="w-5 h-5" strokeWidth={1.75} />
-            Morning reflection
-          </button>
+
         </div>
       </div>
 

@@ -52,6 +52,10 @@ function parseHash(): AppRoute {
     'admin',
     'video-journal',
   ];
+  if (screen === 'reflection') {
+    return { screen: 'home', dreamId: null };
+  }
+
   if (allowed.includes(screen)) {
     return { screen, dreamId: null };
   }
