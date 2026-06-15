@@ -1,0 +1,134 @@
+/**
+ * Everdream — Ember Skin
+ * Warm copper dusk with amber glow.
+ * Applied via class "skin-ember" on <html>.
+ */
+
+.skin-ember {
+  --bg-pearl: #1a1410;
+  --bg-deep: #221a14;
+  --bg-cream: #2a2018;
+  --bg-aqua-wash: rgba(212, 140, 80, 0.14);
+  --bg-lav-wash: rgba(180, 100, 60, 0.10);
+  --bg-warm-wash: rgba(255, 180, 100, 0.06);
+
+  --aqua-deep: #c87840;
+  --aqua-light: #e8a868;
+  --lav-mid: #a86848;
+  --lav-light: #d4a080;
+  --gold-soft: #f0c878;
+  --rose: #d48068;
+
+  --text-primary: #f5ebe0;
+  --text-body: #c8b0a0;
+  --text-label: #8a7060;
+  --text-dream: #a89080;
+  --text-whisper: rgba(245, 235, 224, 0.18);
+
+  --glass-bg: rgba(34, 26, 20, 0.80);
+  --glass-blur: 12px;
+  --glass-border: rgba(212, 140, 80, 0.18);
+  --glass-shadow: 0 1px 8px rgba(0, 0, 0, 0.35), 0 0 24px rgba(200, 120, 64, 0.06);
+  --header-bg: rgba(26, 20, 16, 0.94);
+  --nav-bg: rgba(26, 20, 16, 0.98);
+
+  --font-ui: 'Inter', system-ui, sans-serif;
+  --font-dream: 'Playfair Display', Georgia, serif;
+}
+
+.skin-ember {
+  --color-paper: var(--bg-pearl);
+  --color-cream: var(--bg-cream);
+  --color-parchment: var(--glass-bg);
+  --color-ink: var(--text-primary);
+  --color-muted: var(--text-label);
+  --color-line: var(--glass-border);
+  --color-sage: var(--aqua-light);
+  --color-sageDark: var(--aqua-deep);
+  --color-dusk: var(--lav-light);
+  --color-duskDeep: var(--lav-mid);
+  --color-blush: var(--rose);
+  --color-moon: var(--gold-soft);
+}
+
+.skin-ember .bg-paper,
+.skin-ember main {
+  background:
+    radial-gradient(ellipse 120% 70% at 25% 0%, var(--bg-aqua-wash), transparent 55%),
+    radial-gradient(ellipse 80% 50% at 80% 15%, var(--bg-lav-wash), transparent 50%),
+    radial-gradient(ellipse 60% 40% at 50% 100%, var(--bg-warm-wash), transparent 60%),
+    var(--bg-pearl) !important;
+}
+
+.skin-ember .bg-cream {
+  background: var(--bg-cream) !important;
+}
+
+.skin-ember header {
+  background: var(--header-bg) !important;
+  border-bottom: 1px solid var(--glass-border) !important;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.skin-ember header .font-serif,
+.skin-ember header p {
+  color: var(--text-primary) !important;
+}
+
+.skin-ember header .text-muted {
+  color: var(--text-label) !important;
+}
+
+.skin-ember header .bg-parchment,
+.skin-ember header button {
+  background: var(--glass-bg) !important;
+  border-color: var(--glass-border) !important;
+}
+
+.skin-ember nav {
+  background: linear-gradient(to top, var(--nav-bg) 70%, transparent 100%) !important;
+  border-top: 1px solid var(--glass-border) !important;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.skin-ember nav button.text-sageDark {
+  color: var(--aqua-light) !important;
+}
+
+.skin-ember .bg-white,
+.skin-ember [class*="bg-white/"] {
+  background: var(--glass-bg) !important;
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border-color: var(--glass-border) !important;
+  box-shadow: var(--glass-shadow) !important;
+}
+
+.skin-ember .text-ink,
+.skin-ember h1, .skin-ember h2, .skin-ember h3 {
+  color: var(--text-primary) !important;
+}
+
+.skin-ember .text-muted {
+  color: var(--text-label) !important;
+}
+
+.skin-ember .font-serif,
+.skin-ember .italic {
+  font-family: var(--font-dream) !important;
+  color: var(--text-dream) !important;
+}
+
+.skin-ember input,
+.skin-ember textarea {
+  background: var(--bg-deep) !important;
+  border-color: var(--glass-border) !important;
+  color: var(--text-body) !important;
+}
+
+.skin-ember ::selection {
+  background: rgba(200, 120, 64, 0.35);
+  color: var(--text-primary);
+}

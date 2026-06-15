@@ -70,6 +70,30 @@ export const SKINS: SkinMeta[] = [
       { color: '#d4a0a8', label: 'Rose' },
     ],
   },
+  {
+    id: 'ember',
+    name: 'Ember',
+    tagline: 'Copper dusk, warm glow',
+    className: 'skin-ember',
+    preview: ['#1a1410', '#c87840', '#f0c878'],
+    swatches: [
+      { color: '#1a1410', label: 'Dusk' },
+      { color: '#c87840', label: 'Copper' },
+      { color: '#f0c878', label: 'Amber' },
+    ],
+  },
+  {
+    id: 'noir',
+    name: 'Noir',
+    tagline: 'Monochrome, gold editorial',
+    className: 'skin-noir',
+    preview: ['#0a0a0a', '#888888', '#c8a848'],
+    swatches: [
+      { color: '#0a0a0a', label: 'Black' },
+      { color: '#888888', label: 'Silver' },
+      { color: '#c8a848', label: 'Gold' },
+    ],
+  },
 ];
 
 export const SKIN_IDS = SKINS.map((s) => s.id) as SkinId[];

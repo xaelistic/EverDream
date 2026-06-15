@@ -1,0 +1,143 @@
+/**
+ * Everdream — Noir Skin
+ * Stark monochrome editorial with gold accents.
+ * Applied via class "skin-noir" on <html>.
+ */
+
+.skin-noir {
+  --bg-pearl: #0a0a0a;
+  --bg-deep: #111111;
+  --bg-cream: #161616;
+  --bg-aqua-wash: rgba(255, 255, 255, 0.03);
+  --bg-lav-wash: rgba(200, 170, 100, 0.04);
+  --bg-warm-wash: rgba(255, 255, 255, 0.02);
+
+  --aqua-deep: #c8a848;
+  --aqua-light: #e8d080;
+  --lav-mid: #888888;
+  --lav-light: #b0b0b0;
+  --gold-soft: #d4b060;
+  --rose: #a0a0a0;
+
+  --text-primary: #f0f0f0;
+  --text-body: #a8a8a8;
+  --text-label: #686868;
+  --text-dream: #909090;
+  --text-whisper: rgba(240, 240, 240, 0.15);
+
+  --glass-bg: rgba(18, 18, 18, 0.85);
+  --glass-blur: 8px;
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-shadow: 0 1px 6px rgba(0, 0, 0, 0.50), 0 0 1px rgba(255, 255, 255, 0.04);
+  --header-bg: rgba(10, 10, 10, 0.96);
+  --nav-bg: rgba(10, 10, 10, 0.98);
+
+  --font-ui: 'Inter', system-ui, sans-serif;
+  --font-dream: 'Playfair Display', Georgia, serif;
+}
+
+.skin-noir {
+  --color-paper: var(--bg-pearl);
+  --color-cream: var(--bg-cream);
+  --color-parchment: var(--glass-bg);
+  --color-ink: var(--text-primary);
+  --color-muted: var(--text-label);
+  --color-line: var(--glass-border);
+  --color-sage: var(--aqua-light);
+  --color-sageDark: var(--aqua-deep);
+  --color-dusk: var(--lav-light);
+  --color-duskDeep: var(--lav-mid);
+  --color-blush: var(--rose);
+  --color-moon: var(--gold-soft);
+}
+
+.skin-noir .bg-paper,
+.skin-noir main {
+  background:
+    radial-gradient(ellipse 100% 60% at 50% 0%, var(--bg-lav-wash), transparent 50%),
+    radial-gradient(ellipse 80% 40% at 0% 100%, var(--bg-aqua-wash), transparent 40%),
+    var(--bg-pearl) !important;
+}
+
+.skin-noir .bg-cream {
+  background: var(--bg-cream) !important;
+}
+
+.skin-noir header {
+  background: var(--header-bg) !important;
+  border-bottom: 1px solid var(--glass-border) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.skin-noir header .font-serif,
+.skin-noir header p {
+  color: var(--text-primary) !important;
+  letter-spacing: 8px !important;
+}
+
+.skin-noir header .text-muted {
+  color: var(--text-label) !important;
+}
+
+.skin-noir header .bg-parchment,
+.skin-noir header button {
+  background: var(--glass-bg) !important;
+  border-color: var(--glass-border) !important;
+}
+
+.skin-noir nav {
+  background: linear-gradient(to top, var(--nav-bg) 70%, transparent 100%) !important;
+  border-top: 1px solid var(--glass-border) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.skin-noir nav button.text-sageDark {
+  color: var(--aqua-deep) !important;
+}
+
+.skin-noir .bg-white,
+.skin-noir [class*="bg-white/"] {
+  background: var(--glass-bg) !important;
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border-color: var(--glass-border) !important;
+  box-shadow: var(--glass-shadow) !important;
+}
+
+.skin-noir .text-ink,
+.skin-noir h1, .skin-noir h2, .skin-noir h3 {
+  color: var(--text-primary) !important;
+}
+
+.skin-noir .text-muted {
+  color: var(--text-label) !important;
+}
+
+.skin-noir .font-serif,
+.skin-noir .italic {
+  font-family: var(--font-dream) !important;
+  color: var(--text-dream) !important;
+}
+
+.skin-noir input,
+.skin-noir textarea {
+  background: var(--bg-deep) !important;
+  border-color: var(--glass-border) !important;
+  color: var(--text-body) !important;
+}
+
+.skin-noir ::selection {
+  background: rgba(200, 168, 72, 0.35);
+  color: var(--text-primary);
+}
+
+.skin-noir ::-webkit-scrollbar {
+  width: 4px;
+}
+
+.skin-noir ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+}

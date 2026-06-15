@@ -8,9 +8,9 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import { isValidSkinId } from '../lib/skins';
 
-export type SkinId = 'default' | 'pearl' | 'pearl-dark' | 'midnight' | 'sakura';
+export type SkinId = 'default' | 'pearl' | 'pearl-dark' | 'midnight' | 'sakura' | 'ember' | 'noir';
 
-const SKIN_CLASSES = ['skin-pearl', 'skin-pearl-dark', 'skin-midnight', 'skin-sakura'] as const;
+const SKIN_CLASSES = ['skin-pearl', 'skin-pearl-dark', 'skin-midnight', 'skin-sakura', 'skin-ember', 'skin-noir'] as const;
 
 interface SkinContextValue {
   skin: SkinId;
@@ -50,6 +50,10 @@ function skinToClass(skin: SkinId): string | null {
       return 'skin-midnight';
     case 'sakura':
       return 'skin-sakura';
+    case 'ember':
+      return 'skin-ember';
+    case 'noir':
+      return 'skin-noir';
     default:
       return null;
   }
