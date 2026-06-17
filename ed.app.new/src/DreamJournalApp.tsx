@@ -1489,6 +1489,172 @@ const DreamJournalApp = () => {
     alert('✅ Card downloaded! Ready to post to Stories or your feed.');
   };
 
+  // ── Reflection Share ──────────────────────────────────────────
+  const [showReflectionShareModal, setShowReflectionShareModal] = useState(false);
+  const [reflectionShareData, setReflectionShareData] = useState<{
+    quote: { text: string; source: string };
+    mood: string;
+    energy: number;
+    sleepDuration: number | null;
+    sleepQuality: number | null;
+    sleepSource: string;
+  } | null>(null);
+
+  const shareReflection = (data: typeof reflectionShareData) => {
+    if (!data) return;
+    setReflectionShareData(data);
+    setShowReflectionShareModal(true);
+  };
+
+  const generateReflectionShareableImage = async () => {
+    if (!reflectionShareData) return;
+
+    const canvas = document.createElement('canvas');
+    const size = 1080;
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+
+    // Morning gradient background (warm sunrise tones)
+    const grad = ctx.createLinearGradient(0, 0, 0, size);
+    grad.addColorStop(0, '#1a1a2e');
+    grad.addColorStop(0.3, '#2d1b4e');
+    grad.addColorStop(0.6, '#4a2c6e');
+    grad.addColorStop(1, '#1a1a2e');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+
+    // Decorative orbs
+    ctx.save();
+    ctx.fillStyle = 'rgba(167, 139, 250, 0.08)';
+    ctx.beginPath();
+    ctx.arc(size * 0.15, size * 0.15, 200, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(251, 191, 36, 0.06)';
+    ctx.beginPath();
+    ctx.arc(size * 0.85, size * 0.3, 150, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(52, 211, 153, 0.05)';
+    ctx.beginPath();
+    ctx.arc(size * 0.5, size * 0.8, 180, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Top branding
+    ctx.fillStyle = '#e0e7ff';
+    ctx.font = 'bold 38px system-ui, sans-serif';
+    ctx.fillText('EVERDREAM', 70, 85);
+    ctx.font = '24px system-ui, sans-serif';
+    ctx.fillStyle = '#c7d2fe';
+    ctx.fillText('☀️ Morning Reflection', 70, 120);
+
+    // Mood emoji + label
+    const moodEmojis: Record<string, string> = {
+      peaceful: '😌', anxious: '😰', excited: '🤩',
+      tired: '😴', curious: '🤔', reflective: '✨',
+    };
+    const moodEmoji = moodEmojis[reflectionShareData.mood] || '✨';
+    ctx.font = '64px system-ui, sans-serif';
+    ctx.fillText(moodEmoji, 70, 210);
+    ctx.fillStyle = '#f1e7ff';
+    ctx.font = 'bold 32px system-ui, sans-serif';
+    ctx.fillText(reflectionShareData.mood.charAt(0).toUpperCase() + reflectionShareData.mood.slice(1), 150, 205);
+
+    // Energy bar
+    ctx.fillStyle = 'rgba(167, 139, 250, 0.2)';
+    ctx.fillRect(70, 240, 400, 24);
+    const energyWidth = (reflectionShareData.energy / 100) * 400;
+    const energyGrad = ctx.createLinearGradient(70, 0, 70 + energyWidth, 0);
+    energyGrad.addColorStop(0, '#a78bfa');
+    energyGrad.addColorStop(1, '#34d399');
+    ctx.fillStyle = energyGrad;
+    ctx.fillRect(70, 240, energyWidth, 24);
+    ctx.fillStyle = '#e0e7ff';
+    ctx.font = '20px system-ui, sans-serif';
+    ctx.fillText(`Energy: ${reflectionShareData.energy}%`, 490, 258);
+
+    // Sleep data card
+    if (reflectionShareData.sleepDuration || reflectionShareData.sleepQuality) {
+      ctx.fillStyle = 'rgba(30, 27, 78, 0.6)';
+      ctx.beginPath();
+      ctx.roundRect(70, 290, 940, 120, 16);
+      ctx.fill();
+
+      ctx.fillStyle = '#c4b5fd';
+      ctx.font = '22px system-ui, sans-serif';
+      ctx.fillText('🌙 Sleep Summary', 100, 325);
+
+      ctx.fillStyle = '#f1e7ff';
+      ctx.font = '28px system-ui, sans-serif';
+      if (reflectionShareData.sleepDuration) {
+        const hours = Math.floor(reflectionShareData.sleepDuration / 60);
+        const mins = reflectionShareData.sleepDuration % 60;
+        ctx.fillText(`${hours}h ${mins}m`, 100, 370);
+      }
+      if (reflectionShareData.sleepQuality) {
+        ctx.fillText(`${reflectionShareData.sleepQuality}% quality`, 350, 370);
+      }
+      ctx.fillStyle = '#9b96b0';
+      ctx.font = '18px system-ui, sans-serif';
+      ctx.fillText(reflectionShareData.sleepSource || 'Manual', 700, 370);
+    }
+
+    // Quote card
+    const quoteY = reflectionShareData.sleepDuration || reflectionShareData.sleepQuality ? 440 : 320;
+    ctx.fillStyle = 'rgba(30, 27, 78, 0.5)';
+    ctx.beginPath();
+    ctx.roundRect(70, quoteY, 940, 200, 16);
+    ctx.fill();
+
+    ctx.fillStyle = '#a5b4fc';
+    ctx.font = '22px system-ui, sans-serif';
+    ctx.fillText('💬 Quote of the day', 100, quoteY + 40);
+
+    // Word wrap the quote
+    ctx.fillStyle = '#f1e7ff';
+    ctx.font = 'italic 36px Georgia, serif';
+    const quoteText = `"${reflectionShareData.quote.text}"`;
+    const maxWidth = 860;
+    const lineHeight = 48;
+    let qy = quoteY + 90;
+    const words = quoteText.split(' ');
+    let line = '';
+    for (let n = 0; n < words.length; n++) {
+      const testLine = line + words[n] + ' ';
+      const metrics = ctx.measureText(testLine);
+      if (metrics.width > maxWidth && n > 0) {
+        ctx.fillText(line, 100, qy);
+        line = words[n] + ' ';
+        qy += lineHeight;
+      } else {
+        line = testLine;
+      }
+    }
+    ctx.fillText(line, 100, qy);
+
+    // Quote source
+    ctx.fillStyle = '#9b96b0';
+    ctx.font = '22px system-ui, sans-serif';
+    ctx.fillText(`— ${reflectionShareData.quote.source}`, 100, qy + 45);
+
+    // Bottom branding + link
+    ctx.fillStyle = '#64748b';
+    ctx.font = '22px system-ui, sans-serif';
+    ctx.fillText('EverDream • Yours forever', 70, size - 100);
+    ctx.fillStyle = '#818cf8';
+    ctx.font = '20px system-ui, sans-serif';
+    ctx.fillText('everdream.app', 70, size - 70);
+
+    // Download
+    const link = document.createElement('a');
+    link.download = `everdream-reflection-${new Date().toISOString().split('T')[0]}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+
+    setShowReflectionShareModal(false);
+    alert('✅ Reflection card downloaded! Ready to post to Instagram Stories.');
+  };
+
   const saveSettingsToStorage = async (settingsToSave) => {
     try {
       await window.storage.set('settings', JSON.stringify(settingsToSave));
@@ -1728,6 +1894,7 @@ const DreamJournalApp = () => {
             setReflectionMood={setReflectionMood}
             reflectionEnergy={reflectionEnergy}
             setReflectionEnergy={setReflectionEnergy}
+            onShareReflection={shareReflection}
           />
         )}
 
@@ -2964,6 +3131,86 @@ const DreamJournalApp = () => {
             {selectedDream.videoCapture?.url && (
               <p className="text-center text-[10px] text-muted">Video dreams work best with the downloaded card (or export the original recording from the entry).</p>
             )}
+          </div>
+        </Modal>
+      )}
+
+      {/* Reflection Share Modal */}
+      {showReflectionShareModal && reflectionShareData && (
+        <Modal onClose={() => setShowReflectionShareModal(false)}>
+          <div className="space-y-5">
+            <div>
+              <h2 className="text-2xl font-serif font-medium text-ink">Share reflection</h2>
+              <p className="text-sm text-muted mt-1">Create a beautiful card for Instagram Stories.</p>
+            </div>
+
+            {/* Preview card */}
+            <div className="rounded-3xl border border-line bg-parchment p-5 shadow-paper">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-xs uppercase tracking-[0.2em] text-muted">Preview</span>
+              </div>
+              <div className="rounded-2xl bg-gradient-to-b from-[#1a1a2e] to-[#312e81] p-5 text-white">
+                <div className="text-sm font-bold mb-1">EVERDREAM</div>
+                <div className="text-xs text-indigo-300 mb-4">☀️ Morning Reflection</div>
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="text-4xl">
+                    {reflectionShareData.mood === 'peaceful' ? '😌' :
+                     reflectionShareData.mood === 'anxious' ? '😰' :
+                     reflectionShareData.mood === 'excited' ? '🤩' :
+                     reflectionShareData.mood === 'tired' ? '😴' :
+                     reflectionShareData.mood === 'curious' ? '🤔' : '✨'}
+                  </span>
+                  <span className="text-lg font-semibold capitalize">{reflectionShareData.mood}</span>
+                </div>
+                <div className="w-full h-2 bg-indigo-900/40 rounded-full mb-1">
+                  <div
+                    className="h-2 rounded-full bg-gradient-to-r from-violet-400 to-emerald-400"
+                    style={{ width: `${reflectionShareData.energy}%` }}
+                  />
+                </div>
+                <div className="text-xs text-indigo-300 mb-4">Energy: {reflectionShareData.energy}%</div>
+                {(reflectionShareData.sleepDuration || reflectionShareData.sleepQuality) && (
+                  <div className="rounded-xl bg-indigo-900/40 p-3 mb-4">
+                    <div className="text-xs text-indigo-300 mb-1">🌙 Sleep Summary</div>
+                    <div className="text-sm">
+                      {reflectionShareData.sleepDuration && `${Math.floor(reflectionShareData.sleepDuration / 60)}h ${reflectionShareData.sleepDuration % 60}m`}
+                      {reflectionShareData.sleepQuality && ` • ${reflectionShareData.sleepQuality}% quality`}
+                    </div>
+                  </div>
+                )}
+                <div className="rounded-xl bg-indigo-900/40 p-3">
+                  <div className="text-xs text-indigo-300 mb-1">💬 Quote of the day</div>
+                  <p className="text-sm italic leading-relaxed">"{reflectionShareData.quote.text}"</p>
+                  <p className="text-xs text-indigo-300 mt-2">— {reflectionShareData.quote.source}</p>
+                </div>
+                <div className="mt-4 pt-3 border-t border-indigo-800/40 flex items-center justify-between">
+                  <span className="text-xs text-slate-500">EverDream • Yours forever</span>
+                  <span className="text-xs text-indigo-400">everdream.app</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={generateReflectionShareableImage}
+                className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-sage hover:bg-sageDark text-cream font-semibold transition"
+              >
+                <Download className="w-4 h-4" /> Download Card
+              </button>
+              <button
+                onClick={() => {
+                  generateReflectionShareableImage();
+                }}
+                className="flex items-center justify-center gap-2 py-3 rounded-2xl border-2 border-dusk/30 bg-dusk/5 hover:bg-dusk/10 text-duskDeep font-semibold transition"
+              >
+                <Share2 className="w-4 h-4" /> Share
+              </button>
+            </div>
+
+            <p className="text-center text-[10px] text-muted">
+              1080 × 1080px • Optimized for Instagram Stories • Watermarked with everdream.app
+            </p>
           </div>
         </Modal>
       )}

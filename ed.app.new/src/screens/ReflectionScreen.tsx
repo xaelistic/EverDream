@@ -1,4 +1,4 @@
-import { ArrowLeft, Moon, Sparkles } from 'lucide-react';
+import { ArrowLeft, Moon, Sparkles, Share2 } from 'lucide-react';
 import type { WearableSleepRecord } from '../../lib/wearables';
 
 interface ReflectionScreenProps {
@@ -9,6 +9,14 @@ interface ReflectionScreenProps {
   setReflectionMood: (mood: string) => void;
   reflectionEnergy: number;
   setReflectionEnergy: (energy: number) => void;
+  onShareReflection?: (data: {
+    quote: { text: string; source: string };
+    mood: string;
+    energy: number;
+    sleepDuration: number | null;
+    sleepQuality: number | null;
+    sleepSource: string;
+  }) => void;
 }
 
 export function ReflectionScreen({
@@ -19,6 +27,7 @@ export function ReflectionScreen({
   setReflectionMood,
   reflectionEnergy,
   setReflectionEnergy,
+  onShareReflection,
 }: ReflectionScreenProps) {
   return (
     <div className="space-y-6">
@@ -140,6 +149,25 @@ export function ReflectionScreen({
             Return home
           </button>
         </div>
+
+        {/* Share Reflection Button */}
+        {onShareReflection && (
+          <button
+            type="button"
+            onClick={() => onShareReflection({
+              quote: reflectionQuote,
+              mood: reflectionMood,
+              energy: reflectionEnergy,
+              sleepDuration: reflectionSleepData?.sleepDuration ?? null,
+              sleepQuality: reflectionSleepData?.quality ?? reflectionSleepData?.sleepQuality ?? null,
+              sleepSource: reflectionSleepData?.source ?? 'Manual',
+            })}
+            className="w-full mt-3 flex items-center justify-center gap-2 py-3.5 rounded-2xl border-2 border-dusk/30 bg-dusk/5 hover:bg-dusk/10 text-duskDeep font-semibold transition"
+          >
+            <Share2 className="w-4 h-4" strokeWidth={1.75} />
+            Share to Instagram Stories
+          </button>
+        )}
       </div>
     </div>
   );
