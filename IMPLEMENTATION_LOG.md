@@ -20,11 +20,21 @@
 - **Exchange site stub** — `exchange-web/index.html` for `exchange.everdream.app`
 - **Spec** — `docs/specs/SPEC-06-simulacra-economy.md`
 
+### Session: SPEC-06 Phase 2 (Jun 18, 2026)
+
+- **Supabase persistence** — `assetPersistence.ts`, `simulacraPersistence.ts`; blob→`dream-media` upload
+- **Simulacrum reload** — `getSimulacrumAsync()` loads from cloud on screen open
+- **Dream detail pipeline** — collapsible `DreamAssetGenerator` with Phase 3 `mesh_3d`
+- **IPFS** — `ipfs.ts` Pinata upload in `mintNFT()`
+- **Silent mint** — `silentMint.ts` + `003_silent_mint_tables.sql` (custodial_wallets, dream_nfts)
+- **Discord bot stub** — `discordBot.ts` slash command definitions
+- **Env** — `.env.example` Pinata, Discord, NFT contract vars
+
 ### Next
 
-1. Persist simulacra to Supabase `dream_assets`
-2. IPFS metadata + testnet contract for real NFTs
-3. Discord bot (slash commands / OAuth)
+1. Deploy exchange-web + env secrets (Pinata, Discord webhook)
+2. Polygon/Base testnet contract
+3. Discord bot worker deployment
 4. Friend requests backend, public profile RLS (Phase 3 backlog)
 
 ---

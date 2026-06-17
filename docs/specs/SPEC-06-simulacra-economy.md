@@ -1,6 +1,6 @@
 # SPEC-06: Dream Simulacra, VR, NFT & XAEL Economy
 
-**Status:** Phase 1 in progress (Jun 2026)  
+**Status:** Phase 2 in progress (Jun 2026)  
 **Depends on:** Inference backlog (SPEC-03), dream assets pipeline (`lib/assets/pipeline.ts`)
 
 ## Vision
@@ -27,13 +27,14 @@ Dream Image ──► Depth (HF/local) ──► Displaced terrain (browser 3D)
 - [x] `DreamVRScreen` — wraps `WebXRViewer`
 - [x] Routes: `#/simulacrum/:dreamId`, `#/vr/:dreamId`
 - [x] Wire from dream detail (Explore 3D / VR / Exchange buttons)
-- [ ] Wire `DreamAssetGenerator` mesh_3d step end-to-end
+- [x] Wire `DreamAssetGenerator` mesh_3d + pipeline in dream detail (collapsible)
 
 ### Phase 2 — NFT & Marketplace (local + Supabase)
 - [x] `nftMarketplace.ts` — listings, bids, XAEL-denominated prices
-- [ ] IPFS metadata upload (Pinata/Web3.Storage)
-- [ ] Polygon/Base testnet contract
-- [ ] `silent-mint-queue` schema migration + app trigger
+- [x] `ipfs.ts` — Pinata metadata upload on mint (fallback: local blob)
+- [ ] Polygon/Base testnet contract (`VITE_NFT_CONTRACT_ADDRESS`)
+- [x] `003_silent_mint_tables.sql` + `silentMint.ts` app trigger
+- [x] `assetPersistence.ts` + `simulacraPersistence.ts` → Supabase `dream_assets`
 
 ### Phase 3 — XAEL Exchange
 - [x] `xaelEconomy.ts` — balances: XAEL, ENERGY, DATA, COMPUTE
@@ -43,7 +44,8 @@ Dream Image ──► Depth (HF/local) ──► Displaced terrain (browser 3D)
 
 ### Phase 4 — Discord & Website
 - [x] `discord.ts` — webhooks for mint/trade/simulacra ready
-- [ ] Discord bot (dream combine commands)
+- [x] `discordBot.ts` — slash command defs + combine webhook stub
+- [ ] Discord bot worker deployment
 - [x] Standalone `exchange-web/index.html` (embeds `#/exchange`; deploy to exchange.everdream.app)
 
 ### Phase 5 — Inference-independent paths
@@ -67,7 +69,8 @@ Dream Image ──► Depth (HF/local) ──► Displaced terrain (browser 3D)
 ## Next steps (priority)
 
 1. ~~Complete mesh polling in `processAssetStep` for `mesh_3d`~~ (uses `generate3DMeshBlocking`)
-2. Persist simulacra assets to Supabase `dream_assets`
-3. Link NFT mint to simulacrum `animation_url` (GLB/skybox)
-4. Deploy Discord webhook URL via env
-5. Extract exchange to public website sub-route
+2. ~~Persist simulacra assets to Supabase `dream_assets`~~
+3. ~~Link NFT mint to simulacrum `animation_url`~~
+4. Deploy Discord webhook + Pinata JWT via env
+5. Deploy `exchange-web` to exchange.everdream.app
+6. Real testnet contract + dream_id TEXT migration if needed

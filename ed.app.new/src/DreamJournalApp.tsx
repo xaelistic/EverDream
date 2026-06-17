@@ -67,7 +67,10 @@ import { getOrCreateWallet, createDreamNFT, mintNFT, saveNFT, type DreamNFT, typ
 import { createListingFromNFT } from './lib/nftMarketplace';
 import { notifyNFTMinted } from './lib/discord';
 import { estimateDreamXAELValue } from './lib/xaelEconomy';
-import { getSimulacrum } from './lib/simulacra/simulacraService';
+import { getSimulacrum, saveSimulacrum } from './lib/simulacra/simulacraService';
+import { getProfileIdForAssets } from './lib/assets/assetPersistence';
+import { saveNFTToSupabase } from './lib/dreamPersistence';
+import { triggerSilentMint } from './lib/silentMint';
 
 const DreamSimulacrumScreen = lazy(() =>
   import('./screens/DreamSimulacrumScreen').then((m) => ({ default: m.DreamSimulacrumScreen })),
@@ -78,6 +81,7 @@ const DreamVRScreen = lazy(() =>
 const XAELExchangeScreen = lazy(() =>
   import('./screens/XAELExchangeScreen').then((m) => ({ default: m.XAELExchangeScreen })),
 );
+const DreamAssetGenerator = lazy(() => import('./components/assets/DreamAssetGenerator'));
 import DreamVisualizer from './components/dreams/DreamVisualizer';
 import DreamCapture from './components/dreams/DreamCapture';
 import { VideoJournalScreen } from './screens/VideoJournalScreen';
@@ -1486,6 +1490,18 @@ const DreamJournalApp = () => {
         sim?.meshUrl || sim?.parallaxVideoUrl || dream.parallaxVideoUrl || dream.generatedImage?.url;
       createListingFromNFT(minted, price, { animationUrl });
       notifyNFTMinted(minted.metadata.name, minted.tokenId || minted.id, minted.owner, minted.metadata.image);
+
+      getProfileIdForAssets().then((profileId) => {
+        if (profileId) saveNFTToSupabase(minted, dream.id, profileId).catch(() => {});
+      });
+      triggerSilentMint({
+        dream_id: dream.id,
+        content: dream.narrative || dream.content,
+        category: dream.category || 'normal',
+        image_url: minted.metadata.image,
+        animation_url: animationUrl,
+        created_at: new Date().toISOString(),
+      }).catch(() => {});
     } catch (err) {
       setMintError(err instanceof Error ? err.message : 'Minting failed');
     } finally {
@@ -2484,6 +2500,44 @@ const DreamJournalApp = () => {
                 }
               }}
             />
+
+            <details className="rounded-2xl border border-sage/20 bg-sage/5 overflow-hidden group">
+              <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-sageDark list-none flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <Box className="w-4 h-4" strokeWidth={1.75} />
+                  Advanced asset pipeline (depth · skybox · 3D mesh)
+                </span>
+                <ChevronRight className="w-4 h-4 transition group-open:rotate-90" />
+              </summary>
+              <div className="border-t border-sage/15 bg-ink/95 text-cream rounded-b-2xl">
+                <Suspense fallback={<p className="p-4 text-sm text-muted">Loading generator…</p>}>
+                  <DreamAssetGenerator
+                    dreamId={detailDream.id}
+                    dreamText={detailDream.narrative || detailDream.content}
+                    dreamNugget={detailDream.nugget}
+                    dreamEmotion={detailDream.emotion}
+                    dreamThemes={detailDream.themes}
+                    existingImageUrl={detailDream.generatedImage?.url}
+                    onEnterVR={({ skyboxUrl, assets }) => {
+                      navigate('vr', detailDream.id);
+                    }}
+                    onAssetsGenerated={(assets) => {
+                      const parallax = assets.find((a) => a.type === 'parallax_video' && a.result_url);
+                      const mesh = assets.find((a) => a.type === 'mesh_3d' && a.result_url);
+                      if (parallax?.result_url) {
+                        (detailDream as { parallaxVideoUrl?: string }).parallaxVideoUrl = parallax.result_url;
+                      }
+                      if (mesh?.result_url) {
+                        const sim = getSimulacrum(detailDream.id);
+                        if (sim) {
+                          saveSimulacrum({ ...sim, meshUrl: mesh.result_url, mode: 'mesh_glb' });
+                        }
+                      }
+                    }}
+                  />
+                </Suspense>
+              </div>
+            </details>
 
             <div className="flex items-start justify-between">
               <div>

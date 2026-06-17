@@ -29,6 +29,7 @@ import {
   generateAssetPrompts,
 } from '../../lib/assets/pipeline';
 import type { AssetGenerationJob, AssetType, DreamAsset } from '../../lib/assets/pipeline';
+import { persistPipelineAssets } from '../../lib/assets/assetPersistence';
 import type { WebXRAsset } from '../vr/WebXRViewer';
 
 // ============================================================
@@ -90,6 +91,17 @@ const PHASE_2_PHASES: PhaseConfig[] = [
   },
 ];
 
+const PHASE_3_PHASES: PhaseConfig[] = [
+  {
+    id: 'mesh_3d',
+    label: '3D Mesh (GLB)',
+    description: 'Text-to-3D object for simulacrum & VR',
+    icon: '📦',
+    requiresKey: 'meshy',
+    free: false,
+  },
+];
+
 // ============================================================
 // MAIN COMPONENT
 // ============================================================
@@ -147,12 +159,13 @@ export default function DreamAssetGenerator({
       const apiKeys = {
         hfApiKey: import.meta.env.VITE_HF_INFERENCE_API_KEY || '',
         blockadeApiKey: import.meta.env.VITE_BLOCKADE_LABS_API_KEY || '',
+        meshyApiKey: import.meta.env.VITE_MESHY_API_KEY || '',
       };
 
       for (let i = 0; i < selectedPhases.length; i++) {
         if (abortRef.current) break;
 
-        const phaseConfig = [...PHASE_1_PHASES, ...PHASE_2_PHASES].find(
+        const phaseConfig = [...PHASE_1_PHASES, ...PHASE_2_PHASES, ...PHASE_3_PHASES].find(
           (p) => p.id === selectedPhases[i]
         );
         setCurrentPhaseLabel(phaseConfig?.label || selectedPhases[i]);
@@ -166,6 +179,9 @@ export default function DreamAssetGenerator({
 
       if (!abortRef.current) {
         setPhase('complete');
+        persistPipelineAssets(dreamId, currentJob.assets).catch((e) =>
+          console.warn('[DreamAssetGenerator] Cloud persist failed', e),
+        );
         onAssetsGenerated?.(currentJob.assets);
       }
     } catch (err) {
@@ -248,11 +264,26 @@ export default function DreamAssetGenerator({
           </div>
 
           {/* Phase 2 */}
-          <div style={{ marginBottom: 20 }}>
+          <div style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 12, color: '#8b5cf6', fontWeight: 'bold', marginBottom: 8 }}>
               PHASE 2 — Dream World
             </div>
             {PHASE_2_PHASES.map((p) => (
+              <PhaseToggle
+                key={p.id}
+                config={p}
+                selected={selectedPhases.includes(p.id)}
+                onToggle={() => togglePhase(p.id)}
+              />
+            ))}
+          </div>
+
+          {/* Phase 3 */}
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 12, color: '#5ec4a8', fontWeight: 'bold', marginBottom: 8 }}>
+              PHASE 3 — 3D Simulacrum
+            </div>
+            {PHASE_3_PHASES.map((p) => (
               <PhaseToggle
                 key={p.id}
                 config={p}
@@ -295,6 +326,9 @@ export default function DreamAssetGenerator({
               </div>
               <div>
                 BLOCKADE_API_KEY — for skybox generation (free at blockadelabs.com)
+              </div>
+              <div>
+                MESHY_API_KEY — for 3D mesh GLB (meshy.ai)
               </div>
               <div style={{ marginTop: 8, color: '#666' }}>
                 Without keys, uses fallback methods (lower quality but still works).

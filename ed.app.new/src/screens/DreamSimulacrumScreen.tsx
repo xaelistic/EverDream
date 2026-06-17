@@ -1,10 +1,10 @@
-import { Suspense, useMemo, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useLoader } from '@react-three/fiber';
 import { OrbitControls, Text, useGLTF, Html } from '@react-three/drei';
 import { ArrowLeft, Box, Loader2, Glasses, Share2 } from 'lucide-react';
 import * as THREE from 'three';
 import type { DreamSimulacrum } from '../lib/simulacra/simulacraService';
-import { buildDreamSimulacrum } from '../lib/simulacra/simulacraService';
+import { buildDreamSimulacrum, getSimulacrumAsync } from '../lib/simulacra/simulacraService';
 import { notifySimulacraReady } from '../lib/discord';
 
 interface DreamSimulacrumScreenProps {
@@ -93,8 +93,18 @@ export function DreamSimulacrumScreen({
 }: DreamSimulacrumScreenProps) {
   const [sim, setSim] = useState<DreamSimulacrum | null>(null);
   const [building, setBuilding] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [progress, setProgress] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getSimulacrumAsync(dreamId).then((existing) => {
+      if (!cancelled && existing) setSim(existing);
+      if (!cancelled) setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [dreamId]);
 
   const build = async () => {
     if (!imageUrl) {
@@ -166,6 +176,10 @@ export function DreamSimulacrumScreen({
               </Suspense>
               <OrbitControls enablePan enableZoom maxPolarAngle={Math.PI / 2} />
             </Canvas>
+          ) : loading ? (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <Loader2 className="w-8 h-8 text-sage animate-spin" />
+            </div>
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-6 text-center">
               <Box className="w-12 h-12 text-sage/60" strokeWidth={1.25} />

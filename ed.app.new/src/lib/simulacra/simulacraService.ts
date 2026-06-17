@@ -5,6 +5,7 @@
 
 import { buildLocalDepthMap, imageTo3DBlocking, type ImageTo3DJob } from '../assets/imageTo3D';
 import { generateParallaxVideo } from '../assets/pipeline';
+import { persistSimulacrumToSupabase, loadSimulacrumFromSupabase } from './simulacraPersistence';
 
 export type SimulacrumMode = 'depth_terrain' | 'mesh_glb' | 'skybox_vr';
 
@@ -89,6 +90,9 @@ export async function buildDreamSimulacrum(input: BuildSimulacrumInput): Promise
   };
 
   saveSimulacrum(simulacrum);
+  persistSimulacrumToSupabase(simulacrum).catch((e) =>
+    console.warn('[simulacra] Supabase persist failed', e),
+  );
   input.onProgress?.('Simulacrum ready');
   return simulacrum;
 }
@@ -101,6 +105,16 @@ export function saveSimulacrum(simulacrum: DreamSimulacrum): void {
 
 export function getSimulacrum(dreamId: string): DreamSimulacrum | null {
   return loadAllSimulacra()[dreamId] ?? null;
+}
+
+/** Load from localStorage, then Supabase dream_assets. */
+export async function getSimulacrumAsync(dreamId: string): Promise<DreamSimulacrum | null> {
+  const local = getSimulacrum(dreamId);
+  if (local) return local;
+
+  const remote = await loadSimulacrumFromSupabase(dreamId);
+  if (remote) saveSimulacrum(remote);
+  return remote;
 }
 
 function loadAllSimulacra(): Record<string, DreamSimulacrum> {

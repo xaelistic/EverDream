@@ -489,28 +489,44 @@ export function createCombinedNFT(
  * Mint an NFT (simulated - in production this would call a smart contract)
  */
 export async function mintNFT(nft: DreamNFT): Promise<DreamNFT> {
-  // In production, this would:
-  // 1. Upload metadata to IPFS (via Pinata, NFT.Storage, or Arweave)
-  // 2. Call the mint function on the smart contract
-  // 3. Wait for confirmation
-  // 4. Return the updated NFT with txHash and tokenId
-  
-  // For now, simulate minting with a fake tx hash
-  const fakeTxHash = '0x' + Array.from({ length: 64 }, () => 
+  let metadataUri: string | undefined;
+  try {
+    const { uploadNFTMetadataToIpfs, isIpfsConfigured } = await import('./ipfs');
+    const uri = await uploadNFTMetadataToIpfs(nft);
+    if (uri) metadataUri = uri;
+    if (isIpfsConfigured() && uri) {
+      nft = {
+        ...nft,
+        metadata: {
+          ...nft.metadata,
+          external_url: uri,
+        },
+      };
+    }
+  } catch (e) {
+    console.warn('[NFT] IPFS upload skipped', e);
+  }
+
+  const fakeTxHash = '0x' + Array.from({ length: 64 }, () =>
     Math.floor(Math.random() * 16).toString(16)
   ).join('');
 
   const fakeTokenId = Math.floor(Math.random() * 1000000).toString();
+  const contractAddress =
+    import.meta.env.VITE_NFT_CONTRACT_ADDRESS ||
+    '0x' + Array.from({ length: 40 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
 
   return {
     ...nft,
     status: 'minted',
     txHash: fakeTxHash,
-    contractAddress: '0x' + Array.from({ length: 40 }, () => 
-      Math.floor(Math.random() * 16).toString(16)
-    ).join(''),
+    contractAddress,
     tokenId: fakeTokenId,
-    isSimulated: true,
+    isSimulated: !import.meta.env.VITE_NFT_CONTRACT_ADDRESS,
+    metadata: {
+      ...nft.metadata,
+      external_url: metadataUri || nft.metadata.external_url,
+    },
   };
 }
 
