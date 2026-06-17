@@ -516,13 +516,17 @@ export async function mintNFT(nft: DreamNFT): Promise<DreamNFT> {
     import.meta.env.VITE_NFT_CONTRACT_ADDRESS ||
     '0x' + Array.from({ length: 40 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
 
+  const chainConfigured = Boolean(
+    import.meta.env.VITE_NFT_CONTRACT_ADDRESS?.startsWith('0x'),
+  );
+
   return {
     ...nft,
     status: 'minted',
     txHash: fakeTxHash,
     contractAddress,
     tokenId: fakeTokenId,
-    isSimulated: !import.meta.env.VITE_NFT_CONTRACT_ADDRESS,
+    isSimulated: !chainConfigured,
     metadata: {
       ...nft.metadata,
       external_url: metadataUri || nft.metadata.external_url,

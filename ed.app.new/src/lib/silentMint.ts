@@ -13,6 +13,7 @@ export interface SilentMintPayload {
   category: string;
   image_url?: string;
   animation_url?: string;
+  metadata_uri?: string;
   created_at: string;
 }
 

@@ -1500,6 +1500,7 @@ const DreamJournalApp = () => {
         category: dream.category || 'normal',
         image_url: minted.metadata.image,
         animation_url: animationUrl,
+        metadata_uri: minted.metadata.external_url,
         created_at: new Date().toISOString(),
       }).catch(() => {});
     } catch (err) {

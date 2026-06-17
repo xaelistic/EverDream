@@ -30,11 +30,20 @@
 - **Discord bot stub** — `discordBot.ts` slash command definitions
 - **Env** — `.env.example` Pinata, Discord, NFT contract vars
 
+### Session: SPEC-06 Phase 3 — chain, bot, deploy (Jun 18, 2026)
+
+- **ERC-721** — `contracts/EverDreamNFT.sol`, Hardhat deploy scripts, 2 passing tests
+- **On-chain mint** — `silent-mint-queue` calls `mintDream` when `CHAIN_RPC_URL` + deployer key set
+- **chainMint.ts** — explorer URLs, chain config (Base Sepolia / Polygon Amoy)
+- **Discord bot** — `discord-bot/` with slash commands + Dockerfile
+- **exchange-web** — nginx Dockerfile; `public/exchange` redirect in main app
+- **Migration** — `004_dream_assets_text_id.sql`
+
 ### Next
 
-1. Deploy exchange-web + env secrets (Pinata, Discord webhook)
-2. Polygon/Base testnet contract
-3. Discord bot worker deployment
+1. `cd contracts && npm run deploy:base-sepolia` (set `DEPLOYER_PRIVATE_KEY`)
+2. Supabase: `db push` migrations 003–004; deploy `silent-mint-queue`; set chain secrets
+3. Coolify: deploy `exchange-web` + `discord-bot` images
 4. Friend requests backend, public profile RLS (Phase 3 backlog)
 
 ---

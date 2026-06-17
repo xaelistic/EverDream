@@ -64,7 +64,17 @@ export function XAELExchangeScreen({ navigate, walletAddress = 'local-wallet' }:
 
       <div className="rounded-3xl border border-line bg-gradient-to-br from-sage/15 to-cream p-6 shadow-lift">
         <p className="text-[11px] uppercase tracking-[0.2em] text-muted">XAEL Exchange</p>
-        <h2 className="font-serif text-2xl text-ink mt-1">Trade experience, energy & compute</h2>
+        <div className="flex flex-wrap items-start justify-between gap-2 mt-1">
+          <h2 className="font-serif text-2xl text-ink">Trade experience, energy & compute</h2>
+          <a
+            href="https://exchange.everdream.app"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs font-semibold text-sageDark border border-sage/30 bg-sage/10 px-3 py-1.5 rounded-full hover:bg-sage/20"
+          >
+            Open exchange site ↗
+          </a>
+        </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5">
           {(Object.keys(COMMODITY_META) as Commodity[]).map((c) => {
             const meta = COMMODITY_META[c];

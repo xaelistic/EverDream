@@ -32,7 +32,8 @@ Dream Image ──► Depth (HF/local) ──► Displaced terrain (browser 3D)
 ### Phase 2 — NFT & Marketplace (local + Supabase)
 - [x] `nftMarketplace.ts` — listings, bids, XAEL-denominated prices
 - [x] `ipfs.ts` — Pinata metadata upload on mint (fallback: local blob)
-- [ ] Polygon/Base testnet contract (`VITE_NFT_CONTRACT_ADDRESS`)
+- [x] `contracts/EverDreamNFT.sol` + Hardhat deploy (Base Sepolia / Polygon Amoy)
+- [ ] Deploy contract & set `VITE_NFT_CONTRACT_ADDRESS`
 - [x] `003_silent_mint_tables.sql` + `silentMint.ts` app trigger
 - [x] `assetPersistence.ts` + `simulacraPersistence.ts` → Supabase `dream_assets`
 
@@ -45,7 +46,8 @@ Dream Image ──► Depth (HF/local) ──► Displaced terrain (browser 3D)
 ### Phase 4 — Discord & Website
 - [x] `discord.ts` — webhooks for mint/trade/simulacra ready
 - [x] `discordBot.ts` — slash command defs + combine webhook stub
-- [ ] Discord bot worker deployment
+- [x] `discord-bot/` worker (`/dream-combine`, `/simulacrum`, `/xael-price`) + Dockerfile
+- [ ] Deploy bot to Coolify with `DISCORD_BOT_TOKEN`
 - [x] Standalone `exchange-web/index.html` (embeds `#/exchange`; deploy to exchange.everdream.app)
 
 ### Phase 5 — Inference-independent paths
@@ -73,4 +75,6 @@ Dream Image ──► Depth (HF/local) ──► Displaced terrain (browser 3D)
 3. ~~Link NFT mint to simulacrum `animation_url`~~
 4. Deploy Discord webhook + Pinata JWT via env
 5. Deploy `exchange-web` to exchange.everdream.app
-6. Real testnet contract + dream_id TEXT migration if needed
+6. ~~dream_id TEXT migration~~ (`004_dream_assets_text_id.sql`)
+7. Deploy `exchange-web` Docker image to exchange.everdream.app
+8. Set Supabase secrets for on-chain silent-mint
