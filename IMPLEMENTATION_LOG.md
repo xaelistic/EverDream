@@ -39,6 +39,15 @@
 - **exchange-web** — nginx Dockerfile; `public/exchange` redirect in main app
 - **Migration** — `004_dream_assets_text_id.sql`
 
+### Session: RevenueCat + Stripe subscriptions (Jun 18, 2026)
+
+- **Migration** `005_subscriptions.sql` — `profiles.subscription_tier`, Stripe/RC ids, `subscription_events`
+- **Client** — `lib/subscriptions/*`, `useSubscription`, wired Settings → Subscription tab
+- **RevenueCat** — `@revenuecat/purchases-capacitor` (Play + App Store on native)
+- **Stripe** — `stripe-checkout`, `stripe-portal`, `stripe-webhook` edge functions
+- **RevenueCat webhook** — `revenuecat-webhook` updates Supabase entitlements
+- **Gating** — free tier 5 AI images/month via `usageLimits.ts`
+
 ### Next
 
 1. `cd contracts && npm run deploy:base-sepolia` (set `DEPLOYER_PRIVATE_KEY`)

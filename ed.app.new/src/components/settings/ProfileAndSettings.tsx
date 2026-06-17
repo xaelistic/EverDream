@@ -20,8 +20,11 @@ import {
 } from 'lucide-react';
 import { useSkinFull } from '../../contexts/SkinContext';
 import { useAuth } from '../../hooks/use-auth';
+import { useSubscription } from '../../hooks/useSubscription';
 import { useToast } from '../ui/Toast';
 import { supabase } from '../../lib/supabase/client';
+import { Capacitor } from '@capacitor/core';
+import { getPreferredPaymentChannel } from '../../lib/subscriptions/subscriptionService';
 
 // Safe localStorage helpers with try-catch wrappers
 function safeGetLocalStorage(key: string): string | null {
@@ -185,6 +188,20 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
   const { setSkin, isPearl } = useSkinFull();
   const { signOut } = useAuth();
   const { addToast } = useToast();
+  const {
+    tier,
+    state: subscriptionState,
+    offerings,
+    loading: subLoading,
+    purchasing,
+    error: subError,
+    enabled: subsEnabled,
+    subscribe,
+    restore,
+    manage,
+    limits,
+  } = useSubscription();
+  const paymentChannel = getPreferredPaymentChannel();
   const [activeTab, setActiveTab] = useState<TabId>('account');
   const [isLoading, setIsLoading] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
@@ -674,72 +691,139 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
     </div>
   );
 
+  const handleSubscribe = async (planId: 'plus' | 'pro') => {
+    try {
+      const offering = offerings.find((o) => o.tier === planId);
+      await subscribe(planId, offering?.packageIdentifier);
+      addToast(`Subscribed to EverDream ${planId === 'pro' ? 'Pro' : '+'}`, 'success');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Purchase failed';
+      if (!msg.toLowerCase().includes('cancel')) {
+        addToast(msg, 'error');
+      }
+    }
+  };
+
+  const tierLabel = tier === 'pro' ? 'EverDream Pro' : tier === 'plus' ? 'EverDream+' : 'Free';
+
   const renderSubscriptionTab = () => (
     <div className="space-y-4">
-      {/* Current Plan */}
       <div className="p-6 bg-gradient-to-br from-sage to-pink-600 rounded-2xl text-white">
         <div className="flex items-center justify-between mb-4">
           <div>
             <p className="text-purple-200 text-sm">Current Plan</p>
-            <h3 className="text-2xl font-bold">Free</h3>
+            <h3 className="text-2xl font-bold">{subLoading ? '…' : tierLabel}</h3>
+            {subscriptionState?.source && tier !== 'free' && (
+              <p className="text-xs text-purple-200 mt-1 capitalize">
+                via {subscriptionState.source}
+                {subscriptionState.expiresAt &&
+                  ` · renews ${new Date(subscriptionState.expiresAt).toLocaleDateString()}`}
+              </p>
+            )}
           </div>
           <CreditCard className="w-8 h-8 text-purple-200" />
         </div>
-        <p className="text-sm text-purple-100 mb-4">
-          Upgrade to unlock advanced features
+        <p className="text-sm text-purple-100 mb-2">
+          {tier === 'free'
+            ? 'Upgrade to unlock cloud sync, unlimited AI images, and more'
+            : `${Number.isFinite(limits.aiImagesPerMonth) ? limits.aiImagesPerMonth : 'Unlimited'} AI images · ${limits.cloudSync ? 'Cloud sync on' : 'Local only'}`}
         </p>
-        <button className="w-full py-3 bg-cream text-sage rounded-xl font-semibold hover:bg-sage/10 transition">
-          Upgrade Now
-        </button>
+        <p className="text-[11px] text-purple-200/80 mb-4">
+          {Capacitor.isNativePlatform()
+            ? subsEnabled
+              ? 'Billing via Google Play / App Store'
+              : 'Add RevenueCat API keys to enable in-app purchase'
+            : subsEnabled
+              ? 'Billing via Stripe Checkout'
+              : 'Add Stripe keys to enable web checkout'}
+        </p>
+        {tier !== 'pro' && (
+          <button
+            type="button"
+            disabled={purchasing || subLoading}
+            onClick={() => handleSubscribe(tier === 'free' ? 'plus' : 'pro')}
+            className="w-full py-3 bg-cream text-sage rounded-xl font-semibold hover:bg-sage/10 transition disabled:opacity-50"
+          >
+            {purchasing ? 'Processing…' : tier === 'free' ? 'Upgrade to EverDream+' : 'Upgrade to Pro'}
+          </button>
+        )}
+        {tier !== 'free' && subsEnabled && (
+          <button
+            type="button"
+            onClick={() => manage().catch((e) => addToast(String(e), 'error'))}
+            className="w-full mt-2 py-2.5 border border-white/30 rounded-xl text-sm font-medium hover:bg-white/10"
+          >
+            {paymentChannel === 'stripe' ? 'Manage billing' : 'Restore purchases'}
+          </button>
+        )}
+        {Capacitor.isNativePlatform() && (
+          <button
+            type="button"
+            onClick={() => restore().then(() => addToast('Purchases restored', 'success')).catch((e) => addToast(String(e), 'error'))}
+            className="w-full mt-2 py-2 text-xs text-purple-200 underline"
+          >
+            Restore purchases
+          </button>
+        )}
       </div>
 
-      {/* Plan Options */}
+      {subError && (
+        <p className="text-sm text-rose-600 bg-rose-50 border border-rose-100 rounded-xl px-3 py-2">{subError}</p>
+      )}
+
       <div className="space-y-3">
-        {SUBSCRIPTION_PLANS.map((plan) => (
-          <div
-            key={plan.id}
-            className={`p-4 rounded-xl border-2 ${
-              plan.popular
-                ? 'border-sage/100 bg-sage/10'
-                : 'border-line bg-cream'
-            }`}
-          >
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <h4 className="font-semibold text-ink">{plan.name}</h4>
-                <p className="text-2xl font-bold text-ink">
-                  {plan.price}
-                  <span className="text-sm font-normal text-muted">/{plan.period}</span>
-                </p>
+        {SUBSCRIPTION_PLANS.filter((p) => p.id !== 'free').map((plan) => {
+          const planTier = plan.id as 'plus' | 'pro';
+          const offering = offerings.find((o) => o.tier === planTier);
+          const isCurrent = tier === plan.id;
+          const priceDisplay = offering?.priceString ?? plan.price;
+
+          return (
+            <div
+              key={plan.id}
+              className={`p-4 rounded-xl border-2 ${
+                plan.popular ? 'border-sage/100 bg-sage/10' : 'border-line bg-cream'
+              } ${isCurrent ? 'ring-2 ring-sage/40' : ''}`}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h4 className="font-semibold text-ink">{plan.name}</h4>
+                  <p className="text-2xl font-bold text-ink">
+                    {priceDisplay}
+                    {!offering?.priceString && (
+                      <span className="text-sm font-normal text-muted">/{plan.period}</span>
+                    )}
+                  </p>
+                </div>
+                {isCurrent ? (
+                  <span className="px-2 py-1 bg-sage text-white text-xs font-medium rounded-full">Current</span>
+                ) : plan.popular ? (
+                  <span className="px-2 py-1 bg-sage text-white text-xs font-medium rounded-full">Popular</span>
+                ) : null}
               </div>
-              {plan.popular && (
-                <span className="px-2 py-1 bg-sage text-white text-xs font-medium rounded-full">
-                  Most Popular
-                </span>
-              )}
-            </div>
 
-            <ul className="space-y-2 mb-4">
-              {plan.features.map((feature, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm text-ink">
-                  <Check className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
-                  {feature}
-                </li>
-              ))}
-            </ul>
-
-            {plan.limitations && (
-              <ul className="space-y-2">
-                {plan.limitations.map((limitation, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-muted">
-                    <X className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" />
-                    {limitation}
+              <ul className="space-y-2 mb-4">
+                {plan.features.map((feature, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm text-ink">
+                    <Check className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
+                    {feature}
                   </li>
                 ))}
               </ul>
-            )}
-          </div>
-        ))}
+
+              {!isCurrent && planTier !== 'free' && (
+                <button
+                  type="button"
+                  disabled={purchasing || !subsEnabled || (tier === 'pro' && planTier === 'plus')}
+                  onClick={() => handleSubscribe(planTier)}
+                  className="w-full py-2.5 rounded-xl bg-sage text-cream text-sm font-semibold disabled:opacity-40"
+                >
+                  {subsEnabled ? `Subscribe — ${plan.name}` : 'Coming soon'}
+                </button>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

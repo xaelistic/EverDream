@@ -101,11 +101,20 @@ import { initDreamService, syncFromSupabase } from './lib/dreamService';
 import { supabase as supabaseClient } from './lib/supabase/client';
 import { getCurrentUser } from './lib/supabase/client';
 import { useAuth } from './hooks/use-auth';
+import { initSubscriptions } from './lib/subscriptions/subscriptionService';
+import { canGenerateImage, recordImageGeneration } from './lib/subscriptions/usageLimits';
+import { loadCachedSubscription } from './lib/subscriptions/subscriptionStore';
 
 const DreamJournalApp = () => {
   const { route, navigate } = useHashRoute();
   const { skin, isThemed } = useSkinFull();
   const { user: authUser } = useAuth();
+
+  useEffect(() => {
+    if (authUser?.id) {
+      initSubscriptions(authUser.id).catch((e) => console.warn('[Subscriptions] init failed', e));
+    }
+  }, [authUser?.id]);
 
   // ── Dream type ──────────────────────────────────────────────
   type Dream = {
@@ -585,11 +594,20 @@ const DreamJournalApp = () => {
 
   // Generate dream image using free AI image generation (Pollinations.ai)
   const generateDreamImageAsync = async (dreamData: any) => {
+    const sub = loadCachedSubscription();
+    const { allowed, limit } = canGenerateImage(sub.tier);
+    if (!allowed) {
+      console.warn('[ImageGen] Monthly limit reached for free tier');
+      alert(`You've used all ${limit} free AI images this month. Upgrade in Settings → Subscription.`);
+      return null;
+    }
+
     setIsGeneratingImage(true);
     const perfCall = startAPICall('image_gen', 'pollinations.ai', 'GET', route.screen);
     try {
       const prompt = dreamData.narrative || dreamData.nugget || dreamData.content || 'a surreal dreamscape';
       const asset = await generateDreamImage(prompt);
+      recordImageGeneration();
       endAPICall(perfCall, 200);
       return {
         url: asset.url,
