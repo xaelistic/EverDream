@@ -6,6 +6,8 @@ import PipelineProgress from './PipelineProgress';
 import { analyzeDream } from '../../lib/dream-analyzer';
 import { generateDreamImage } from '../../modules/sleep/dreamAssetGenerator';
 import { mediaStorageManager } from '../../lib/mediaStorage';
+import { transcribeAudio } from '../../lib/transcriptionWhisper';
+import { ServiceOverloadedError } from '../../lib/api/errorHandling';
 import type { DreamAnalysis } from '../../lib/dream-analyzer';
 import type { DreamAsset } from '../../modules/sleep/types';
 
@@ -73,6 +75,8 @@ export default function DreamCapture({
   const [imageResult, setImageResult] = useState<DreamAsset | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [capturedMedia, setCapturedMedia] = useState<{ url: string; type: string; timestamp: string } | null>(null);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [transcriptionStatus, setTranscriptionStatus] = useState<string | null>(null);
 
   const updateStep = useCallback((name: string, update: { status?: StepStatus; message?: string }) => {
     setSteps(prev => prev.map(s => s.name === name ? { ...s, ...update } : s));
@@ -102,7 +106,9 @@ export default function DreamCapture({
       setAnalysisResult(analysis);
       updateStep('Dream Analysis', { status: 'done', message: `Category: ${analysis.category}` });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Analysis failed';
+      const msg = err instanceof ServiceOverloadedError
+        ? err.message
+        : err instanceof Error ? err.message : 'Analysis failed';
       updateStep('Dream Analysis', { status: 'error', message: msg });
       setError(msg);
       setIsRunning(false);
@@ -158,60 +164,69 @@ export default function DreamCapture({
         </div>
       </Card>
 
-      {/* Audio Journal & Upload (ported/integrated from old versions) */}
-      {/* Placement: Quick actions alongside text entry. 
-          - "Record Voice Journal": opens dedicated audio mode (no camera, great for night/low light).
-          - Upload Audio: imports existing voice memo, saves via mediaStorage, can be transcribed/analyzed.
-          Main "Record" (Moon icon in Shell) is video-first immersive.
-          Audio journal is surfaced here and via RecordScreen with captureMode="audio".
-      */}
+      {/* Audio upload — automatically transcribed */}
+      <p className="text-xs text-muted mb-2">Uploaded audio will be transcribed automatically.</p>
       <div className="flex flex-wrap gap-2 text-xs mb-3">
-        <button
-          type="button"
-          onClick={() => {
-            // Navigate to audio journal (RecordScreen with audio mode)
-            // In parent this can trigger route with captureMode audio
-            if (window.location) {
-              // Simple: alert for now or parent can listen
-              alert('Audio journal: Use the Record flow with voice mode or call RecordScreen with captureMode="audio". Full integration ready.');
-            }
-            // TODO: onOpenAudio?.() or navigate('record-audio')
-          }}
-          className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-line bg-white/60 hover:bg-white text-sageDark active:bg-white/80"
-        >
-          <Mic className="w-3.5 h-3.5" /> Record Voice Journal
-        </button>
-
         <label className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl border border-line bg-white/60 hover:bg-white text-sageDark active:bg-white/80 cursor-pointer">
           <Upload className="w-3.5 h-3.5" /> Upload Audio
           <input
             type="file"
-            accept="audio/*"
+            accept="audio/*,.opus"
             className="hidden"
-            onChange={(e) => {
+            disabled={isTranscribing || isRunning}
+            onChange={async (e) => {
               const file = e.target.files?.[0];
-              if (file) {
-                // Save to mediaStorage and attach note
-                mediaStorageManager.saveMedia(file, {
+              if (!file) return;
+
+              setError(null);
+              setIsTranscribing(true);
+              setTranscriptionStatus('Saving audio...');
+
+              try {
+                await mediaStorageManager.saveMedia(file, {
                   type: 'audio',
-                  mimeType: file.type,
+                  mimeType: file.type || (file.name.endsWith('.opus') ? 'audio/opus' : 'audio/unknown'),
                   size: file.size,
                   duration: 0,
                   recordedAt: new Date().toISOString(),
                   backedUp: false,
                   cloudProviders: [],
                   tags: ['audio-upload', 'journal'],
-                }).then((mediaId) => {
-                  const note = `\n[Audio upload: ${file.name} — ${Math.round(file.size/1024)}KB]`;
-                  setText(prev => (prev + note).trim());
-                  // In real flow this can be linked to the dream media
-                }).catch(console.error);
+                });
+
+                setTranscriptionStatus('Transcribing audio...');
+                const result = await transcribeAudio(file, {
+                  onProgress: (status) => setTranscriptionStatus(status),
+                });
+
+                if (result.text && result.source !== 'fallback') {
+                  setText(result.text.trim());
+                  setTranscriptionStatus('Transcription complete!');
+                } else {
+                  setError('Transcription unavailable — please type your dream manually.');
+                  setTranscriptionStatus(null);
+                }
+              } catch (err) {
+                const msg = err instanceof ServiceOverloadedError
+                  ? err.message
+                  : err instanceof Error ? err.message : 'Transcription failed';
+                setError(msg);
+                setTranscriptionStatus(null);
+              } finally {
+                setIsTranscribing(false);
+                e.target.value = '';
               }
-              e.target.value = '';
             }}
           />
         </label>
       </div>
+
+      {isTranscribing && transcriptionStatus && (
+        <div className="rounded-2xl border border-sage/20 bg-sage/5 p-3 flex items-center gap-2">
+          <Mic className="w-4 h-4 text-sage animate-pulse" />
+          <p className="text-sm text-sageDark">{transcriptionStatus}</p>
+        </div>
+      )}
 
       {/* Pipeline Progress */}
       {isRunning && (

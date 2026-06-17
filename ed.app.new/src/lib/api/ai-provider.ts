@@ -20,6 +20,8 @@
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { addToBacklog } from '../taskBacklog';
+import { ServiceOverloadedError, isOverloadError } from './errorHandling';
 
 // ── Inline Rate Limiter ───────────────────────────────────────
 
@@ -59,13 +61,28 @@ export class ApiError extends Error {
   static getUserMessage(category: string): string {
     switch (category) {
       case 'network': return 'Unable to connect. Please check your internet connection and try again.';
-      case 'rate_limit': return 'Too many requests. Please wait a moment and try again.';
+      case 'rate_limit':
+      case 'server':
+        return 'Experiencing heavy load. Check back later. Your task has been queued and will be retried automatically.';
       case 'auth': return 'Authentication failed. Please sign in again.';
-      case 'server': return 'The AI service is temporarily unavailable. Please try again in a moment.';
       case 'validation': return 'The request was invalid. Please check your input and try again.';
       default: return 'Something unexpected happened. Please try again.';
     }
   }
+}
+
+function isRetryableAnalysisError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes('429') ||
+    lower.includes('503') ||
+    lower.includes('502') ||
+    lower.includes('rate limit') ||
+    lower.includes('too many') ||
+    lower.includes('unavailable') ||
+    lower.includes('all providers') ||
+    lower.includes('overloaded')
+  );
 }
 
 // ── Types ────────────────────────────────────────────────────
@@ -157,7 +174,11 @@ async function delay(ms: number): Promise<void> {
  * console.log(analysis.themes);   // ['freedom', 'exploration', 'water']
  * ```
  */
-export async function analyzeDreamWithAI(text: string): Promise<DreamAnalysis> {
+export async function analyzeDreamWithAI(
+  text: string,
+  options: { skipBacklog?: boolean } = {},
+): Promise<DreamAnalysis> {
+  const { skipBacklog = false } = options;
   // Input validation
   if (!text || typeof text !== 'string') {
     console.warn('[AI] Invalid input: text must be a non-empty string');
@@ -246,7 +267,14 @@ export async function analyzeDreamWithAI(text: string): Promise<DreamAnalysis> {
     }
   }
 
-  console.error('[AI] All retries exhausted. Last error:', lastError);
+  const errorMessage = lastError?.message || 'All providers failed';
+  console.error('[AI] All retries exhausted. Last error:', errorMessage);
+
+  if ((isOverloadError(lastError) || isRetryableAnalysisError(errorMessage)) && !skipBacklog) {
+    await addToBacklog('analysis', { text }, undefined, errorMessage);
+    throw new ServiceOverloadedError();
+  }
+
   return { ...FALLBACK_ANALYSIS, narrative: text, nugget: text.substring(0, 100) };
 }
 

@@ -47,12 +47,17 @@ import { getPerformanceSummary, getRecentAPICalls, clearPerformanceData } from '
 import { getAdminDashboardData, syncAnalyticsToBackend, startAutoSync, stopAutoSync, type AdminDashboardData } from '../../lib/analytics-sync';
 import type { AnalyticsSummary } from '../../lib/analytics';
 import type { PerformanceSummary } from '../../lib/performance';
+import { isAdminUser } from '../../lib/adminAuth';
+import TaskQueue from './TaskQueue';
+import Analytics from './Analytics';
+import CronManager from './CronManager';
+import InferenceProviders from './InferenceProviders';
 
 interface AdminDashboardProps {
   onClose: () => void;
 }
 
-type DashboardTab = 'overview' | 'screens' | 'performance' | 'errors' | 'sessions' | 'ab-tests' | 'settings';
+type DashboardTab = 'overview' | 'screens' | 'performance' | 'errors' | 'sessions' | 'ab-tests' | 'queue' | 'analytics-db' | 'cron' | 'providers' | 'settings';
 
 export default function AdminDashboard({ onClose }: AdminDashboardProps) {
   const [tab, setTab] = useState<DashboardTab>('overview');
@@ -64,6 +69,11 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
   const [syncing, setSyncing] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['overview']));
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(false);
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    isAdminUser().then(setIsAdmin);
+  }, []);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -150,8 +160,27 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
     { id: 'errors', label: 'Errors', icon: AlertTriangle },
     { id: 'sessions', label: 'Sessions', icon: Users },
     { id: 'ab-tests', label: 'A/B Tests', icon: Layers },
+    { id: 'queue', label: 'Task Queue', icon: Server },
+    { id: 'analytics-db', label: 'Analytics', icon: Heart },
+    { id: 'cron', label: 'Cron', icon: Clock },
+    { id: 'providers', label: 'Providers', icon: Zap },
     { id: 'settings', label: 'Settings', icon: Shield },
   ];
+
+  if (isAdmin === false) {
+    return (
+      <div className="fixed inset-0 z-[100] bg-slate-950 flex items-center justify-center">
+        <div className="text-center space-y-3 p-6">
+          <Shield className="w-10 h-10 text-red-400 mx-auto" />
+          <p className="text-white font-medium">Admin access required</p>
+          <p className="text-white/40 text-sm">You do not have permission to view this dashboard.</p>
+          <button type="button" onClick={onClose} className="mt-4 px-4 py-2 rounded-lg bg-white/10 text-white text-sm hover:bg-white/20">
+            Go Back
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (loading && !adminData) {
     return (
@@ -671,6 +700,18 @@ export default function AdminDashboard({ onClose }: AdminDashboardProps) {
               </Section>
             </div>
           )}
+
+          {/* ==================== TASK QUEUE ==================== */}
+          {tab === 'queue' && <TaskQueue />}
+
+          {/* ==================== SUPABASE ANALYTICS ==================== */}
+          {tab === 'analytics-db' && <Analytics />}
+
+          {/* ==================== CRON MANAGER ==================== */}
+          {tab === 'cron' && <CronManager />}
+
+          {/* ==================== INFERENCE PROVIDERS ==================== */}
+          {tab === 'providers' && <InferenceProviders />}
 
           {/* ==================== SETTINGS ==================== */}
           {tab === 'settings' && (

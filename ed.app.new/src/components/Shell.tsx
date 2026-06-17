@@ -35,7 +35,7 @@ function getRecordButtonTarget(active: RouteScreen): RouteScreen {
 
 function isNavActive(active: RouteScreen, screen: RouteScreen): boolean {
   if (screen === 'more') {
-    return ['more', 'wearables', 'privacy', 'achievements', 'assets', 'import-photos', 'admin'].includes(active);
+    return ['more', 'wearables', 'privacy', 'achievements', 'assets', 'import-photos', 'admin', 'settings'].includes(active);
   }
   return active === screen;
 }

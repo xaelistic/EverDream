@@ -56,9 +56,42 @@ export const ErrorCodes = {
   SUPABASE_NOT_CONFIGURED: 'SUPABASE_NOT_CONFIGURED',
   SUPABASE_FUNCTION_ERROR: 'SUPABASE_FUNCTION_ERROR',
 
+  // Service overload (rate limits, 503s)
+  SERVICE_OVERLOADED: 'SERVICE_OVERLOADED',
+
   // Unknown
   UNKNOWN: 'UNKNOWN',
 } as const;
+
+/** User-friendly message shown when all inference providers are overloaded */
+export const SERVICE_OVERLOADED_MESSAGE =
+  'Experiencing heavy load. Check back later. Your task has been queued and will be retried automatically.';
+
+export class ServiceOverloadedError extends Error {
+  public readonly code = ErrorCodes.SERVICE_OVERLOADED;
+  public readonly retryable = true;
+
+  constructor(message: string = SERVICE_OVERLOADED_MESSAGE) {
+    super(message);
+    this.name = 'ServiceOverloadedError';
+  }
+}
+
+/** Returns true if an error indicates rate limiting or server overload */
+export function isOverloadError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return (
+    message.includes('rate limit') ||
+    message.includes('429') ||
+    message.includes('too many') ||
+    message.includes('503') ||
+    message.includes('502') ||
+    message.includes('unavailable') ||
+    message.includes('heavy load') ||
+    message.includes('all providers') ||
+    message.includes('overloaded')
+  );
+}
 
 // ── Error Messages ───────────────────────────────────────────
 
@@ -148,6 +181,11 @@ const ERROR_MESSAGES: Record<string, { message: string; retryable: boolean; seve
     retryable: true,
     severity: 'error',
   },
+  [ErrorCodes.SERVICE_OVERLOADED]: {
+    message: SERVICE_OVERLOADED_MESSAGE,
+    retryable: true,
+    severity: 'info',
+  },
   [ErrorCodes.UNKNOWN]: {
     message: 'An unexpected error occurred. Please try again.',
     retryable: true,
@@ -199,9 +237,18 @@ function classifyNativeError(error: Error): ApiError {
     return createApiError(ErrorCodes.NETWORK_TIMEOUT, error);
   }
 
+  // Service overload (rate limits + server errors)
+  if (
+    message.includes('all providers') ||
+    message.includes('heavy load') ||
+    message.includes('service_overloaded')
+  ) {
+    return createApiError(ErrorCodes.SERVICE_OVERLOADED, error, 900000);
+  }
+
   // Rate limiting
   if (message.includes('rate limit') || message.includes('429') || message.includes('too many')) {
-    return createApiError(ErrorCodes.API_RATE_LIMITED, error, 5000);
+    return createApiError(ErrorCodes.SERVICE_OVERLOADED, error, 900000);
   }
 
   // API unavailable
@@ -209,7 +256,7 @@ function classifyNativeError(error: Error): ApiError {
     if (message.includes('loading') || message.includes('warming')) {
       return createApiError(ErrorCodes.TRANSCRIPTION_MODEL_LOADING, error, 10000);
     }
-    return createApiError(ErrorCodes.API_UNAVAILABLE, error, 5000);
+    return createApiError(ErrorCodes.SERVICE_OVERLOADED, error, 900000);
   }
 
   // API key missing
