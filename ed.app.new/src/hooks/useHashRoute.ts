@@ -22,7 +22,8 @@ export type RouteScreen =
   | 'profile'
   | 'simulacrum'
   | 'vr'
-  | 'exchange';
+  | 'exchange'
+  | 'combine';
 
 export type AppRoute = {
   screen: RouteScreen;
@@ -68,6 +69,7 @@ function parseHash(): AppRoute {
     'simulacrum',
     'vr',
     'exchange',
+    'combine',
   ];
   if (screen === 'reflection') {
     return { screen: 'home', dreamId: null };

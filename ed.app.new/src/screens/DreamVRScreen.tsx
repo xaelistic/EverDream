@@ -1,6 +1,7 @@
 import { ArrowLeft } from 'lucide-react';
 import WebXRViewer, { type WebXRAsset } from '../components/vr/WebXRViewer';
 import { getSimulacrum } from '../lib/simulacra/simulacraService';
+import { ProFeatureGate } from '../components/subscriptions/ProFeatureGate';
 
 interface DreamVRScreenProps {
   dreamId: string;
@@ -31,6 +32,11 @@ export function DreamVRScreen({ dreamId, title, imageUrl, parallaxVideoUrl, navi
   }
 
   return (
+    <ProFeatureGate
+      feature="Dream VR"
+      description="Step inside your dream in WebXR. Requires EverDream Pro."
+      onUpgrade={() => navigate('settings')}
+    >
     <div className="fixed inset-0 z-[90] bg-ink">
       <button
         type="button"
@@ -46,5 +52,6 @@ export function DreamVRScreen({ dreamId, title, imageUrl, parallaxVideoUrl, navi
         enableVR
       />
     </div>
+    </ProFeatureGate>
   );
 }

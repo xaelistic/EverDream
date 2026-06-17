@@ -76,6 +76,7 @@ export function MoreScreen({ skin, isThemed, navigate }: MoreScreenProps) {
             { label: 'Sleep & wearables', sub: 'Sessions and sync', screen: 'wearables', icon: Watch },
             { label: 'Keepsakes', sub: 'Images & provenance', screen: 'assets', icon: Shield },
             { label: 'XAEL Exchange', sub: 'Trade qualia, energy & compute', screen: 'exchange', icon: Award },
+            { label: 'Combine dreams', sub: 'Fuse NFTs into remixes', screen: 'combine', icon: Award },
             { label: 'Achievements', sub: 'Small wins', screen: 'achievements', icon: Award },
           ].map(({ label, sub, screen, icon: Icon }) => (
             <button

@@ -67,6 +67,7 @@ import { getOrCreateWallet, createDreamNFT, mintNFT, saveNFT, type DreamNFT, typ
 import { createListingFromNFT } from './lib/nftMarketplace';
 import { notifyNFTMinted } from './lib/discord';
 import { estimateDreamXAELValue } from './lib/xaelEconomy';
+import { rewardXAELForDream } from './lib/mintDreamRewards';
 import { getSimulacrum, saveSimulacrum } from './lib/simulacra/simulacraService';
 import { getProfileIdForAssets } from './lib/assets/assetPersistence';
 import { saveNFTToSupabase } from './lib/dreamPersistence';
@@ -80,6 +81,9 @@ const DreamVRScreen = lazy(() =>
 );
 const XAELExchangeScreen = lazy(() =>
   import('./screens/XAELExchangeScreen').then((m) => ({ default: m.XAELExchangeScreen })),
+);
+const DreamCombineScreen = lazy(() =>
+  import('./screens/DreamCombineScreen').then((m) => ({ default: m.DreamCombineScreen })),
 );
 const DreamAssetGenerator = lazy(() => import('./components/assets/DreamAssetGenerator'));
 import DreamVisualizer from './components/dreams/DreamVisualizer';
@@ -1161,6 +1165,9 @@ const DreamJournalApp = () => {
     await saveDreamsToStorage(updatedDreams);
     console.log('[SaveDream] Storage save complete');
 
+    const xaelMinted = rewardXAELForDream(newDream, userId);
+    console.log('[SaveDream] XAEL minted:', xaelMinted);
+
     // Sync to Supabase (non-blocking)
     syncDreamToSupabase(newDream).catch((err: unknown) => {
       console.warn('[SaveDream] Supabase sync error:', err);
@@ -1181,7 +1188,7 @@ const DreamJournalApp = () => {
     setShowAchievement({
       id: 'asset_created',
       title: 'Journal entry saved',
-      description: `Pattern depth ${newDream.assetMetadata.rarityScore}`,
+      description: `+${xaelMinted} XAEL · depth ${newDream.assetMetadata.rarityScore}`,
       icon: '💎'
     });
     setTimeout(() => setShowAchievement(null), 3000);
@@ -2248,6 +2255,10 @@ const DreamJournalApp = () => {
           {route.screen === 'exchange' && (
             <XAELExchangeScreen navigate={navigate} walletAddress={wallet?.address} />
           )}
+
+          {route.screen === 'combine' && (
+            <DreamCombineScreen navigate={navigate} />
+          )}
         </Suspense>
 
       {/* Record (full page) — uses DreamCapture with pipeline progress */}
@@ -2433,6 +2444,9 @@ const DreamJournalApp = () => {
             const updatedDreams = [newDream, ...dreams];
             setDreams(updatedDreams);
             await saveDreamsToStorage(updatedDreams);
+
+            const recordUserId = wallet?.address || authUser?.id || 'local-user';
+            rewardXAELForDream(newDream, recordUserId);
 
             // Sync to Supabase (non-blocking)
             syncDreamToSupabase(newDream).catch((err: unknown) => {

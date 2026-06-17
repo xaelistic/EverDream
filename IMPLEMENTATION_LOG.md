@@ -1,5 +1,30 @@
 # EverDream Implementation Log
 
+## Session: SPEC-06 Complete (Jun 18, 2026)
+
+**Branch:** `main` · **App:** `ed.app.new`
+
+### Shipped (final pass)
+
+- **Oracle** — `xaelOracle.ts` spot ticker (ENERGY/DATA/COMPUTE) wired into exchange UI
+- **Economy persistence** — `006_economy_marketplace.sql` + `economyPersistence.ts` (balances, orders, trades, listings)
+- **XAEL mint on save** — `dreamToXAEL.ts`, `mintDreamRewards.ts`; rewards on journal save + record flow
+- **Trade fix** — `executeTrade` deducts XAEL correctly; `placeSellOrder` for user listings
+- **Dream combine** — `DreamCombineScreen` at `#/combine`; fuses 2–4 parent NFTs, lists on exchange
+- **Exchange UI** — spot prices, place-order tab, NFT commodity bundles, TAO bridge quote preview
+- **TAO bridge stub** — `taoBridge.ts` (simulated until `VITE_TAO_BRIDGE_ENABLED`)
+- **Pro gates** — `ProFeatureGate` on simulacrum + VR (`vrSimulacra` entitlement)
+- **Spec** — `SPEC-06-simulacra-economy.md` marked code-complete with ops deferred section
+
+### Ops still manual
+
+1. Deploy NFT contract + env vars
+2. `supabase db push` through migration 006
+3. Coolify: exchange-web + discord-bot
+4. TAO bridge contract (future)
+
+---
+
 ## Session: SPEC-06 Simulacra, VR, NFT & XAEL Economy (Jun 18, 2026)
 
 **Branch:** `main` · **App:** `ed.app.new`

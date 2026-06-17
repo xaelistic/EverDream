@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import type { DreamSimulacrum } from '../lib/simulacra/simulacraService';
 import { buildDreamSimulacrum, getSimulacrumAsync } from '../lib/simulacra/simulacraService';
 import { notifySimulacraReady } from '../lib/discord';
+import { ProFeatureGate } from '../components/subscriptions/ProFeatureGate';
 
 interface DreamSimulacrumScreenProps {
   dreamId: string;
@@ -133,6 +134,11 @@ export function DreamSimulacrumScreen({
   };
 
   return (
+    <ProFeatureGate
+      feature="Dream Simulacrum"
+      description="Build explorable 3D terrain and GLB meshes from your dream images. Included with EverDream Pro."
+      onUpgrade={() => navigate('settings')}
+    >
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <button
@@ -226,5 +232,6 @@ export function DreamSimulacrumScreen({
         )}
       </div>
     </div>
+    </ProFeatureGate>
   );
 }

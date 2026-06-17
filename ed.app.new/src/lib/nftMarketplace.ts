@@ -37,6 +37,9 @@ export function listNFTListings(): NFTListing[] {
 
 function saveListings(listings: NFTListing[]): void {
   localStorage.setItem(LISTINGS_KEY, JSON.stringify(listings));
+  import('./economyPersistence').then(({ syncEconomyToSupabase }) => {
+    syncEconomyToSupabase().catch(() => {});
+  });
 }
 
 export function createListingFromNFT(

@@ -59,6 +59,9 @@ export function getBalances(): WalletBalances {
 
 export function saveBalances(b: WalletBalances): void {
   localStorage.setItem(BALANCE_KEY, JSON.stringify(b));
+  import('./economyPersistence').then(({ syncEconomyToSupabase }) => {
+    syncEconomyToSupabase().catch(() => {});
+  });
 }
 
 /** Mint XAEL from dream XAEL data after journaling. */
@@ -74,7 +77,7 @@ export function mintXAELFromDream(xael: XAELData): number {
 
 /** Estimate XAEL listing price for a dream NFT. */
 export function estimateDreamXAELValue(xael: Partial<XAELData>, rarity = 1): number {
-  if (!xael.structure || !xael.emotion) return 10 * rarity;
+  if (!xael.structure) return 10 * rarity;
   const full = xael as XAELData;
   const score = calculateXAELScore(full);
   return Math.max(5, Math.round(score * rarity));
@@ -101,10 +104,13 @@ export function placeOrder(
   const orders = listOrders();
   orders.unshift(full);
   localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
+  import('./economyPersistence').then(({ syncEconomyToSupabase }) => {
+    syncEconomyToSupabase().catch(() => {});
+  });
   return full;
 }
 
-/** Simulated instant match for MVP — deducts seller balance, credits buyer. */
+/** Simulated instant match for MVP — buyer pays XAEL, receives commodity. */
 export function executeTrade(orderId: string, buyerId: string): TradeRecord | null {
   const orders = listOrders();
   const idx = orders.findIndex((o) => o.id === orderId && o.status === 'open');
@@ -112,19 +118,23 @@ export function executeTrade(orderId: string, buyerId: string): TradeRecord | nu
 
   const order = orders[idx];
   const total = order.amount * order.pricePerUnit;
-  const buyer = getBalances();
-  const seller = getBalances();
+  const balances = getBalances();
 
   if (order.side === 'sell') {
-    if (buyer[order.commodity] < 0 && order.commodity !== 'XAEL') return null;
-    if (buyer.XAEL < total) return null;
-    buyer.XAEL -= total;
-    buyer[order.commodity] += order.amount;
-    seller.XAEL += total;
-    if (seller[order.commodity] >= order.amount) seller[order.commodity] -= order.amount;
+    if (balances.XAEL < total) return null;
+    balances.XAEL -= total;
+    if (order.commodity === 'XAEL') {
+      balances.XAEL += order.amount;
+    } else {
+      balances[order.commodity] += order.amount;
+    }
+  } else {
+    if (order.commodity !== 'XAEL' && balances[order.commodity] < order.amount) return null;
+    if (order.commodity !== 'XAEL') balances[order.commodity] -= order.amount;
+    balances.XAEL += total;
   }
 
-  saveBalances(buyer);
+  saveBalances(balances);
   orders[idx] = { ...order, status: 'filled' };
   localStorage.setItem(ORDERS_KEY, JSON.stringify(orders));
 
@@ -140,7 +150,38 @@ export function executeTrade(orderId: string, buyerId: string): TradeRecord | nu
   const trades = listTrades();
   trades.unshift(trade);
   localStorage.setItem(TRADES_KEY, JSON.stringify(trades));
+  import('./economyPersistence').then(({ syncEconomyToSupabase }) => {
+    syncEconomyToSupabase().catch(() => {});
+  });
   return trade;
+}
+
+/** Place a sell order from the user's wallet (deducts listed commodity). */
+export function placeSellOrder(
+  commodity: Commodity,
+  amount: number,
+  pricePerUnit: number,
+  sellerId: string,
+  extras?: { dreamId?: string; nftId?: string },
+): ExchangeOrder | null {
+  if (amount <= 0 || pricePerUnit <= 0) return null;
+  const balances = getBalances();
+  if (commodity !== 'XAEL' && balances[commodity] < amount) return null;
+  if (commodity === 'XAEL' && balances.XAEL < amount) return null;
+
+  if (commodity === 'XAEL') balances.XAEL -= amount;
+  else balances[commodity] -= amount;
+  saveBalances(balances);
+
+  return placeOrder({
+    commodity,
+    side: 'sell',
+    amount,
+    pricePerUnit,
+    sellerId,
+    dreamId: extras?.dreamId,
+    nftId: extras?.nftId,
+  });
 }
 
 export function listTrades(): TradeRecord[] {
