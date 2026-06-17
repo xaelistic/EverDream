@@ -1,5 +1,8 @@
-import { ArrowLeft, Moon, Sparkles } from 'lucide-react';
+import { useState } from 'react';
+import { ArrowLeft, Sparkles, Share2 } from 'lucide-react';
 import type { WearableSleepRecord } from '../../lib/wearables';
+import type { DreamCardInput, ReflectionCardInput, SleepCardInput } from '../../lib/shareCard';
+import { ShareSheet } from '../components/share/ShareSheet';
 
 interface ReflectionScreenProps {
   navigate: (screen: string, dreamId?: string) => void;
@@ -9,6 +12,9 @@ interface ReflectionScreenProps {
   setReflectionMood: (mood: string) => void;
   reflectionEnergy: number;
   setReflectionEnergy: (energy: number) => void;
+  shareReflection: ReflectionCardInput;
+  shareSleep: SleepCardInput | null;
+  shareDream: DreamCardInput | null;
 }
 
 export function ReflectionScreen({
@@ -19,16 +25,30 @@ export function ReflectionScreen({
   setReflectionMood,
   reflectionEnergy,
   setReflectionEnergy,
+  shareReflection,
+  shareSleep,
+  shareDream,
 }: ReflectionScreenProps) {
+  const [showShare, setShowShare] = useState(false);
+
   return (
     <div className="space-y-6">
-      <button
-        type="button"
-        onClick={() => navigate('home')}
-        className="inline-flex items-center gap-2 text-sm font-medium text-muted hover:text-ink"
-      >
-        <ArrowLeft className="w-4 h-4" strokeWidth={1.75} /> Home
-      </button>
+      <div className="flex items-center justify-between gap-3">
+        <button
+          type="button"
+          onClick={() => navigate('home')}
+          className="inline-flex items-center gap-2 text-sm font-medium text-muted hover:text-ink"
+        >
+          <ArrowLeft className="w-4 h-4" strokeWidth={1.75} /> Home
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowShare(true)}
+          className="inline-flex items-center gap-2 text-sm font-semibold text-sageDark border border-sage/30 bg-sage/10 hover:bg-sage/20 px-4 py-2 rounded-full transition"
+        >
+          <Share2 className="w-4 h-4" /> Share
+        </button>
+      </div>
 
       <div className="rounded-3xl border border-line bg-cream p-6 shadow-lift">
         <p className="text-[11px] uppercase tracking-[0.2em] text-muted mb-2">Morning reflection</p>
@@ -55,16 +75,32 @@ export function ReflectionScreen({
               <div className="space-y-3 text-sm text-ink">
                 <div className="rounded-2xl bg-white/90 p-4 shadow-sm">
                   <div className="text-xs uppercase tracking-[0.18em] text-muted">Duration</div>
-                  <div className="text-lg font-semibold">{Math.round((reflectionSleepData.sleepDuration || 0) / 60)}h {Math.round((reflectionSleepData.sleepDuration || 0) % 60)}m</div>
+                  <div className="text-lg font-semibold">
+                    {Math.round(((reflectionSleepData as { sleepDuration?: number; durationMinutes?: number }).sleepDuration
+                      ?? (reflectionSleepData as { durationMinutes?: number }).durationMinutes
+                      ?? 0) / 60)}h{' '}
+                    {Math.round(((reflectionSleepData as { sleepDuration?: number; durationMinutes?: number }).sleepDuration
+                      ?? (reflectionSleepData as { durationMinutes?: number }).durationMinutes
+                      ?? 0) % 60)}m
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div className="rounded-2xl bg-white/90 p-3">
                     <div className="text-xs uppercase tracking-[0.18em] text-muted">Deep/REM</div>
-                    <div className="font-semibold">{reflectionSleepData.estimatedREM || 0}m REM</div>
+                    <div className="font-semibold">
+                      {(reflectionSleepData as { estimatedREM?: number; remMinutes?: number }).estimatedREM
+                        ?? (reflectionSleepData as { remMinutes?: number }).remMinutes
+                        ?? 0}m REM
+                    </div>
                   </div>
                   <div className="rounded-2xl bg-white/90 p-3">
                     <div className="text-xs uppercase tracking-[0.18em] text-muted">Quality</div>
-                    <div className="font-semibold">{reflectionSleepData.quality || reflectionSleepData.sleepQuality || 0}%</div>
+                    <div className="font-semibold">
+                      {(reflectionSleepData as { quality?: number; sleepQuality?: number; score?: number }).quality
+                        ?? (reflectionSleepData as { sleepQuality?: number }).sleepQuality
+                        ?? (reflectionSleepData as { score?: number }).score
+                        ?? 0}%
+                    </div>
                   </div>
                 </div>
               </div>
@@ -75,8 +111,7 @@ export function ReflectionScreen({
 
           <div className="rounded-3xl border border-line bg-parchment p-4">
             <p className="text-xs uppercase tracking-[0.2em] text-muted mb-3">How are you feeling?</p>
-            
-            {/* Compact Mood Selector (same as HomeScreen) */}
+
             <div className="flex items-center justify-center gap-2 flex-wrap mb-4">
               {['peaceful', 'anxious', 'excited', 'tired', 'curious', 'reflective'].map((mood) => {
                 const emojis: Record<string, string> = {
@@ -106,7 +141,6 @@ export function ReflectionScreen({
               })}
             </div>
 
-            {/* Energy Slider */}
             <div>
               <div className="flex items-center justify-between text-xs uppercase tracking-[0.18em] text-muted mb-2">
                 <span>Energy</span>
@@ -141,6 +175,14 @@ export function ReflectionScreen({
           </button>
         </div>
       </div>
+
+      <ShareSheet
+        open={showShare}
+        onClose={() => setShowShare(false)}
+        reflection={shareReflection}
+        sleep={shareSleep}
+        dream={shareDream}
+      />
     </div>
   );
 }

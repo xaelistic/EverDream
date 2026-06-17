@@ -35,7 +35,7 @@ export function PrivacyScreen({
       <div className="grid grid-cols-2 gap-3">
         <button
           onClick={exportAllData}
-          className="bg-blue-600 hover:bg-blue-700 py-3 rounded-lg transition flex items-center justify-center gap-2"
+          className="bg-sage hover:bg-sageDark text-cream py-3 rounded-lg transition flex items-center justify-center gap-2"
           aria-label="Export all data"
         >
           <Download className="w-4 h-4" strokeWidth={1.75} />

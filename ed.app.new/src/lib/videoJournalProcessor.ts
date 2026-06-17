@@ -19,6 +19,7 @@ const VIDEO_PLACEHOLDER =
   'Video journal entry - watch the video for the full dream description.';
 const AUDIO_PLACEHOLDER =
   'Audio journal entry - listen to the recording for the full dream description.';
+const PLACEHOLDER_TRANSCRIPT = VIDEO_PLACEHOLDER;
 
 export interface VideoJournalInput {
   videoBlob: Blob;
@@ -78,46 +79,211 @@ function logError(stage: string, error: unknown) {
   trackEvent('error', `video_journal_${stage}_error`, { message }, 'record');
 }
 
-/** Prepare blob for Whisper — video/webm often needs an audio MIME hint */
-function prepareAudioForTranscription(blob: Blob): Blob {
-  if (!blob.type.startsWith('video/')) return blob;
-  const audioType = blob.type.includes('webm') ? 'audio/webm' : 'audio/ogg';
-  console.log(`[DreamCapture] Converting ${blob.type} → ${audioType} for transcription (${blob.size} bytes)`);
-  return new Blob([blob], { type: audioType });
+function waitForVideoReady(video: HTMLVideoElement): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (video.readyState >= HTMLMediaElement.HAVE_METADATA) {
+      resolve();
+      return;
+    }
+    video.onloadedmetadata = () => resolve();
+    video.onerror = () => reject(new Error('Failed to load video for audio extraction'));
+  });
 }
 
-type TranscriptSource = VideoJournalProcessResult['transcriptSource'];
+function getSupportedAudioMimeType(): string {
+  const candidates = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/ogg;codecs=opus',
+    'audio/ogg',
+  ];
+  for (const type of candidates) {
+    if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(type)) {
+      return type;
+    }
+  }
+  return 'audio/webm';
+}
 
-async function transcribeMediaBlob(
-  blob: Blob,
-  placeholder: string,
-  logPrefix: string,
+function audioBufferToWav(buffer: AudioBuffer): Blob {
+  const numChannels = buffer.numberOfChannels;
+  const sampleRate = buffer.sampleRate;
+  const bitDepth = 16;
+  const bytesPerSample = bitDepth / 8;
+  const blockAlign = numChannels * bytesPerSample;
+  const dataLength = buffer.length * blockAlign;
+  const arrayBuffer = new ArrayBuffer(44 + dataLength);
+  const view = new DataView(arrayBuffer);
+
+  const writeString = (offset: number, str: string) => {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  };
+
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + dataLength, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * blockAlign, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitDepth, true);
+  writeString(36, 'data');
+  view.setUint32(40, dataLength, true);
+
+  const channels: Float32Array[] = [];
+  for (let ch = 0; ch < numChannels; ch++) {
+    channels.push(buffer.getChannelData(ch));
+  }
+
+  let offset = 44;
+  for (let i = 0; i < buffer.length; i++) {
+    for (let ch = 0; ch < numChannels; ch++) {
+      const sample = Math.max(-1, Math.min(1, channels[ch][i]));
+      view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+      offset += 2;
+    }
+  }
+
+  return new Blob([arrayBuffer], { type: 'audio/wav' });
+}
+
+async function tryDecodeAudioExtraction(videoBlob: Blob): Promise<Blob | null> {
+  try {
+    const audioContext = new AudioContext();
+    const arrayBuffer = await videoBlob.arrayBuffer();
+    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer.slice(0));
+    await audioContext.close();
+    const wav = audioBufferToWav(audioBuffer);
+    console.log(`[VideoJournal] Decoded audio via Web Audio API (${wav.size} bytes)`);
+    return wav;
+  } catch {
+    return null;
+  }
+}
+
+async function tryCaptureStreamExtraction(
+  video: HTMLVideoElement,
+  sourceMimeType: string,
+): Promise<Blob | null> {
+  const captureStream =
+    (video as HTMLVideoElement & { captureStream?: () => MediaStream }).captureStream?.() ??
+    (video as HTMLVideoElement & { mozCaptureStream?: () => MediaStream }).mozCaptureStream?.();
+
+  if (!captureStream) return null;
+
+  const audioTracks = captureStream.getAudioTracks();
+  if (audioTracks.length === 0) {
+    console.warn('[VideoJournal] No audio tracks in video stream');
+    return null;
+  }
+
+  const audioStream = new MediaStream(audioTracks);
+  const mimeType = getSupportedAudioMimeType();
+  const chunks: Blob[] = [];
+
+  return new Promise((resolve, reject) => {
+    const recorder = new MediaRecorder(audioStream, { mimeType, audioBitsPerSecond: 128000 });
+
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) chunks.push(event.data);
+    };
+
+    recorder.onerror = () => reject(new Error('MediaRecorder failed during audio extraction'));
+
+    recorder.onstop = () => {
+      audioTracks.forEach((track) => track.stop());
+      const blob = new Blob(chunks, { type: mimeType });
+      console.log(
+        `[VideoJournal] Extracted audio via captureStream: ${sourceMimeType} ÔåÆ ${mimeType} (${blob.size} bytes)`,
+      );
+      resolve(blob.size > 0 ? blob : null);
+    };
+
+    recorder.start(250);
+
+    video.currentTime = 0;
+    video
+      .play()
+      .then(() => {
+        const onEnded = () => {
+          video.removeEventListener('ended', onEnded);
+          if (recorder.state === 'recording') recorder.stop();
+        };
+        video.addEventListener('ended', onEnded);
+
+        if (video.duration && isFinite(video.duration)) {
+          setTimeout(() => {
+            if (recorder.state === 'recording') recorder.stop();
+          }, Math.ceil(video.duration * 1000) + 500);
+        }
+      })
+      .catch(reject);
+  });
+}
+
+/**
+ * Extract the audio track from a video blob for Whisper transcription.
+ * Uses captureStream + MediaRecorder, with Web Audio decode as fallback.
+ */
+async function extractAudioFromVideo(videoBlob: Blob): Promise<Blob> {
+  if (!videoBlob.type.startsWith('video/')) return videoBlob;
+
+  const videoUrl = URL.createObjectURL(videoBlob);
+  const video = document.createElement('video');
+  video.src = videoUrl;
+  video.muted = true;
+  video.playsInline = true;
+  video.preload = 'auto';
+
+  try {
+    await waitForVideoReady(video);
+
+    const captured = await tryCaptureStreamExtraction(video, videoBlob.type);
+    if (captured && captured.size > 1000) return captured;
+
+    const decoded = await tryDecodeAudioExtraction(videoBlob);
+    if (decoded && decoded.size > 1000) return decoded;
+
+    throw new Error('Could not extract audio track from video');
+  } finally {
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
+    URL.revokeObjectURL(videoUrl);
+  }
+}
+
+async function transcribeVideoJournal(
+  videoBlob: Blob,
   onProgress?: (status: string) => void,
-): Promise<{ text: string; source: TranscriptSource }> {
-  const audioBlob = prepareAudioForTranscription(blob);
+): Promise<{ text: string; source: VideoJournalProcessResult['transcriptSource'] }> {
+  onProgress?.('Extracting audio from video...');
+  let audioBlob: Blob;
+  try {
+    audioBlob = await extractAudioFromVideo(videoBlob);
+    logStage('audio_extracted', { size: audioBlob.size, type: audioBlob.type });
+  } catch (error) {
+    logError('audio_extraction', error);
+    return { text: PLACEHOLDER_TRANSCRIPT, source: 'none' };
+  }
 
   try {
     const result = await transcribeWithWhisper(audioBlob, { onProgress, language: 'en' });
-    const text = (result.text || '').trim();
-    const isRealSpeech =
-      text.length > 5 &&
-      result.source !== 'fallback' &&
-      !text.toLowerCase().includes('no speech detected') &&
-      !text.toLowerCase().includes('transcription unavailable');
-
-    if (isRealSpeech) {
+    if (result.text && result.text.length > 5 && result.source !== 'fallback') {
       return {
-        text,
+        text: result.text.trim(),
         source: result.source === 'hf-whisper' ? 'whisper' : 'web-speech',
       };
     }
-    console.warn(`[${logPrefix}] Transcription empty or placeholder:`, text.slice(0, 80));
-    trackEvent('custom', `${logPrefix}_transcription_empty`, { source: result.source, length: text.length }, 'record');
+    logStage('transcription_empty', { source: result.source, length: result.text?.length ?? 0 });
   } catch (error) {
     logError('transcription', error);
   }
 
-  return { text: placeholder, source: 'none' };
+  return { text: PLACEHOLDER_TRANSCRIPT, source: 'none' };
 }
 
 function mergeEmotionIntoAnalysis(
@@ -176,10 +342,8 @@ export async function processVideoJournal(
 
   // 1. Transcribe
   logStage('transcription_start');
-  const { text: transcriptText, source: transcriptSource } = await transcribeMediaBlob(
+  const { text: transcriptText, source: transcriptSource } = await transcribeVideoJournal(
     input.videoBlob,
-    VIDEO_PLACEHOLDER,
-    'video_journal',
     (status) => logStage('transcription_progress', { status }),
   );
   logStage('transcription_complete', { source: transcriptSource, length: transcriptText.length });
@@ -289,8 +453,6 @@ export async function processVideoJournal(
   };
 }
 
-// ── Audio journal pipeline (same XAEL build: transcribe → analyse → image) ──
-
 export interface AudioJournalInput {
   audioBlob: Blob;
   audioUrl?: string;
@@ -324,7 +486,7 @@ export async function processAudioJournal(
   input: AudioJournalInput,
 ): Promise<{
   dream: AudioJournalDream;
-  transcriptSource: TranscriptSource;
+  transcriptSource: VideoJournalProcessResult['transcriptSource'];
   transcriptLength: number;
   imageSource: string;
 }> {
@@ -421,7 +583,6 @@ export async function processAudioJournal(
   return { dream, transcriptSource, transcriptLength: transcriptText.length, imageSource };
 }
 
-/** Process typed or uploaded text through analyse → image (XAEL build) */
 export async function processTextJournal(text: string): Promise<{
   analysis: DreamAnalysis;
   generatedImage: VideoJournalDream['generatedImage'];

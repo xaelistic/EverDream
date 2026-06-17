@@ -37,7 +37,7 @@ function isNavActive(active: RouteScreen, screen: RouteScreen): boolean {
     return active === 'home' || active === 'reflection';
   }
   if (screen === 'more') {
-    return ['more', 'wearables', 'privacy', 'achievements', 'assets', 'import-photos', 'admin'].includes(active);
+    return ['more', 'wearables', 'privacy', 'achievements', 'assets', 'import-photos', 'admin', 'settings'].includes(active);
   }
   return active === screen;
 }

@@ -28,7 +28,7 @@ import {
 import Shell from './components/Shell';
 import { TrackerScreen } from './components/tracker/TrackerScreen';
 import { HomeScreen } from './screens/HomeScreen';
-
+import { ReflectionScreen } from './screens/ReflectionScreen';
 import { JournalScreen } from './screens/JournalScreen';
 import { InsightsScreen } from './screens/InsightsScreen';
 import { MoreScreen } from './screens/MoreScreen';
@@ -41,10 +41,13 @@ import { generateDreamImage } from './modules/sleep/dreamAssetGenerator';
 import { generateParallaxVideo } from './lib/assets/pipeline';
 import type { EmotionCapture } from './components/face/FacialEmotionDetector';
 import {
+  transcribeAudio,
   transcribeAudio as transcribeWithWhisper,
   transcribeWithWebSpeech,
   isSpeechRecognitionSupported,
 } from './lib/transcriptionWhisper';
+import { startBacklogRetryLoop, subscribeBacklogStatus } from './lib/backlogRetry';
+import ProfileAndSettings from './components/settings/ProfileAndSettings';
 import { processVideoJournal, processTextJournal } from './lib/videoJournalProcessor';
 import { WearableSettings } from './components/wearables/WearableSettings';
 import type { WearableConfig, WearableSleepRecord } from './lib/wearables';
@@ -55,6 +58,9 @@ import { initPerformanceMonitor, startAPICall, endAPICall } from './lib/performa
 import { AppLoadingScreen, ErrorBanner, LoadingOverlay } from './components/ui';
 import { TermsModal } from './components/modal';
 import { ProfileHub } from './screens/ProfileHubScreen';
+import { PublicProfileScreen } from './screens/PublicProfileScreen';
+import { PrivacyScreen } from './screens/PrivacyScreen';
+import { normalizeSleepData, dreamToShareInput } from './lib/shareCard';
 import { getOrCreateWallet, createDreamNFT, mintNFT, saveNFT, type DreamNFT, type WalletIdentity } from './lib/nft';
 import DreamVisualizer from './components/dreams/DreamVisualizer';
 import DreamCapture from './components/dreams/DreamCapture';
@@ -74,10 +80,12 @@ import type { DreamAsset } from './modules/sleep/types';
 import { initDreamService, syncFromSupabase } from './lib/dreamService';
 import { supabase as supabaseClient } from './lib/supabase/client';
 import { getCurrentUser } from './lib/supabase/client';
+import { useAuth } from './hooks/use-auth';
 
 const DreamJournalApp = () => {
   const { route, navigate } = useHashRoute();
   const { skin, isThemed } = useSkinFull();
+  const { user: authUser } = useAuth();
 
   // ── Dream type ──────────────────────────────────────────────
   type Dream = {
@@ -158,6 +166,7 @@ const DreamJournalApp = () => {
   const [currentEntry, setCurrentEntry] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const [queuedTaskCount, setQueuedTaskCount] = useState(0);
   const [settings, setSettings] = useState({
     alarmTime: '07:00',
     alarmEnabled: true,
@@ -257,6 +266,30 @@ const DreamJournalApp = () => {
     const lastDream = dreams.find((d) => !d.isSample && d.sleepData);
     return lastDream?.sleepData || null;
   }, [wearableData, dreams]);
+
+  const shareSleepData = useMemo(
+    () => normalizeSleepData(reflectionSleepData),
+    [reflectionSleepData],
+  );
+
+  const shareDreamData = useMemo(() => {
+    const real = dreams.filter((d) => !d.isSample);
+    if (real.length === 0) return null;
+    const latest = [...real].sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+    )[0];
+    return dreamToShareInput(latest);
+  }, [dreams]);
+
+  const shareReflectionData = useMemo(
+    () => ({
+      mood: reflectionMood || 'reflective',
+      energy: reflectionEnergy,
+      quote: reflectionQuote.text,
+      quoteSource: reflectionQuote.source,
+    }),
+    [reflectionMood, reflectionEnergy, reflectionQuote],
+  );
   const [hasAcceptedTerms, setHasAcceptedTerms] = useState(false);
 
   const detailDream = useMemo(() => {
@@ -425,6 +458,12 @@ const DreamJournalApp = () => {
     return () => {
       endSession();
     };
+  }, []);
+
+  // Start backlog retry loop and subscribe to queue status
+  useEffect(() => {
+    startBacklogRetryLoop();
+    return subscribeBacklogStatus(setQueuedTaskCount);
   }, []);
 
   // Track screen views on route change
@@ -1704,6 +1743,12 @@ const DreamJournalApp = () => {
       onOpenProfile={() => setShowProfile(true)}
     >
 
+      {queuedTaskCount > 0 && (
+        <div className="mb-4 rounded-2xl border border-sage/20 bg-sage/5 px-4 py-2.5 flex items-center gap-2 text-sm text-sageDark">
+          <div className="w-2 h-2 rounded-full bg-sage animate-pulse" />
+          <span>{queuedTaskCount} task{queuedTaskCount !== 1 ? 's' : ''} queued — retrying automatically</span>
+        </div>
+      )}
 
       {(isProcessing || isGeneratingImage) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/20 backdrop-blur-sm p-4">
@@ -1759,9 +1804,13 @@ const DreamJournalApp = () => {
             sleep={
               reflectionSleepData
                 ? {
-                    durationMinutes: reflectionSleepData.sleepDuration,
-                    quality: reflectionSleepData.quality || reflectionSleepData.sleepQuality,
-                    remMinutes: reflectionSleepData.estimatedREM,
+                    durationMinutes: (reflectionSleepData as { sleepDuration?: number; durationMinutes?: number }).sleepDuration
+                      ?? (reflectionSleepData as { durationMinutes?: number }).durationMinutes,
+                    quality: (reflectionSleepData as { quality?: number; sleepQuality?: number; score?: number }).quality
+                      ?? (reflectionSleepData as { sleepQuality?: number }).sleepQuality
+                      ?? (reflectionSleepData as { score?: number }).score,
+                    remMinutes: (reflectionSleepData as { estimatedREM?: number; remMinutes?: number }).estimatedREM
+                      ?? (reflectionSleepData as { remMinutes?: number }).remMinutes,
                     source: reflectionSleepData.source,
                   }
                 : null
@@ -1783,6 +1832,21 @@ const DreamJournalApp = () => {
               setShowDailyReflection(false);
               navigate('home');
             }}
+          />
+        )}
+
+        {route.screen === 'reflection' && (
+          <ReflectionScreen
+            navigate={navigate}
+            reflectionSleepData={reflectionSleepData}
+            reflectionQuote={reflectionQuote}
+            reflectionMood={reflectionMood}
+            setReflectionMood={setReflectionMood}
+            reflectionEnergy={reflectionEnergy}
+            setReflectionEnergy={setReflectionEnergy}
+            shareReflection={shareReflectionData}
+            shareSleep={shareSleepData}
+            shareDream={shareDreamData}
           />
         )}
 
@@ -1851,24 +1915,24 @@ const DreamJournalApp = () => {
             <h2 className="text-2xl font-bold mb-4">Your Dream Assets</h2>
             
             {/* Asset Overview */}
-            <div className="bg-gradient-to-br from-purple-600 to-pink-600 rounded-xl p-6">
+            <div className="bg-gradient-to-br from-sage to-sageDark rounded-xl p-6 text-cream">
               <h3 className="text-xl font-bold mb-4">Asset Portfolio</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <div className="text-3xl font-bold">{dreams.filter(d => !d.isSample).length}</div>
-                  <div className="text-sm text-purple-100">Total Assets</div>
+                  <div className="text-sm text-cream/80">Total Assets</div>
                 </div>
                 <div>
                   <div className="text-3xl font-bold">{insights?.avgRarity || '0.00'}</div>
-                  <div className="text-sm text-purple-100">Avg Rarity</div>
+                  <div className="text-sm text-cream/80">Avg Rarity</div>
                 </div>
                 <div>
                   <div className="text-3xl font-bold">${insights?.totalAssetValue || 0}</div>
-                  <div className="text-sm text-purple-100">Est. Value</div>
+                  <div className="text-sm text-cream/80">Est. Value</div>
                 </div>
                 <div>
                   <div className="text-3xl font-bold">{dreams.filter(d => !d.isSample && d.generatedImage).length}</div>
-                  <div className="text-sm text-purple-100">With Images</div>
+                  <div className="text-sm text-cream/80">With Images</div>
                 </div>
               </div>
             </div>
@@ -2058,166 +2122,19 @@ const DreamJournalApp = () => {
         )}
 
         {route.screen === 'privacy' && (
-          <div className="space-y-4">
-            <h2 className="text-2xl font-bold mb-4">Privacy & Data Sovereignty</h2>
-            
-            {/* Quick Actions */}
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={exportAllData}
-                className="bg-blue-600 hover:bg-blue-700 py-3 rounded-lg transition flex items-center justify-center gap-2"
-              >
-                <Download className="w-4 h-4" />
-                Export All Data
-              </button>
-              <button
-                onClick={deleteAllUserData}
-                className="bg-red-600 hover:bg-red-700 py-3 rounded-lg transition flex items-center justify-center gap-2"
-              >
-                <X className="w-4 h-4" />
-                Delete Everything
-              </button>
-            </div>
+          <PrivacyScreen
+            privacySettings={privacySettings}
+            setPrivacySettings={setPrivacySettings}
+            savePrivacySettings={savePrivacySettings}
+            exportAllData={exportAllData}
+            deleteAllUserData={deleteAllUserData}
+            setShowLicensing={setShowLicensing}
+            setShowTerms={setShowTerms}
+          />
+        )}
 
-            {/* Privacy Settings */}
-            <div className="bg-white bg-opacity-10 backdrop-blur-sm rounded-xl p-4 border border-white border-opacity-10">
-              <h3 className="font-semibold mb-4 flex items-center gap-2">
-                <Shield className="w-5 h-5 text-cyan-300" />
-                Granular Privacy Controls
-              </h3>
-              <div className="space-y-4">
-                <PrivacyToggle
-                  label="AI Dream Analysis"
-                  description="Allow Claude AI to analyze dream content"
-                  value={privacySettings.aiAnalysis}
-                  onChange={(v) => {
-                    const newSettings = {...privacySettings, aiAnalysis: v};
-                    setPrivacySettings(newSettings);
-                    savePrivacySettings(newSettings);
-                  }}
-                  required={true}
-                  note="Required for core functionality"
-                />
-                
-                <PrivacyToggle
-                  label="Image Generation"
-                  description="Generate AI images from dreams"
-                  value={privacySettings.imageGeneration}
-                  onChange={(v) => {
-                    const newSettings = {...privacySettings, imageGeneration: v};
-                    setPrivacySettings(newSettings);
-                    savePrivacySettings(newSettings);
-                  }}
-                />
-
-                <PrivacyToggle
-                  label="Wearable Data Sync"
-                  description="Sync sleep data from wearable devices"
-                  value={privacySettings.wearableSync}
-                  onChange={(v) => {
-                    const newSettings = {...privacySettings, wearableSync: v};
-                    setPrivacySettings(newSettings);
-                    savePrivacySettings(newSettings);
-                  }}
-                />
-
-                <PrivacyToggle
-                  label="Anonymous Analytics"
-                  description="Share anonymous usage patterns (helps improve app)"
-                  value={privacySettings.anonymousAnalytics}
-                  onChange={(v) => {
-                    const newSettings = {...privacySettings, anonymousAnalytics: v};
-                    setPrivacySettings(newSettings);
-                    savePrivacySettings(newSettings);
-                  }}
-                />
-
-                <PrivacyToggle
-                  label="Third-Party Data Sharing"
-                  description="Allow dream baskets to license your content"
-                  value={privacySettings.thirdPartySharing}
-                  onChange={(v) => {
-                    const newSettings = {...privacySettings, thirdPartySharing: v};
-                    setPrivacySettings(newSettings);
-                    savePrivacySettings(newSettings);
-                  }}
-                  note="Required for monetization (Phase 3)"
-                />
-              </div>
-            </div>
-
-            {/* Data Storage Info */}
-            <div className="bg-white bg-opacity-10 backdrop-blur-sm rounded-xl p-4 border border-white border-opacity-10">
-              <h3 className="font-semibold mb-3">Where Your Data Lives</h3>
-              <div className="space-y-3 text-sm">
-                <div className="flex items-start gap-3">
-                  <Shield className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <div className="font-semibold text-green-300">Local Storage (Primary)</div>
-                    <div className="text-purple-200">Browser IndexedDB on your device</div>
-                    <div className="text-xs text-purple-300 mt-1">You control this data completely</div>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <Cpu className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <div className="font-semibold text-blue-300">Data Processors</div>
-                    <div className="text-purple-200">• Claude AI (Anthropic) - Analysis only</div>
-                    <div className="text-purple-200">• DALL-E (OpenAI) - Image generation</div>
-                    <div className="text-xs text-purple-300 mt-1">No data retention, processing only</div>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <Activity className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <div className="font-semibold text-yellow-300">Transmission</div>
-                    <div className="text-purple-200">HTTPS/TLS 1.3 encrypted</div>
-                    <div className="text-xs text-purple-300 mt-1">All API calls are encrypted in transit</div>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <Moon className="w-5 h-5 text-purple-400 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <div className="font-semibold text-purple-300">Future: Ethereum Storage</div>
-                    <div className="text-purple-200">IPFS + Ethereum for NFT minting</div>
-                    <div className="text-xs text-purple-300 mt-1">Phase 3: Decentralized storage option</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* GDPR Rights */}
-            <div className="bg-green-600 bg-opacity-20 rounded-xl p-4 border border-green-500 border-opacity-30">
-              <h3 className="font-semibold mb-2">Your GDPR Rights</h3>
-              <div className="text-sm space-y-1 text-green-100">
-                <div>✓ Right to Access (export your data anytime)</div>
-                <div>✓ Right to Rectification (edit your dreams)</div>
-                <div>✓ Right to Erasure (delete everything)</div>
-                <div>✓ Right to Data Portability (JSON export)</div>
-                <div>✓ Right to Object (opt-out controls)</div>
-                <div>✓ Right to Restrict Processing (granular controls)</div>
-              </div>
-            </div>
-
-            {/* Licensing Info */}
-            <button
-              onClick={() => setShowLicensing(true)}
-              className="w-full bg-purple-600 hover:bg-purple-700 py-3 rounded-lg transition"
-            >
-              View Open Source Licensing
-            </button>
-
-            {/* Terms */}
-            <button
-              onClick={() => setShowTerms(true)}
-              className="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg transition"
-            >
-              View Terms & Conditions
-            </button>
-          </div>
+        {route.screen === 'profile' && route.profileHandle && (
+          <PublicProfileScreen handle={route.profileHandle} navigate={navigate} />
         )}
 
       {/* Record (full page) — uses DreamCapture with pipeline progress */}
@@ -2317,6 +2234,53 @@ const DreamJournalApp = () => {
               } finally {
                 setIsProcessing(false);
               }
+            } else if (result.audioUrl || result.audioBlob) {
+              const audioDuration = result.duration || 0;
+              let transcriptText = text || '';
+
+              if (result.audioBlob && !text?.trim()) {
+                setIsProcessing(true);
+                try {
+                  const transcription = await transcribeAudio(result.audioBlob, {
+                    onProgress: (status) => console.log('[AudioJournal]', status),
+                  });
+                  if (transcription.text && transcription.source !== 'fallback') {
+                    transcriptText = transcription.text.trim();
+                  }
+                } catch (err) {
+                  console.warn('[AudioJournal] Transcription failed:', err);
+                  transcriptText = 'Audio journal entry — transcription queued, will retry automatically.';
+                } finally {
+                  setIsProcessing(false);
+                }
+              }
+
+              newDream = {
+                id: `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                date: new Date().toISOString(),
+                content: transcriptText || 'Audio journal entry',
+                category: 'audio-journal',
+                themes: ['audio', 'voice-note', 'personal-recording'],
+                emotion: 'neutral',
+                symbols: [],
+                narrative: transcriptText || 'Audio journal recording',
+                nugget: transcriptText
+                  ? transcriptText.substring(0, 90) + (transcriptText.length > 90 ? '...' : '')
+                  : `Audio journal (${Math.floor(audioDuration / 60)}:${(audioDuration % 60).toString().padStart(2, '0')})`,
+                interpretation: {
+                  symbols: {},
+                  meaning: 'Voice journal - personal reflection',
+                  commonPattern: '',
+                },
+                captureMode: 'audio',
+                audioCapture: {
+                  url: result.audioUrl,
+                  capturedAt: new Date().toISOString(),
+                  duration: audioDuration,
+                  mediaId: result.mediaId,
+                },
+                isSample: false,
+              };
             } else {
               // Text capture result from DreamCapture
               const analysis = result.analysis;
@@ -2649,21 +2613,17 @@ const DreamJournalApp = () => {
         />
       )}
 
+      {route.screen === 'settings' && (
+        <ProfileAndSettings
+          user={authUser ? { email: authUser.email, name: authUser.email?.split('@')[0] } : undefined}
+          onClose={() => navigate('home')}
+          onExportData={exportAllData}
+          onNavigate={navigate}
+        />
+      )}
+
       {route.screen === 'admin' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-serif text-2xl font-medium text-ink">Analytics Dashboard</h2>
-            <button
-              type="button"
-              onClick={() => navigate('more')}
-              className="p-2 rounded-full border border-line bg-cream hover:bg-parchment transition"
-              aria-label="Back"
-            >
-              <ArrowLeft className="w-5 h-5 text-muted" strokeWidth={1.5} />
-            </button>
-          </div>
-          <AdminDashboard onClose={() => navigate('more')} />
-        </div>
+        <AdminDashboard onClose={() => navigate('home')} />
       )}
 
       </div>
@@ -2682,61 +2642,61 @@ const DreamJournalApp = () => {
               />
             )}
 
-            <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg p-4">
+            <div className="bg-gradient-to-r from-sage/90 to-sageDark rounded-lg p-4 text-cream">
               <h3 className="font-semibold mb-3">Asset Metadata</h3>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-purple-200">Asset ID:</span>
+                  <span className="text-cream/80">Asset ID:</span>
                   <span className="font-mono text-xs">{selectedDream.id}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-purple-200">Created:</span>
+                  <span className="text-cream/80">Created:</span>
                   <span>{new Date(selectedDream.date).toLocaleDateString()}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-purple-200">Rarity Score:</span>
+                  <span className="text-cream/80">Rarity Score:</span>
                   <span className="font-bold">{selectedDream.assetMetadata?.rarityScore}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-purple-200">Uniqueness:</span>
+                  <span className="text-cream/80">Uniqueness:</span>
                   <span className="font-bold">{selectedDream.assetMetadata?.uniquenessScore}</span>
                 </div>
               </div>
             </div>
 
             {/* NFT Component Breakdown */}
-            <div className="bg-blue-600 bg-opacity-20 rounded-lg p-4">
-              <h3 className="font-semibold mb-3 flex items-center gap-2">
-                <Shield className="w-4 h-4" />
+            <div className="bg-sage/10 border border-sage/20 rounded-lg p-4">
+              <h3 className="font-semibold mb-3 flex items-center gap-2 text-ink">
+                <Shield className="w-4 h-4 text-sage" />
                 NFT Component Breakdown
               </h3>
               <div className="space-y-3">
                 {getNFTComponents(selectedDream).map((component, i) => (
-                  <div key={component.id} className="bg-blue-700 bg-opacity-30 rounded p-3">
+                  <div key={component.id} className="bg-cream border border-line rounded p-3">
                     <div className="flex items-start justify-between mb-1">
                       <div>
-                        <div className="text-sm font-semibold text-blue-200">{component.component}</div>
-                        <div className="text-xs text-blue-300">{component.type}</div>
+                        <div className="text-sm font-semibold text-ink">{component.component}</div>
+                        <div className="text-xs text-muted">{component.type}</div>
                       </div>
                       {component.readyForMinting && (
-                        <span className="text-xs bg-green-500 px-2 py-0.5 rounded">Ready</span>
+                        <span className="text-xs bg-sage text-cream px-2 py-0.5 rounded">Ready</span>
                       )}
                     </div>
                     <div className="text-xs space-y-1 mt-2">
-                      <div className="text-blue-200">{component.description}</div>
-                      <div className="flex justify-between text-blue-300">
+                      <div className="text-muted">{component.description}</div>
+                      <div className="flex justify-between text-muted">
                         <span>Size: {component.size}</span>
                         <span>License: {component.license}</span>
                       </div>
-                      <div className="text-green-300 font-semibold">Ownership: {component.ownership}</div>
+                      <div className="text-sageDark font-semibold">Ownership: {component.ownership}</div>
                       {component.note && (
-                        <div className="text-yellow-300 text-xs mt-1">ℹ️ {component.note}</div>
+                        <div className="text-duskDeep text-xs mt-1">ℹ️ {component.note}</div>
                       )}
                     </div>
                   </div>
                 ))}
               </div>
-              <div className="mt-3 text-xs text-blue-200 bg-blue-700 bg-opacity-30 p-2 rounded">
+              <div className="mt-3 text-xs text-muted bg-parchment p-2 rounded border border-line">
                 💡 Each component can be minted separately or bundled into a single NFT. You control the composition.
               </div>
             </div>
@@ -2767,11 +2727,11 @@ const DreamJournalApp = () => {
               </div>
             </div>
 
-            <div className="bg-purple-600 bg-opacity-20 rounded-lg p-4">
-              <h3 className="font-semibold mb-2 text-sm">Future: Ethereum NFT</h3>
-              <div className="text-xs text-purple-200 space-y-1">
+            <div className="bg-dusk/10 border border-dusk/20 rounded-lg p-4">
+              <h3 className="font-semibold mb-2 text-sm text-ink">Future: Ethereum NFT</h3>
+              <div className="text-xs text-muted space-y-1">
                 <div>When ready, mint to:</div>
-                <div className="font-mono bg-purple-700 bg-opacity-30 p-2 rounded mt-1">
+                <div className="font-mono bg-parchment border border-line p-2 rounded mt-1 text-ink">
                   Ethereum Mainnet or Polygon (lower fees)
                 </div>
                 <div className="mt-2">Smart Contract: GPL-3.0 (open source)</div>
@@ -2790,7 +2750,7 @@ const DreamJournalApp = () => {
                 a.download = `dream-asset-${selectedDream.id}.json`;
                 a.click();
               }}
-              className="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg transition flex items-center justify-center gap-2"
+              className="w-full bg-sage hover:bg-sageDark text-cream py-3 rounded-lg transition flex items-center justify-center gap-2"
             >
               <Download className="w-4 h-4" />
               Download Asset Metadata (JSON)
@@ -3064,30 +3024,30 @@ const DreamJournalApp = () => {
               </div>
             </div>
 
-            <div className="bg-purple-600 bg-opacity-20 rounded-lg p-4">
-              <h3 className="font-semibold mb-2 text-purple-300">Your Dream Data</h3>
-              <div className="space-y-1 text-purple-100">
-                <div><strong>License:</strong> CC-BY-4.0 (Creative Commons Attribution) OR User's Choice</div>
-                <div><strong>You Choose:</strong></div>
+            <div className="bg-sage/10 border border-sage/20 rounded-lg p-4">
+              <h3 className="font-semibold mb-2 text-ink">Your Dream Data</h3>
+              <div className="space-y-1 text-muted">
+                <div><strong className="text-ink">License:</strong> CC-BY-4.0 (Creative Commons Attribution) OR User's Choice</div>
+                <div><strong className="text-ink">You Choose:</strong></div>
                 <ul className="list-disc list-inside ml-2 space-y-1 text-xs">
                   <li>CC-BY-4.0: Others can share with attribution</li>
                   <li>CC-BY-SA-4.0: Share-alike (copyleft)</li>
                   <li>CC-BY-NC-4.0: Non-commercial only</li>
                   <li>All Rights Reserved: No sharing without permission</li>
                 </ul>
-                <div className="mt-2 text-xs bg-purple-700 bg-opacity-30 p-2 rounded">
+                <div className="mt-2 text-xs bg-parchment border border-line p-2 rounded text-ink">
                   💡 <strong>Recommendation:</strong> CC-BY-4.0 allows participation in Dream Economy baskets while maintaining attribution rights.
                 </div>
               </div>
             </div>
 
-            <div className="bg-blue-600 bg-opacity-20 rounded-lg p-4">
-              <h3 className="font-semibold mb-2 text-blue-300">NFT Smart Contracts</h3>
-              <div className="space-y-1 text-blue-100 text-xs">
-                <div><strong>License:</strong> GPL-3.0 (GNU General Public License)</div>
-                <div><strong>Why GPL?</strong> Strong copyleft ensures modifications to our NFT contracts remain open source and benefit everyone.</div>
-                <div className="mt-2"><strong>Contract Address (Future):</strong></div>
-                <div className="font-mono bg-blue-700 bg-opacity-30 p-2 rounded">
+            <div className="bg-dusk/10 border border-dusk/20 rounded-lg p-4">
+              <h3 className="font-semibold mb-2 text-ink">NFT Smart Contracts</h3>
+              <div className="space-y-1 text-muted text-xs">
+                <div><strong className="text-ink">License:</strong> GPL-3.0 (GNU General Public License)</div>
+                <div><strong className="text-ink">Why GPL?</strong> Strong copyleft ensures modifications to our NFT contracts remain open source and benefit everyone.</div>
+                <div className="mt-2"><strong className="text-ink">Contract Address (Future):</strong></div>
+                <div className="font-mono bg-parchment border border-line p-2 rounded text-ink">
                   0x... (Ethereum Mainnet)<br/>
                   0x... (Polygon for lower fees)
                 </div>
@@ -3289,30 +3249,6 @@ const Modal = ({ children, onClose }) => (
         <X className="w-5 h-5" strokeWidth={1.75} />
       </button>
       {children}
-    </div>
-  </div>
-);
-
-const PrivacyToggle = ({ label, description, value, onChange, required = false, note }) => (
-  <div className="border-b border-line pb-4 last:border-0">
-    <div className="flex items-start justify-between gap-3 mb-1">
-      <div className="flex-1 min-w-0">
-        <div className="font-semibold text-sm text-ink">{label}</div>
-        <div className="text-xs text-muted mt-0.5 leading-relaxed">{description}</div>
-        {note && (
-          <div className="text-xs text-duskDeep mt-1.5">{note}</div>
-        )}
-      </div>
-      <button
-        type="button"
-        onClick={() => !required && onChange(!value)}
-        disabled={required}
-        className={`ml-2 w-12 h-7 rounded-full transition flex-shrink-0 border border-line ${
-          value ? 'bg-sage' : 'bg-parchment'
-        } ${required ? 'opacity-45 cursor-not-allowed' : ''}`}
-      >
-        <div className={`w-5 h-5 bg-cream rounded-full shadow-sm transition transform mt-0.5 ${value ? 'translate-x-6' : 'translate-x-1'}`} />
-      </button>
     </div>
   </div>
 );

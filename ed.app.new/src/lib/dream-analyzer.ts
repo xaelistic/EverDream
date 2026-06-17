@@ -20,6 +20,8 @@
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { addToBacklog } from './taskBacklog';
+import { ServiceOverloadedError, isOverloadError } from './api/errorHandling';
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -224,6 +226,7 @@ export async function analyzeDream(text: string): Promise<DreamAnalysis> {
   console.log('[DreamAnalyzer] Safe text length after truncation:', safeText.length);
 
   // Try Supabase Edge Function ONLY - no direct API fallbacks
+  let lastError: unknown;
   try {
     console.log('[DreamAnalyzer] Attempt 1: Trying Supabase Edge Function...');
     const result = await analyzeViaEdgeFunction(safeText);
@@ -231,11 +234,18 @@ export async function analyzeDream(text: string): Promise<DreamAnalysis> {
     console.log('[DreamAnalyzer] ========== DREAM ANALYSIS COMPLETED ==========');
     return result;
   } catch (err) {
+    lastError = err;
     console.warn('[DreamAnalyzer] ✗ Edge function failed:', err instanceof Error ? err.message : String(err));
   }
 
-  // Return fallback analysis if edge function fails
-  console.error('[DreamAnalyzer] ✗ Analysis failed, returning fallback');
-  console.log('[DreamAnalyzer] ========== DREAM ANALYSIS COMPLETED (FALLBACK) ==========');
+  const errMessage = lastError instanceof Error ? lastError.message : String(lastError);
+  console.error('[DreamAnalyzer] ✗ Analysis failed');
+  console.log('[DreamAnalyzer] ========== DREAM ANALYSIS COMPLETED (FAILED) ==========');
+
+  if (isOverloadError(lastError)) {
+    await addToBacklog('analysis', { text: safeText }, undefined, errMessage);
+    throw new ServiceOverloadedError();
+  }
+
   return { ...FALLBACK_ANALYSIS, narrative: safeText, nugget: safeText.substring(0, 100) };
 }

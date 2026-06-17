@@ -5,7 +5,7 @@ import { Card } from '../ui/Card';
 import PipelineProgress from './PipelineProgress';
 import { analyzeDream } from '../../lib/dream-analyzer';
 import { generateDreamImage } from '../../modules/sleep/dreamAssetGenerator';
-
+import { ServiceOverloadedError } from '../../lib/api/errorHandling';
 import type { DreamAnalysis } from '../../lib/dream-analyzer';
 import type { DreamAsset } from '../../modules/sleep/types';
 
@@ -73,6 +73,8 @@ export default function DreamCapture({
   const [imageResult, setImageResult] = useState<DreamAsset | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [capturedMedia, setCapturedMedia] = useState<{ url: string; type: string; timestamp: string } | null>(null);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [transcriptionStatus, setTranscriptionStatus] = useState<string | null>(null);
 
   const updateStep = useCallback((name: string, update: { status?: StepStatus; message?: string }) => {
     setSteps(prev => prev.map(s => s.name === name ? { ...s, ...update } : s));
@@ -102,7 +104,9 @@ export default function DreamCapture({
       setAnalysisResult(analysis);
       updateStep('Dream Analysis', { status: 'done', message: `Category: ${analysis.category}` });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Analysis failed';
+      const msg = err instanceof ServiceOverloadedError
+        ? err.message
+        : err instanceof Error ? err.message : 'Analysis failed';
       updateStep('Dream Analysis', { status: 'error', message: msg });
       setError(msg);
       setIsRunning(false);
@@ -161,6 +165,12 @@ export default function DreamCapture({
       <p className="text-xs text-muted mb-3">
         Use the mode bar above to switch to Video, Audio, or Upload. Type here, or paste from another app.
       </p>
+
+      {isTranscribing && transcriptionStatus && (
+        <div className="rounded-2xl border border-sage/20 bg-sage/5 p-3 flex items-center gap-2">
+          <p className="text-sm text-sageDark">{transcriptionStatus}</p>
+        </div>
+      )}
 
       {/* Pipeline Progress */}
       {isRunning && (

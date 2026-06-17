@@ -15,6 +15,8 @@
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { addToBacklog } from './taskBacklog';
+import { ServiceOverloadedError, isOverloadError } from './api/errorHandling';
 
 // ── Inline Rate Limiter (avoids import issues in test env) ───
 
@@ -55,9 +57,10 @@ export class ApiError extends Error {
   static getUserMessage(category: string): string {
     switch (category) {
       case 'network': return 'Unable to connect. Please check your internet connection and try again.';
-      case 'rate_limit': return 'Too many requests. Please wait a moment and try again.';
+      case 'rate_limit':
+      case 'server':
+        return 'Experiencing heavy load. Check back later. Your task has been queued and will be retried automatically.';
       case 'auth': return 'Authentication failed. Please sign in again.';
-      case 'server': return 'The service is temporarily unavailable. Please try again in a moment.';
       case 'validation': return 'The request was invalid. Please check your input and try again.';
       default: return 'Something unexpected happened. Please try again.';
     }
@@ -123,6 +126,39 @@ const RETRY_DELAY_MS = 2000;
 const RATE_LIMIT_KEY = 'transcribe-audio';
 const MAX_AUDIO_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB
 
+/** Normalize MIME types for Whisper (handles .opus uploads with missing/wrong types) */
+function normalizeAudioMimeType(blob: Blob, fileName?: string): Blob {
+  const type = blob.type.toLowerCase();
+  const name = (fileName || '').toLowerCase();
+
+  if (type === 'audio/opus' || name.endsWith('.opus')) {
+    return new Blob([blob], { type: 'audio/opus' });
+  }
+  if (!type || type === 'application/octet-stream') {
+    if (name.endsWith('.opus')) return new Blob([blob], { type: 'audio/opus' });
+    if (name.endsWith('.ogg')) return new Blob([blob], { type: 'audio/ogg' });
+    if (name.endsWith('.webm')) return new Blob([blob], { type: 'audio/webm' });
+    if (name.endsWith('.wav')) return new Blob([blob], { type: 'audio/wav' });
+    if (name.endsWith('.mp3')) return new Blob([blob], { type: 'audio/mpeg' });
+    if (name.endsWith('.m4a')) return new Blob([blob], { type: 'audio/mp4' });
+  }
+  return blob;
+}
+
+function isRetryableTranscriptionError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes('429') ||
+    lower.includes('503') ||
+    lower.includes('502') ||
+    lower.includes('rate limit') ||
+    lower.includes('too many') ||
+    lower.includes('unavailable') ||
+    lower.includes('all providers') ||
+    lower.includes('overloaded')
+  );
+}
+
 // ── Supabase Client ──────────────────────────────────────────
 
 let _supabase: SupabaseClient | null = null;
@@ -163,9 +199,10 @@ export async function transcribeWithWhisper(
     language?: string;
     timestamps?: boolean;
     onProgress?: (status: string) => void;
+    skipBacklog?: boolean;
   } = {}
 ): Promise<TranscriptionResult> {
-  const { language = 'en', onProgress } = options;
+  const { language = 'en', onProgress, skipBacklog = false } = options;
 
   console.log('[Transcription] Starting transcription with Whisper...');
   console.log('[Transcription] Input type:', typeof audioData, audioData instanceof Blob ? 'Blob' : audioData instanceof File ? 'File' : audioData instanceof ArrayBuffer ? 'ArrayBuffer' : 'string');
@@ -191,6 +228,8 @@ export async function transcribeWithWhisper(
     blob = new Blob([audioData], { type: 'audio/wav' });
   } else {
     blob = audioData as Blob;
+    const fileName = audioData instanceof File ? audioData.name : undefined;
+    blob = normalizeAudioMimeType(blob, fileName);
   }
 
   console.log('[Transcription] Blob created:', blob.size, 'bytes, type:', blob.type);
@@ -275,14 +314,35 @@ export async function transcribeWithWhisper(
       }
     }
 
-    console.warn('[Transcription] All edge function attempts failed, trying Web Speech fallback');
+    if (isRetryableTranscriptionError(lastAttemptError) && !skipBacklog) {
+      await addToBacklog('transcription', { language }, blob, lastAttemptError);
+      throw new ServiceOverloadedError();
+    }
 
-    // Fallback: direct HF call
-    return transcribeWithHFDirect(blob, language, onProgress);
+    console.warn('[Transcription] All edge function attempts failed, trying direct HF fallback');
+    try {
+      return await transcribeWithHFDirect(blob, language, onProgress);
+    } catch (hfErr) {
+      const hfMessage = hfErr instanceof Error ? hfErr.message : String(hfErr);
+      if ((isOverloadError(hfErr) || isRetryableTranscriptionError(hfMessage)) && !skipBacklog) {
+        await addToBacklog('transcription', { language }, blob, hfMessage);
+        throw new ServiceOverloadedError();
+      }
+      throw hfErr;
+    }
   }
 
   // No Supabase: direct HF call
-  return transcribeWithHFDirect(blob, language, onProgress);
+  try {
+    return await transcribeWithHFDirect(blob, language, onProgress);
+  } catch (hfErr) {
+    const hfMessage = hfErr instanceof Error ? hfErr.message : String(hfErr);
+    if ((isOverloadError(hfErr) || isRetryableTranscriptionError(hfMessage)) && !skipBacklog) {
+      await addToBacklog('transcription', { language }, blob, hfMessage);
+      throw new ServiceOverloadedError();
+    }
+    throw hfErr;
+  }
 }
 
 /**
@@ -432,6 +492,7 @@ export async function transcribeAudio(
     language?: string;
     preferWebSpeech?: boolean;
     onProgress?: (status: string) => void;
+    skipBacklog?: boolean;
   } = {}
 ): Promise<TranscriptionResult> {
   const { preferWebSpeech = false, onProgress } = options;
@@ -440,14 +501,23 @@ export async function transcribeAudio(
   if (!preferWebSpeech) {
     try {
       onProgress?.('Transcribing with Whisper AI...');
-      return await transcribeWithWhisper(audioData, { onProgress });
+      return await transcribeWithWhisper(audioData, options);
     } catch (err) {
+      if (err instanceof ServiceOverloadedError) throw err;
+
       const apiErr = ApiError.fromError(err);
       console.warn('[Transcription] Whisper failed:', apiErr.message);
 
-      // Don't fall back to Web Speech for network/server errors with file input
       if (apiErr.category === 'validation') {
-        throw apiErr; // Re-throw validation errors
+        throw apiErr;
+      }
+
+      if (apiErr.category === 'rate_limit' || apiErr.category === 'server') {
+        if (!options.skipBacklog && (audioData instanceof Blob || audioData instanceof File)) {
+          const blob = audioData instanceof File ? audioData : audioData;
+          await addToBacklog('transcription', { language: options.language || 'en' }, blob, apiErr.message);
+        }
+        throw new ServiceOverloadedError();
       }
     }
   }
