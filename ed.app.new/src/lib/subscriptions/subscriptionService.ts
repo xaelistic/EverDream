@@ -75,7 +75,7 @@ export async function getOfferings(): Promise<SubscriptionOffering[]> {
       tier: 'plus',
       identifier: PRODUCT_IDS.plusMonthly,
       title: 'EverDream+',
-      priceString: '$4.99/mo',
+      priceString: '$5.99/mo',
     },
     {
       tier: 'pro',

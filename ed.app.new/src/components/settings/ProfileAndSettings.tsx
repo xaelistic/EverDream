@@ -154,7 +154,7 @@ const SUBSCRIPTION_PLANS = [
   {
     id: 'plus',
     name: 'EverDream+',
-    price: '$4.99',
+    price: '$5.99',
     period: 'month',
     popular: true,
     features: [
