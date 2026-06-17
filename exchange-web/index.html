@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>EverDream XAEL Exchange</title>
+    <meta
+      name="description"
+      content="Trade dream XAEL tokens alongside energy, data, and compute credits."
+    />
+    <style>
+      :root {
+        --ink: #1a1a2e;
+        --sage: #5ec4a8;
+        --cream: #f8f7fa;
+        --muted: #9b96b0;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: Inter, system-ui, sans-serif;
+        background: linear-gradient(160deg, var(--ink) 0%, #16213e 55%, var(--ink) 100%);
+        color: var(--cream);
+        min-height: 100vh;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1rem 1.5rem;
+        border-bottom: 1px solid rgba(168, 237, 220, 0.15);
+      }
+      header a {
+        color: var(--sage);
+        text-decoration: none;
+        font-weight: 600;
+      }
+      .hero {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 2.5rem 1.5rem 1rem;
+        text-align: center;
+      }
+      .hero h1 {
+        font-size: clamp(1.75rem, 4vw, 2.5rem);
+        margin: 0 0 0.75rem;
+      }
+      .hero p {
+        color: var(--muted);
+        line-height: 1.6;
+        margin: 0;
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        justify-content: center;
+        margin-top: 1.25rem;
+      }
+      .chip {
+        border: 1px solid rgba(94, 196, 168, 0.35);
+        background: rgba(94, 196, 168, 0.1);
+        color: var(--sage);
+        padding: 0.35rem 0.75rem;
+        border-radius: 999px;
+        font-size: 0.8rem;
+      }
+      .cta {
+        display: inline-block;
+        margin-top: 1.5rem;
+        background: var(--sage);
+        color: var(--ink);
+        padding: 0.75rem 1.25rem;
+        border-radius: 0.75rem;
+        font-weight: 600;
+        text-decoration: none;
+      }
+      iframe {
+        display: block;
+        width: 100%;
+        height: calc(100vh - 220px);
+        min-height: 520px;
+        border: 0;
+        margin-top: 1.5rem;
+        background: #0f0f1a;
+      }
+      footer {
+        text-align: center;
+        color: var(--muted);
+        font-size: 0.75rem;
+        padding: 1rem;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <a href="https://everdream.app">← EverDream</a>
+      <span>XAEL Exchange</span>
+    </header>
+    <main>
+      <section class="hero">
+        <h1>Trade qualia &amp; compute</h1>
+        <p>
+          Exchange dream XAEL scores, energy credits, data shards, and compute units.
+          NFT listings include explorable 3D simulacra when available.
+        </p>
+        <div class="chips">
+          <span class="chip">XAEL</span>
+          <span class="chip">Energy</span>
+          <span class="chip">Data</span>
+          <span class="chip">Compute</span>
+          <span class="chip">Dream NFTs</span>
+        </div>
+        <a class="cta" id="open-app" href="/#/exchange">Open full exchange</a>
+      </section>
+      <iframe
+        id="exchange-frame"
+        title="EverDream XAEL Exchange"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+      ></iframe>
+    </main>
+    <footer>EverDream · Local ledger today · On-chain settlement planned</footer>
+    <script>
+      (function () {
+        var isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+        var appOrigin = isLocal ? 'http://localhost:5173' : 'https://everdream.app';
+        var exchangeUrl = appOrigin + '/#/exchange';
+        document.getElementById('open-app').href = exchangeUrl;
+        document.getElementById('exchange-frame').src = exchangeUrl;
+      })();
+    </script>
+  </body>
+</html>

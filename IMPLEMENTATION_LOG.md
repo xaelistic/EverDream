@@ -1,3 +1,34 @@
+# EverDream Implementation Log
+
+## Session: SPEC-06 Simulacra, VR, NFT & XAEL Economy (Jun 18, 2026)
+
+**Branch:** `main` · **App:** `ed.app.new`
+
+### Shipped
+
+- **Image→3D pipeline** — `imageTo3D.ts` (Meshy image-to-3D + luminance depth fallback)
+- **Simulacrum service** — `simulacraService.ts` builds/persists `DreamSimulacrum` (depth terrain, optional GLB, parallax)
+- **3D explorer** — `DreamSimulacrumScreen` (R3F depth terrain / GLB)
+- **VR** — `DreamVRScreen` wraps `WebXRViewer` (`#/vr/:dreamId`)
+- **XAEL economy** — `xaelEconomy.ts` local ledger (XAEL, ENERGY, DATA, COMPUTE)
+- **Exchange UI** — `XAELExchangeScreen` (`#/exchange`)
+- **NFT marketplace** — `nftMarketplace.ts` listings + buy flow; mint wires simulacrum `animation_url`
+- **Discord** — `discord.ts` webhooks (mint, trade, simulacra ready)
+- **Routes** — dream detail: Explore 3D, Enter VR, Mint NFT, XAEL Exchange; More screen link
+- **Asset pipeline** — `mesh_3d` uses `generate3DMeshBlocking` (poll to completion)
+- **Build** — lazy-loaded 3D/VR/exchange chunks; PWA `maximumFileSizeToCacheInBytes` 6MB
+- **Exchange site stub** — `exchange-web/index.html` for `exchange.everdream.app`
+- **Spec** — `docs/specs/SPEC-06-simulacra-economy.md`
+
+### Next
+
+1. Persist simulacra to Supabase `dream_assets`
+2. IPFS metadata + testnet contract for real NFTs
+3. Discord bot (slash commands / OAuth)
+4. Friend requests backend, public profile RLS (Phase 3 backlog)
+
+---
+
 # V2 Redesign Implementation Specification
 
 **Document Version:** 1.0  

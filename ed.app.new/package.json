@@ -21,6 +21,7 @@
     "cap:open:ios": "npx cap open ios"
   },
   "dependencies": {
+    "@bufbuild/protobuf": "^2.12.0",
     "@capacitor/core": "^8.4.0",
     "@capacitor/local-notifications": "^8.2.0",
     "@react-three/drei": "^9.122.0",

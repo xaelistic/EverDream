@@ -668,11 +668,17 @@ export async function processAssetStep(
         if (!apiKeys.meshyApiKey) {
           throw new Error('3D mesh requires Meshy API key');
         }
-        const result = await generate3DMesh({ prompt: asset.prompt }, apiKeys.meshyApiKey);
+        const result = await generate3DMeshBlocking({ prompt: asset.prompt }, apiKeys.meshyApiKey);
         updatedAssets[pendingIdx] = {
           ...updatedAssets[pendingIdx],
-          status: 'processing',
-          metadata: { ...updatedAssets[pendingIdx].metadata, meshyId: result.id },
+          status: 'completed',
+          result_url: result.model_url,
+          metadata: {
+            ...updatedAssets[pendingIdx].metadata,
+            meshyId: result.id,
+            vertices: result.vertices_count,
+            faces: result.faces_count,
+          },
           completed_at: now,
         };
         break;

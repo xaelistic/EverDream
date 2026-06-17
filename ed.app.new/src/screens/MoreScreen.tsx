@@ -75,6 +75,7 @@ export function MoreScreen({ skin, isThemed, navigate }: MoreScreenProps) {
             { label: 'Import journal photos', sub: 'OCR from pictures', screen: 'import-photos', icon: Camera },
             { label: 'Sleep & wearables', sub: 'Sessions and sync', screen: 'wearables', icon: Watch },
             { label: 'Keepsakes', sub: 'Images & provenance', screen: 'assets', icon: Shield },
+            { label: 'XAEL Exchange', sub: 'Trade qualia, energy & compute', screen: 'exchange', icon: Award },
             { label: 'Achievements', sub: 'Small wins', screen: 'achievements', icon: Award },
           ].map(({ label, sub, screen, icon: Icon }) => (
             <button

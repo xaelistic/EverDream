@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import {
   Moon,
   Calendar,
@@ -24,6 +24,8 @@ import {
   LineChart,
   Copy,
   Share2,
+  Box,
+  Glasses,
 } from 'lucide-react';
 import Shell from './components/Shell';
 import { TrackerScreen } from './components/tracker/TrackerScreen';
@@ -62,6 +64,20 @@ import { PublicProfileScreen } from './screens/PublicProfileScreen';
 import { PrivacyScreen } from './screens/PrivacyScreen';
 import { normalizeSleepData, dreamToShareInput } from './lib/shareCard';
 import { getOrCreateWallet, createDreamNFT, mintNFT, saveNFT, type DreamNFT, type WalletIdentity } from './lib/nft';
+import { createListingFromNFT } from './lib/nftMarketplace';
+import { notifyNFTMinted } from './lib/discord';
+import { estimateDreamXAELValue } from './lib/xaelEconomy';
+import { getSimulacrum } from './lib/simulacra/simulacraService';
+
+const DreamSimulacrumScreen = lazy(() =>
+  import('./screens/DreamSimulacrumScreen').then((m) => ({ default: m.DreamSimulacrumScreen })),
+);
+const DreamVRScreen = lazy(() =>
+  import('./screens/DreamVRScreen').then((m) => ({ default: m.DreamVRScreen })),
+);
+const XAELExchangeScreen = lazy(() =>
+  import('./screens/XAELExchangeScreen').then((m) => ({ default: m.XAELExchangeScreen })),
+);
 import DreamVisualizer from './components/dreams/DreamVisualizer';
 import DreamCapture from './components/dreams/DreamCapture';
 import { VideoJournalScreen } from './screens/VideoJournalScreen';
@@ -1442,6 +1458,34 @@ const DreamJournalApp = () => {
       const minted = await mintNFT(nft);
       saveNFT(minted);
       setMintedNFT(minted);
+      const price = estimateDreamXAELValue(
+        {
+          structure: {
+            narrative: dream.narrative || dream.content,
+            title: dream.nugget || 'Dream',
+            characters: [],
+            locations: [],
+            objects: [],
+            actions: [],
+            themes: dream.themes || [],
+            symbols: dream.symbols || [],
+            archetypes: [],
+          },
+          emotion: {
+            detectedEmotions: [],
+            sentimentScore: 0.5,
+            emotionalIntensity: 60,
+            dominantEmotion: dream.emotion || 'neutral',
+            secondaryEmotions: [],
+          },
+        },
+        dream.assetMetadata?.rarityScore ? dream.assetMetadata.rarityScore / 50 : 1,
+      );
+      const sim = getSimulacrum(dream.id);
+      const animationUrl =
+        sim?.meshUrl || sim?.parallaxVideoUrl || dream.parallaxVideoUrl || dream.generatedImage?.url;
+      createListingFromNFT(minted, price, { animationUrl });
+      notifyNFTMinted(minted.metadata.name, minted.tokenId || minted.id, minted.owner, minted.metadata.image);
     } catch (err) {
       setMintError(err instanceof Error ? err.message : 'Minting failed');
     } finally {
@@ -2137,6 +2181,40 @@ const DreamJournalApp = () => {
           <PublicProfileScreen handle={route.profileHandle} navigate={navigate} />
         )}
 
+        <Suspense fallback={<AppLoadingScreen message="Loading immersive view…" />}>
+          {route.screen === 'simulacrum' && route.dreamId && (() => {
+            const d = dreams.find((x) => x.id === route.dreamId);
+            if (!d) return <p className="text-muted text-center py-12">Dream not found.</p>;
+            return (
+              <DreamSimulacrumScreen
+                dreamId={d.id}
+                title={d.nugget || 'Dream'}
+                narrative={d.narrative || d.content}
+                imageUrl={d.generatedImage?.url}
+                navigate={navigate}
+              />
+            );
+          })()}
+
+          {route.screen === 'vr' && route.dreamId && (() => {
+            const d = dreams.find((x) => x.id === route.dreamId);
+            if (!d) return null;
+            return (
+              <DreamVRScreen
+                dreamId={d.id}
+                title={d.nugget || 'Dream'}
+                imageUrl={d.generatedImage?.url}
+                parallaxVideoUrl={d.parallaxVideoUrl || undefined}
+                navigate={navigate}
+              />
+            );
+          })()}
+
+          {route.screen === 'exchange' && (
+            <XAELExchangeScreen navigate={navigate} walletAddress={wallet?.address} />
+          )}
+        </Suspense>
+
       {/* Record (full page) — uses DreamCapture with pipeline progress */}
       {(route.screen === 'record' || route.screen === 'capture') && (
         <RecordScreen
@@ -2569,11 +2647,28 @@ const DreamJournalApp = () => {
               </div>
             )}
 
-            <div className="flex gap-3 pt-1">
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => navigate('simulacrum', detailDream.id)}
+                className="col-span-2 bg-sage hover:bg-sageDark text-cream py-3 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm shadow-paper"
+              >
+                <Box className="w-4 h-4" strokeWidth={1.75} />
+                Explore 3D Simulacrum
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('vr', detailDream.id)}
+                disabled={!detailDream.generatedImage?.url}
+                className="border border-sage/30 bg-sage/10 hover:bg-sage/20 text-sageDark py-3 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm disabled:opacity-40"
+              >
+                <Glasses className="w-4 h-4" strokeWidth={1.75} />
+                Enter VR
+              </button>
               <button
                 type="button"
                 onClick={() => shareDream(detailDream)}
-                className="flex-1 bg-sage hover:bg-sageDark text-cream py-3 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm shadow-paper"
+                className="border border-line bg-parchment hover:bg-cream py-3 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm"
               >
                 <Upload className="w-4 h-4" strokeWidth={1.75} />
                 Share
@@ -2581,10 +2676,17 @@ const DreamJournalApp = () => {
               <button
                 type="button"
                 onClick={() => handleOpenMintModal(detailDream)}
-                className="flex-1 border-2 border-dusk/30 bg-dusk/5 hover:bg-dusk/10 text-duskDeep py-3 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm"
+                className="border-2 border-dusk/30 bg-dusk/5 hover:bg-dusk/10 text-duskDeep py-3 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm"
               >
                 <Award className="w-4 h-4" strokeWidth={1.75} />
                 Mint NFT
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('exchange')}
+                className="border border-line bg-parchment hover:bg-cream py-3 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm"
+              >
+                XAEL Exchange
               </button>
             </div>
           </div>

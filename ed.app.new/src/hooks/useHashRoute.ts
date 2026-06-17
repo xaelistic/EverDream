@@ -19,7 +19,10 @@ export type RouteScreen =
   | 'admin'
   | 'settings'
   | 'video-journal'
-  | 'profile';
+  | 'profile'
+  | 'simulacrum'
+  | 'vr'
+  | 'exchange';
 
 export type AppRoute = {
   screen: RouteScreen;
@@ -37,6 +40,9 @@ function parseHash(): AppRoute {
   }
   if (parts[0] === 'profile' && parts[1]) {
     return { screen: 'profile', dreamId: null, profileHandle: decodeURIComponent(parts[1]) };
+  }
+  if ((parts[0] === 'simulacrum' || parts[0] === 'vr') && parts[1]) {
+    return { screen: parts[0] as 'simulacrum' | 'vr', dreamId: decodeURIComponent(parts[1]), profileHandle: null };
   }
 
   const screen = parts[0] as RouteScreen;
@@ -59,6 +65,9 @@ function parseHash(): AppRoute {
     'settings',
     'video-journal',
     'profile',
+    'simulacrum',
+    'vr',
+    'exchange',
   ];
   if (screen === 'reflection') {
     return { screen: 'home', dreamId: null };
@@ -88,6 +97,10 @@ export function useHashRoute() {
     }
     if (screen === 'profile' && id) {
       window.location.hash = `#/profile/${encodeURIComponent(id)}`;
+      return;
+    }
+    if ((screen === 'simulacrum' || screen === 'vr') && id) {
+      window.location.hash = `#/${screen}/${encodeURIComponent(id)}`;
       return;
     }
     window.location.hash = `#/${screen === 'home' ? '' : screen}`;
