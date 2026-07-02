@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, Upload, Award, Shield, Eye, Camera, MessageCircle } from 'lucide-react';
+import { FEATURE_NFT_UI_ENABLED } from '../config/features';
 import DreamVisualizer from '../components/dreams/DreamVisualizer';
 import type { EmotionCapture } from './face/FacialEmotionDetector';
 import { mediaStorageManager } from '../lib/mediaStorage';
@@ -333,15 +334,17 @@ export function DreamDetailScreen({
               <Upload className="w-4 h-4" strokeWidth={1.75} />
               Share
             </button>
-            <button
-              type="button"
-              onClick={() => handleOpenMintModal(detailDream)}
-              className="flex-1 border-2 border-dusk/30 bg-dusk/5 hover:bg-dusk/10 text-duskDeep py-3 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm"
-              aria-label="Mint as NFT"
-            >
-              <Award className="w-4 h-4" strokeWidth={1.75} />
-              Mint NFT
-            </button>
+            {FEATURE_NFT_UI_ENABLED ? (
+              <button
+                type="button"
+                onClick={() => handleOpenMintModal(detailDream)}
+                className="flex-1 border-2 border-dusk/30 bg-dusk/5 hover:bg-dusk/10 text-duskDeep py-3 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm"
+                aria-label="Mint as NFT"
+              >
+                <Award className="w-4 h-4" strokeWidth={1.75} />
+                Mint NFT
+              </button>
+            ) : null}
           </div>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import { Shield } from 'lucide-react';
+import { FEATURE_NFT_UI_ENABLED } from '../config/features';
 
 interface Dream {
   id: string;
@@ -74,7 +75,7 @@ export function AssetsScreen({
           <p>• You retain full ownership and control</p>
           <p>• Dreams are licensed, never sold</p>
           <p>• Revocable at any time</p>
-          <p>• NFT minting ready when you choose</p>
+          {FEATURE_NFT_UI_ENABLED ? <p>• NFT minting ready when you choose</p> : null}
         </div>
       </div>
 

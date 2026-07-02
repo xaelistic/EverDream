@@ -72,6 +72,7 @@ import { getSimulacrum, saveSimulacrum } from './lib/simulacra/simulacraService'
 import { getProfileIdForAssets } from './lib/assets/assetPersistence';
 import { saveNFTToSupabase } from './lib/dreamPersistence';
 import { triggerSilentMint } from './lib/silentMint';
+import { FEATURE_NFT_UI_ENABLED } from './config/features';
 
 const DreamSimulacrumScreen = lazy(() =>
   import('./screens/DreamSimulacrumScreen').then((m) => ({ default: m.DreamSimulacrumScreen })),
@@ -2034,7 +2035,7 @@ const DreamJournalApp = () => {
                 <p>• You retain full ownership and control</p>
                 <p>• Dreams are licensed, never sold</p>
                 <p>• Revocable at any time</p>
-                <p>• NFT minting ready when you choose</p>
+                {FEATURE_NFT_UI_ENABLED ? <p>• NFT minting ready when you choose</p> : null}
               </div>
             </div>
 
@@ -2252,11 +2253,11 @@ const DreamJournalApp = () => {
             );
           })()}
 
-          {route.screen === 'exchange' && (
+          {FEATURE_NFT_UI_ENABLED && route.screen === 'exchange' && (
             <XAELExchangeScreen navigate={navigate} walletAddress={wallet?.address} />
           )}
 
-          {route.screen === 'combine' && (
+          {FEATURE_NFT_UI_ENABLED && route.screen === 'combine' && (
             <DreamCombineScreen navigate={navigate} />
           )}
         </Suspense>
@@ -2760,21 +2761,25 @@ const DreamJournalApp = () => {
                 <Upload className="w-4 h-4" strokeWidth={1.75} />
                 Share
               </button>
-              <button
-                type="button"
-                onClick={() => handleOpenMintModal(detailDream)}
-                className="border-2 border-dusk/30 bg-dusk/5 hover:bg-dusk/10 text-duskDeep py-3 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm"
-              >
-                <Award className="w-4 h-4" strokeWidth={1.75} />
-                Mint NFT
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate('exchange')}
-                className="border border-line bg-parchment hover:bg-cream py-3 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm"
-              >
-                XAEL Exchange
-              </button>
+              {FEATURE_NFT_UI_ENABLED ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenMintModal(detailDream)}
+                    className="border-2 border-dusk/30 bg-dusk/5 hover:bg-dusk/10 text-duskDeep py-3 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm"
+                  >
+                    <Award className="w-4 h-4" strokeWidth={1.75} />
+                    Mint NFT
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => navigate('exchange')}
+                    className="border border-line bg-parchment hover:bg-cream py-3 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm"
+                  >
+                    XAEL Exchange
+                  </button>
+                </>
+              ) : null}
             </div>
           </div>
           </div>
@@ -2853,42 +2858,43 @@ const DreamJournalApp = () => {
               </div>
             </div>
 
-            {/* NFT Component Breakdown */}
-            <div className="bg-sage/10 border border-sage/20 rounded-lg p-4">
-              <h3 className="font-semibold mb-3 flex items-center gap-2 text-ink">
-                <Shield className="w-4 h-4 text-sage" />
-                NFT Component Breakdown
-              </h3>
-              <div className="space-y-3">
-                {getNFTComponents(selectedDream).map((component, i) => (
-                  <div key={component.id} className="bg-cream border border-line rounded p-3">
-                    <div className="flex items-start justify-between mb-1">
-                      <div>
-                        <div className="text-sm font-semibold text-ink">{component.component}</div>
-                        <div className="text-xs text-muted">{component.type}</div>
+            {FEATURE_NFT_UI_ENABLED ? (
+              <div className="bg-sage/10 border border-sage/20 rounded-lg p-4">
+                <h3 className="font-semibold mb-3 flex items-center gap-2 text-ink">
+                  <Shield className="w-4 h-4 text-sage" />
+                  NFT Component Breakdown
+                </h3>
+                <div className="space-y-3">
+                  {getNFTComponents(selectedDream).map((component) => (
+                    <div key={component.id} className="bg-cream border border-line rounded p-3">
+                      <div className="flex items-start justify-between mb-1">
+                        <div>
+                          <div className="text-sm font-semibold text-ink">{component.component}</div>
+                          <div className="text-xs text-muted">{component.type}</div>
+                        </div>
+                        {component.readyForMinting && (
+                          <span className="text-xs bg-sage text-cream px-2 py-0.5 rounded">Ready</span>
+                        )}
                       </div>
-                      {component.readyForMinting && (
-                        <span className="text-xs bg-sage text-cream px-2 py-0.5 rounded">Ready</span>
-                      )}
-                    </div>
-                    <div className="text-xs space-y-1 mt-2">
-                      <div className="text-muted">{component.description}</div>
-                      <div className="flex justify-between text-muted">
-                        <span>Size: {component.size}</span>
-                        <span>License: {component.license}</span>
+                      <div className="text-xs space-y-1 mt-2">
+                        <div className="text-muted">{component.description}</div>
+                        <div className="flex justify-between text-muted">
+                          <span>Size: {component.size}</span>
+                          <span>License: {component.license}</span>
+                        </div>
+                        <div className="text-sageDark font-semibold">Ownership: {component.ownership}</div>
+                        {component.note && (
+                          <div className="text-duskDeep text-xs mt-1">ℹ️ {component.note}</div>
+                        )}
                       </div>
-                      <div className="text-sageDark font-semibold">Ownership: {component.ownership}</div>
-                      {component.note && (
-                        <div className="text-duskDeep text-xs mt-1">ℹ️ {component.note}</div>
-                      )}
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
+                <div className="mt-3 text-xs text-muted bg-parchment p-2 rounded border border-line">
+                  💡 Each component can be minted separately or bundled into a single NFT. You control the composition.
+                </div>
               </div>
-              <div className="mt-3 text-xs text-muted bg-parchment p-2 rounded border border-line">
-                💡 Each component can be minted separately or bundled into a single NFT. You control the composition.
-              </div>
-            </div>
+            ) : null}
 
             {selectedDream.watermark && (
               <div className="bg-cyan-600 bg-opacity-20 rounded-lg p-4">
@@ -2911,23 +2917,25 @@ const DreamJournalApp = () => {
                 <div>✓ Full ownership retained (100%)</div>
                 <div>✓ Licensed, never sold</div>
                 <div>✓ Revocable at any time</div>
-                <div>✓ NFT-ready for blockchain minting</div>
+                {FEATURE_NFT_UI_ENABLED ? <div>✓ NFT-ready for blockchain minting</div> : null}
                 <div>✓ Choose your license: CC-BY, CC-BY-SA, All Rights Reserved</div>
               </div>
             </div>
 
-            <div className="bg-dusk/10 border border-dusk/20 rounded-lg p-4">
-              <h3 className="font-semibold mb-2 text-sm text-ink">Future: Ethereum NFT</h3>
-              <div className="text-xs text-muted space-y-1">
-                <div>When ready, mint to:</div>
-                <div className="font-mono bg-parchment border border-line p-2 rounded mt-1 text-ink">
-                  Ethereum Mainnet or Polygon (lower fees)
+            {FEATURE_NFT_UI_ENABLED ? (
+              <div className="bg-dusk/10 border border-dusk/20 rounded-lg p-4">
+                <h3 className="font-semibold mb-2 text-sm text-ink">Future: Ethereum NFT</h3>
+                <div className="text-xs text-muted space-y-1">
+                  <div>When ready, mint to:</div>
+                  <div className="font-mono bg-parchment border border-line p-2 rounded mt-1 text-ink">
+                    Ethereum Mainnet or Polygon (lower fees)
+                  </div>
+                  <div className="mt-2">Smart Contract: GPL-3.0 (open source)</div>
+                  <div>Storage: IPFS (decentralized)</div>
+                  <div>Gas fees: You pay only at minting time</div>
                 </div>
-                <div className="mt-2">Smart Contract: GPL-3.0 (open source)</div>
-                <div>Storage: IPFS (decentralized)</div>
-                <div>Gas fees: You pay only at minting time</div>
               </div>
-            </div>
+            ) : null}
 
             <button
               onClick={() => {
@@ -2949,7 +2957,7 @@ const DreamJournalApp = () => {
       )}
 
       {/* Mint NFT Modal */}
-      {showMintModal && selectedDream && (
+      {FEATURE_NFT_UI_ENABLED && showMintModal && selectedDream && (
         <Modal onClose={() => setShowMintModal(false)}>
           <div className="space-y-4">
             <h2 className="text-xl font-semibold flex items-center gap-2">

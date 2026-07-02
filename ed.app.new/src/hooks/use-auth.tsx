@@ -14,6 +14,7 @@
  */
 
 import { useState, useEffect, useCallback, createContext, useContext, type ReactNode } from 'react';
+import { FEATURE_REQUIRE_AUTH } from '../config/features';
 import { supabase, getCurrentUser } from '../lib/supabase/client';
 
 export interface AuthUser {
@@ -83,13 +84,11 @@ function useAuthInternal(): AuthState {
             email: currentUser.email,
             isAnonymous: currentUser.is_anonymous ?? true,
           });
-        } else {
-          // No session — sign in anonymously
+        } else if (!FEATURE_REQUIRE_AUTH) {
           const { data, error: signInError } = await supabase.auth.signInAnonymously();
           if (!mounted) return;
 
           if (signInError) {
-            // If anonymous auth fails, allow offline mode (user = null but not loading)
             console.warn('[useAuth] Anonymous sign-in failed, running in offline mode:', signInError.message);
             setUser(null);
           } else if (data.user) {
@@ -99,6 +98,8 @@ function useAuthInternal(): AuthState {
               isAnonymous: true,
             });
           }
+        } else {
+          setUser(null);
         }
       } catch (err) {
         if (!mounted) return;

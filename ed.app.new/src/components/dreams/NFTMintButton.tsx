@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import { FEATURE_NFT_UI_ENABLED } from '../../config/features';
 import { Button, Card, Modal, Badge, Spinner } from '../ui';
 import { Award, ExternalLink, Check, Wallet, Copy } from 'lucide-react';
 import {
@@ -96,6 +97,10 @@ export default function NFTMintButton({ dream, onMinted }: NFTMintButtonProps) {
     a.click();
     URL.revokeObjectURL(url);
   }, [nft]);
+
+  if (!FEATURE_NFT_UI_ENABLED) {
+    return null;
+  }
 
   return (
     <>

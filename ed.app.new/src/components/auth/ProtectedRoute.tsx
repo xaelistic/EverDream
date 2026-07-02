@@ -1,4 +1,5 @@
 import React from 'react';
+import { FEATURE_REQUIRE_AUTH } from '../../config/features';
 import { useAuth } from '../../hooks/use-auth';
 import { Spinner } from '../ui';
 import LoginScreen from './LoginScreen';
@@ -17,7 +18,7 @@ interface ProtectedRouteProps {
  * </ProtectedRoute>
  */
 export default function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { loading } = useAuth();
+  const { user, loading } = useAuth();
 
   if (loading) {
     return (
@@ -33,6 +34,9 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     );
   }
 
-  // QA BYPASS: Allow access without auth for testing
+  if (!user || (FEATURE_REQUIRE_AUTH && user.isAnonymous)) {
+    return <LoginScreen />;
+  }
+
   return <>{children}</>;
 }

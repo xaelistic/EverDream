@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Palette, Brain, Camera, Watch, Shield, Award, Eye, ChevronRight } from 'lucide-react';
+import { FEATURE_NFT_UI_ENABLED } from '../config/features';
 import type { SkinId } from '../contexts/SkinContext';
 import { getSkinMeta } from '../lib/skins';
 import { SkinPickerModal } from '../components/settings/SkinPickerModal';
@@ -75,8 +76,12 @@ export function MoreScreen({ skin, isThemed, navigate }: MoreScreenProps) {
             { label: 'Import journal photos', sub: 'OCR from pictures', screen: 'import-photos', icon: Camera },
             { label: 'Sleep & wearables', sub: 'Sessions and sync', screen: 'wearables', icon: Watch },
             { label: 'Keepsakes', sub: 'Images & provenance', screen: 'assets', icon: Shield },
-            { label: 'XAEL Exchange', sub: 'Trade qualia, energy & compute', screen: 'exchange', icon: Award },
-            { label: 'Combine dreams', sub: 'Fuse NFTs into remixes', screen: 'combine', icon: Award },
+            ...(FEATURE_NFT_UI_ENABLED
+              ? [
+                  { label: 'XAEL Exchange', sub: 'Trade qualia, energy & compute', screen: 'exchange', icon: Award },
+                  { label: 'Combine dreams', sub: 'Fuse NFTs into remixes', screen: 'combine', icon: Award },
+                ]
+              : []),
             { label: 'Achievements', sub: 'Small wins', screen: 'achievements', icon: Award },
           ].map(({ label, sub, screen, icon: Icon }) => (
             <button

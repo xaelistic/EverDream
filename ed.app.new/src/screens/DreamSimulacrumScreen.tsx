@@ -7,6 +7,7 @@ import type { DreamSimulacrum } from '../lib/simulacra/simulacraService';
 import { buildDreamSimulacrum, getSimulacrumAsync } from '../lib/simulacra/simulacraService';
 import { notifySimulacraReady } from '../lib/discord';
 import { ProFeatureGate } from '../components/subscriptions/ProFeatureGate';
+import { FEATURE_NFT_UI_ENABLED } from '../config/features';
 
 interface DreamSimulacrumScreenProps {
   dreamId: string;
@@ -212,7 +213,7 @@ export function DreamSimulacrumScreen({
           )}
         </div>
 
-        {sim && (
+        {sim && FEATURE_NFT_UI_ENABLED ? (
           <div className="p-4 flex flex-wrap gap-2 border-t border-line">
             <button
               type="button"
@@ -229,7 +230,7 @@ export function DreamSimulacrumScreen({
               <Share2 className="w-4 h-4" /> Mint NFT
             </button>
           </div>
-        )}
+        ) : null}
       </div>
     </div>
     </ProFeatureGate>
