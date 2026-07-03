@@ -38,7 +38,7 @@
  *   500 — Unexpected server error
  */
 
-import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
+
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -340,7 +340,7 @@ async function analyzeWithNemotron(text: string): Promise<ProviderResult> {
 
 // ── Main Handler ──────────────────────────────────────────────
 
-serve(async (req: Request): Promise<Response> => {
+Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: CORS_HEADERS });
   }

@@ -6,7 +6,7 @@ import { CaptureModeBar, type CaptureMode } from '../components/capture/CaptureM
 import { AudioWaveform } from '../components/capture/AudioWaveform';
 import { Mic, Square, Loader2, X, Upload, FileText, ArrowLeft } from 'lucide-react';
 import { mediaStorageManager } from '../lib/mediaStorage';
-import { processAudioJournal } from '../lib/videoJournalProcessor';
+
 
 interface RecordScreenProps {
   onComplete: (result: any, text: string) => Promise<void>;
@@ -34,8 +34,7 @@ function AudioJournalCapture({
 }) {
   const [isRecording, setIsRecording] = useState(false);
   const [duration, setDuration] = useState(0);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [isFinished, setIsFinished] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -98,7 +97,7 @@ function AudioJournalCapture({
       };
 
       recorder.onstop = async () => {
-        setIsProcessing(true);
+        setIsSaving(true);
         cleanup();
 
         const audioBlob = new Blob(chunksRef.current, { type: mimeType });
@@ -123,16 +122,6 @@ function AudioJournalCapture({
         const audioUrl = URL.createObjectURL(audioBlob);
 
         try {
-          const { dream } = await processAudioJournal({
-            audioBlob,
-            audioUrl,
-            duration: recordingDuration,
-            mediaId: mediaId || undefined,
-          });
-          setIsFinished(true);
-          await onComplete({ ...dream, audioBlob, audioUrl, mediaId }, dream.content);
-        } catch (err) {
-          console.error('[AudioJournal] Pipeline failed:', err);
           await onComplete({
             audioBlob,
             audioUrl,
@@ -140,6 +129,8 @@ function AudioJournalCapture({
             mediaId,
             hasAudio: true,
           }, '');
+        } finally {
+          setIsSaving(false);
         }
       };
 
@@ -183,13 +174,12 @@ function AudioJournalCapture({
     onCancel();
   };
 
-  if (isProcessing || isFinished) {
+  if (isSaving) {
     return (
       <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50">
         <div className="text-center text-white px-6">
           <Loader2 className="w-12 h-12 animate-spin mx-auto mb-4" />
-          <p className="text-lg font-medium">Building your XAEL…</p>
-          <p className="text-sm text-white/60 mt-2">Transcribing voice, analysing tone, generating image</p>
+          <p className="text-lg font-medium">Saving your recording…</p>
         </div>
       </div>
     );
@@ -287,13 +277,7 @@ function UploadCapturePanel({
       } catch { /* continue */ }
 
       const audioUrl = URL.createObjectURL(file);
-      const { dream } = await processAudioJournal({
-        audioBlob: file,
-        audioUrl,
-        duration: 0,
-        mediaId: mediaId || undefined,
-      });
-      await onComplete({ ...dream, audioBlob: file, audioUrl, mediaId }, dream.content);
+      await onComplete({ audioBlob: file, audioUrl, duration: 0, mediaId }, '');
     } catch (err) {
       console.error('[Upload] Audio pipeline failed:', err);
       setError('Could not process audio file. Try a shorter clip or different format.');

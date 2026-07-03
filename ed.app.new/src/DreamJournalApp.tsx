@@ -26,6 +26,7 @@ import {
   Share2,
   Box,
   Glasses,
+  Loader2,
 } from 'lucide-react';
 import Shell from './components/Shell';
 import { TrackerScreen } from './components/tracker/TrackerScreen';
@@ -50,7 +51,15 @@ import {
 } from './lib/transcriptionWhisper';
 import { startBacklogRetryLoop, subscribeBacklogStatus } from './lib/backlogRetry';
 import ProfileAndSettings from './components/settings/ProfileAndSettings';
-import { processVideoJournal, processTextJournal } from './lib/videoJournalProcessor';
+import { processVideoJournal } from './lib/videoJournalProcessor';
+import {
+  createVideoStub,
+  createAudioStub,
+  createTextStub,
+  runVideoProcessing,
+  runAudioProcessing,
+  runTextProcessing,
+} from './lib/dreamBackgroundProcessor';
 import { WearableSettings } from './components/wearables/WearableSettings';
 import type { WearableConfig, WearableSleepRecord } from './lib/wearables';
 import AdminDashboard from './components/admin/AdminDashboard';
@@ -72,7 +81,11 @@ import { getSimulacrum, saveSimulacrum } from './lib/simulacra/simulacraService'
 import { getProfileIdForAssets } from './lib/assets/assetPersistence';
 import { saveNFTToSupabase } from './lib/dreamPersistence';
 import { triggerSilentMint } from './lib/silentMint';
-import { FEATURE_NFT_UI_ENABLED } from './config/features';
+import {
+  FEATURE_NFT_UI_ENABLED,
+  FEATURE_MESH_UI_ENABLED,
+  FEATURE_VR_UI_ENABLED,
+} from './config/features';
 
 const DreamSimulacrumScreen = lazy(() =>
   import('./screens/DreamSimulacrumScreen').then((m) => ({ default: m.DreamSimulacrumScreen })),
@@ -193,6 +206,7 @@ const DreamJournalApp = () => {
     moodValence?: number;
     sourcePhotos?: string[];
     audioFile?: string;
+    processingStatus?: 'processing' | 'complete' | 'failed';
   };
 
   const [dreams, setDreams] = useState<Dream[]>([]);
@@ -201,6 +215,7 @@ const DreamJournalApp = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [queuedTaskCount, setQueuedTaskCount] = useState(0);
+  const [processingDreamCount, setProcessingDreamCount] = useState(0);
   const [settings, setSettings] = useState({
     alarmTime: '07:00',
     alarmEnabled: true,
@@ -595,6 +610,53 @@ const DreamJournalApp = () => {
     } catch (error) {
       console.error('Storage error:', error);
     }
+  };
+
+  const enqueueDreamPipeline = (
+    dreamId: string,
+    run: () => Promise<Partial<Dream>>,
+  ) => {
+    setProcessingDreamCount((c) => c + 1);
+    run()
+      .then((patch) => {
+        setDreams((prev) => {
+          const updated = prev.map((d) =>
+            d.id === dreamId
+              ? { ...d, ...patch, processingStatus: 'complete' as const }
+              : d,
+          );
+          saveDreamsToStorage(updated).catch(console.error);
+          const finished = updated.find((d) => d.id === dreamId);
+          if (finished) {
+            syncDreamToSupabase(finished).catch((err: unknown) =>
+              console.warn('[DreamPipeline] Supabase sync error:', err),
+            );
+            rewardXAELForDream(
+              finished,
+              wallet?.address || authUser?.id || 'local-user',
+            );
+          }
+          return updated;
+        });
+      })
+      .catch((error) => {
+        console.error('[DreamPipeline] Background processing failed:', error);
+        setDreams((prev) => {
+          const updated = prev.map((d) =>
+            d.id === dreamId
+              ? {
+                  ...d,
+                  processingStatus: 'failed' as const,
+                  narrative:
+                    'Processing could not complete — your recording is saved. We will retry automatically.',
+                }
+              : d,
+          );
+          saveDreamsToStorage(updated).catch(console.error);
+          return updated;
+        });
+      })
+      .finally(() => setProcessingDreamCount((c) => Math.max(0, c - 1)));
   };
 
   // Generate dream image using free AI image generation (Pollinations.ai)
@@ -1828,6 +1890,7 @@ const DreamJournalApp = () => {
       active={route.screen}
       onNavigate={navigate}
       onOpenProfile={() => setShowProfile(true)}
+      processingDreamCount={processingDreamCount}
     >
 
       {queuedTaskCount > 0 && (
@@ -1837,30 +1900,10 @@ const DreamJournalApp = () => {
         </div>
       )}
 
-      {(isProcessing || isGeneratingImage) && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/20 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-cream/95 p-6 shadow-2xl shadow-ink/10">
-            <div className="flex items-center justify-between mb-5">
-              <div>
-                <p className="text-sm uppercase tracking-[0.28em] text-muted">Saving dream</p>
-                <h3 className="text-xl font-semibold text-ink">{isProcessing ? 'Reconstructing your experience…' : 'Painting your dream visualization…'}</h3>
-              </div>
-              <div className="w-12 h-12 rounded-3xl bg-sage/10 flex items-center justify-center">
-                <div className="w-8 h-8 border-4 border-sage border-t-transparent rounded-full animate-spin" />
-              </div>
-            </div>
-            <div className="space-y-3 text-sm text-muted">
-              <p>{isProcessing ? 'Finding themes, tone, and symbols in your entry.' : 'Rendering the mood, color, and composition for your dream image.'}</p>
-              <div className="rounded-2xl border border-line bg-parchment/90 p-4">
-                <div className="text-xs uppercase tracking-[0.2em] text-muted mb-2">What we are doing</div>
-                <ul className="space-y-2">
-                  <li>• Identifying the story and emotion</li>
-                  <li>• Verifying what feels true to you</li>
-                  <li>• Preparing a visual companion if enabled</li>
-                </ul>
-              </div>
-            </div>
-          </div>
+      {isGeneratingImage && (
+        <div className="mb-4 rounded-2xl border border-sage/20 bg-sage/5 px-4 py-2.5 flex items-center gap-2 text-sm text-sageDark">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          <span>Painting your dream visualization…</span>
         </div>
       )}
 
@@ -2225,7 +2268,7 @@ const DreamJournalApp = () => {
         )}
 
         <Suspense fallback={<AppLoadingScreen message="Loading immersive view…" />}>
-          {route.screen === 'simulacrum' && route.dreamId && (() => {
+          {FEATURE_MESH_UI_ENABLED && route.screen === 'simulacrum' && route.dreamId && (() => {
             const d = dreams.find((x) => x.id === route.dreamId);
             if (!d) return <p className="text-muted text-center py-12">Dream not found.</p>;
             return (
@@ -2239,7 +2282,7 @@ const DreamJournalApp = () => {
             );
           })()}
 
-          {route.screen === 'vr' && route.dreamId && (() => {
+          {FEATURE_VR_UI_ENABLED && route.screen === 'vr' && route.dreamId && (() => {
             const d = dreams.find((x) => x.id === route.dreamId);
             if (!d) return null;
             return (
@@ -2266,38 +2309,22 @@ const DreamJournalApp = () => {
       {(route.screen === 'record' || route.screen === 'capture') && (
         <RecordScreen
           onComplete={async (result, text) => {
-            let newDream;
+            let newDream: Dream;
+            let backgroundJob: (() => Promise<Partial<Dream>>) | null = null;
 
-            // Audio pipeline already built the XAEL (record or audio upload)
-            if (result.id && result.captureMode === 'audio' && result.narrative) {
-              newDream = result;
-            } else if (result.uploadedText && text.trim().length >= 10) {
-              setIsProcessing(true);
-              try {
-                const { analysis, generatedImage } = await processTextJournal(text.trim());
-                newDream = {
-                  id: `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                  date: new Date().toISOString(),
-                  content: text.trim(),
-                  category: analysis.category,
-                  themes: analysis.themes,
-                  emotion: analysis.emotion,
-                  symbols: analysis.symbols,
-                  narrative: analysis.narrative,
-                  nugget: analysis.nugget,
-                  interpretation: analysis.interpretation,
-                  captureMode: 'text',
-                  sourceFile: result.fileName,
-                  generatedImage,
-                  isSample: false,
-                };
-              } finally {
-                setIsProcessing(false);
-              }
+            if (result.uploadedText && text.trim().length >= 10) {
+              newDream = createTextStub(text, result.fileName) as Dream;
+              backgroundJob = () => runTextProcessing(text);
             } else if (result.videoUrl || result.videoBlob) {
-              setIsProcessing(true);
-              try {
-                const { dream } = await processVideoJournal({
+              newDream = createVideoStub({
+                videoUrl: result.videoUrl,
+                thumbnail: result.thumbnail,
+                duration: result.duration,
+                mediaId: result.mediaId,
+              }) as Dream;
+              const dreamId = newDream.id;
+              backgroundJob = async () => {
+                const patch = await runVideoProcessing({
                   videoBlob: result.videoBlob,
                   videoUrl: result.videoUrl,
                   thumbnail: result.thumbnail,
@@ -2305,112 +2332,51 @@ const DreamJournalApp = () => {
                   mediaId: result.mediaId,
                   hasAudio: result.hasAudio,
                 });
-                newDream = dream;
-
                 if (result.videoBlob && supabaseClient) {
                   try {
                     const user = await getCurrentUser();
-                    if (user) {
+                    if (user && patch.videoCapture) {
                       const path = `${user.id || 'anon'}/video-${Date.now()}.webm`;
                       const { error: uploadErr } = await supabaseClient.storage
                         .from('dream-media')
-                        .upload(path, result.videoBlob, { contentType: result.videoBlob.type || 'video/webm', upsert: true });
+                        .upload(path, result.videoBlob, {
+                          contentType: result.videoBlob.type || 'video/webm',
+                          upsert: true,
+                        });
                       if (!uploadErr) {
-                        const { data: pub } = supabaseClient.storage.from('dream-media').getPublicUrl(path);
-                        if (pub?.publicUrl && newDream.videoCapture) {
-                          newDream.videoCapture.url = pub.publicUrl;
-                          console.log('[VideoRecord] Video uploaded to Supabase Storage:', pub.publicUrl);
+                        const { data: pub } = supabaseClient.storage
+                          .from('dream-media')
+                          .getPublicUrl(path);
+                        if (pub?.publicUrl) {
+                          patch.videoCapture = {
+                            ...patch.videoCapture,
+                            url: pub.publicUrl,
+                          };
                         }
-                      } else {
-                        console.warn('[VideoRecord] Supabase Storage upload failed:', uploadErr.message);
                       }
                     }
                   } catch (e) {
                     console.warn('[VideoRecord] Supabase video upload error (non-fatal):', e);
                   }
                 }
-              } catch (error) {
-                console.error('[RecordScreen] Video journal processing failed:', error);
-                alert('Saved your video but transcription/analysis failed. You can edit the entry in your journal.');
-                newDream = {
-                  id: `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                  date: new Date().toISOString(),
-                  content: 'Video journal entry - processing failed, watch video for details',
-                  category: 'video-journal',
-                  themes: ['video', 'personal-recording'],
-                  emotion: 'neutral',
-                  symbols: [],
-                  narrative: 'Video journal recording (processing failed)',
-                  nugget: `Video journal (${Math.floor(result.duration / 60)}:${(result.duration % 60).toString().padStart(2, '0')})`,
-                  interpretation: { symbols: {}, meaning: 'Video saved but AI processing failed', commonPattern: '' },
-                  captureMode: 'video',
-                  videoCapture: {
-                    url: result.videoUrl,
-                    capturedAt: new Date().toISOString(),
-                    duration: result.duration,
-                    thumbnail: result.thumbnail,
-                    mediaId: result.mediaId,
-                  },
-                  generatedImage: result.thumbnail
-                    ? { url: result.thumbnail, prompt: 'Video thumbnail', style: 'photo', generatedAt: new Date().toISOString(), source: 'video-capture' }
-                    : null,
-                  isSample: false,
-                };
-              } finally {
-                setIsProcessing(false);
-              }
-            } else if (result.audioUrl || result.audioBlob) {
-              const audioDuration = result.duration || 0;
-              let transcriptText = text || '';
-
-              if (result.audioBlob && !text?.trim()) {
-                setIsProcessing(true);
-                try {
-                  const transcription = await transcribeAudio(result.audioBlob, {
-                    onProgress: (status) => console.log('[AudioJournal]', status),
-                  });
-                  if (transcription.text && transcription.source !== 'fallback') {
-                    transcriptText = transcription.text.trim();
-                  }
-                } catch (err) {
-                  console.warn('[AudioJournal] Transcription failed:', err);
-                  transcriptText = 'Audio journal entry — transcription queued, will retry automatically.';
-                } finally {
-                  setIsProcessing(false);
-                }
-              }
-
-              newDream = {
-                id: `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                date: new Date().toISOString(),
-                content: transcriptText || 'Audio journal entry',
-                category: 'audio-journal',
-                themes: ['audio', 'voice-note', 'personal-recording'],
-                emotion: 'neutral',
-                symbols: [],
-                narrative: transcriptText || 'Audio journal recording',
-                nugget: transcriptText
-                  ? transcriptText.substring(0, 90) + (transcriptText.length > 90 ? '...' : '')
-                  : `Audio journal (${Math.floor(audioDuration / 60)}:${(audioDuration % 60).toString().padStart(2, '0')})`,
-                interpretation: {
-                  symbols: {},
-                  meaning: 'Voice journal - personal reflection',
-                  commonPattern: '',
-                },
-                captureMode: 'audio',
-                audioCapture: {
-                  url: result.audioUrl,
-                  capturedAt: new Date().toISOString(),
-                  duration: audioDuration,
-                  mediaId: result.mediaId,
-                },
-                isSample: false,
+                return { ...patch, id: dreamId };
               };
-            } else {
-              // Text capture result from DreamCapture
+            } else if (result.audioUrl || result.audioBlob) {
+              newDream = createAudioStub({
+                audioUrl: result.audioUrl,
+                duration: result.duration || 0,
+                mediaId: result.mediaId,
+              }) as Dream;
+              backgroundJob = () =>
+                runAudioProcessing({
+                  audioBlob: result.audioBlob,
+                  audioUrl: result.audioUrl,
+                  duration: result.duration || 0,
+                  mediaId: result.mediaId,
+                });
+            } else if (result.analysis) {
               const analysis = result.analysis;
               const imageAsset = result.image;
-
               newDream = {
                 id: `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
                 date: new Date().toISOString(),
@@ -2437,24 +2403,30 @@ const DreamJournalApp = () => {
                     }
                   : null,
                 captureMode: 'text',
+                processingStatus: 'complete',
                 isSample: false,
               };
+            } else {
+              return;
             }
 
-            // Save to state
             const updatedDreams = [newDream, ...dreams];
             setDreams(updatedDreams);
             await saveDreamsToStorage(updatedDreams);
 
-            const recordUserId = wallet?.address || authUser?.id || 'local-user';
-            rewardXAELForDream(newDream, recordUserId);
-
-            // Sync to Supabase (non-blocking)
             syncDreamToSupabase(newDream).catch((err: unknown) => {
               console.warn('[RecordScreen] Supabase sync error:', err);
             });
 
-            // Navigate to the new dream detail
+            if (backgroundJob) {
+              enqueueDreamPipeline(newDream.id, backgroundJob);
+            } else {
+              rewardXAELForDream(
+                newDream,
+                wallet?.address || authUser?.id || 'local-user',
+              );
+            }
+
             navigate('dream', newDream.id);
           }}
           onCancel={() => navigate('home')}
@@ -2470,29 +2442,30 @@ const DreamJournalApp = () => {
               return;
             }
 
-            setIsProcessing(true);
-            try {
-              const { dream: newDream } = await processVideoJournal({
+            const newDream = createVideoStub({
+              videoUrl,
+              thumbnail: thumbnailUrl || undefined,
+              duration,
+            }) as Dream;
+
+            const updatedDreams = [newDream, ...dreams];
+            setDreams(updatedDreams);
+            await saveDreamsToStorage(updatedDreams);
+            syncDreamToSupabase(newDream).catch((err: unknown) => {
+              console.warn('[VideoJournal] Supabase sync error:', err);
+            });
+
+            enqueueDreamPipeline(newDream.id, () =>
+              runVideoProcessing({
                 videoBlob,
                 videoUrl,
                 thumbnail: thumbnailUrl || undefined,
                 duration,
                 capturedEmotion: capturedEmotionFromVideo,
-              });
+              }),
+            );
 
-              const updatedDreams = [newDream, ...dreams];
-              setDreams(updatedDreams);
-              await saveDreamsToStorage(updatedDreams);
-              syncDreamToSupabase(newDream).catch((err: unknown) => {
-                console.warn('[VideoJournal] Supabase sync error:', err);
-              });
-              navigate('dream', newDream.id);
-            } catch (error) {
-              console.error('[VideoJournal] Processing failed:', error);
-              alert('Failed to process video journal. Please try again.');
-            } finally {
-              setIsProcessing(false);
-            }
+            navigate('dream', newDream.id);
           }}
           onCancel={() => navigate('record')}
         />
@@ -2517,6 +2490,18 @@ const DreamJournalApp = () => {
             >
               <ArrowLeft className="w-4 h-4" strokeWidth={1.75} /> Journal
             </button>
+
+            {detailDream.processingStatus === 'processing' && (
+              <div className="rounded-2xl border border-sage/20 bg-sage/5 px-4 py-3 flex items-center gap-3 text-sm text-sageDark">
+                <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                <span>Building your XAEL in the background — you can keep browsing while we transcribe, analyse, and generate your image.</span>
+              </div>
+            )}
+            {detailDream.processingStatus === 'failed' && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                Processing could not finish yet — your recording is saved and we will retry automatically.
+              </div>
+            )}
           <div className="rounded-3xl border border-line bg-cream shadow-lift overflow-hidden">
           <div className="space-y-4 p-5 sm:p-6">
             {/* Dream Visualizer — "Visualize Dream" button + image display */}
@@ -2535,43 +2520,45 @@ const DreamJournalApp = () => {
               }}
             />
 
-            <details className="rounded-2xl border border-sage/20 bg-sage/5 overflow-hidden group">
-              <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-sageDark list-none flex items-center justify-between">
-                <span className="flex items-center gap-2">
-                  <Box className="w-4 h-4" strokeWidth={1.75} />
-                  Advanced asset pipeline (depth · skybox · 3D mesh)
-                </span>
-                <ChevronRight className="w-4 h-4 transition group-open:rotate-90" />
-              </summary>
-              <div className="border-t border-sage/15 bg-ink/95 text-cream rounded-b-2xl">
-                <Suspense fallback={<p className="p-4 text-sm text-muted">Loading generator…</p>}>
-                  <DreamAssetGenerator
-                    dreamId={detailDream.id}
-                    dreamText={detailDream.narrative || detailDream.content}
-                    dreamNugget={detailDream.nugget}
-                    dreamEmotion={detailDream.emotion}
-                    dreamThemes={detailDream.themes}
-                    existingImageUrl={detailDream.generatedImage?.url}
-                    onEnterVR={({ skyboxUrl, assets }) => {
-                      navigate('vr', detailDream.id);
-                    }}
-                    onAssetsGenerated={(assets) => {
-                      const parallax = assets.find((a) => a.type === 'parallax_video' && a.result_url);
-                      const mesh = assets.find((a) => a.type === 'mesh_3d' && a.result_url);
-                      if (parallax?.result_url) {
-                        (detailDream as { parallaxVideoUrl?: string }).parallaxVideoUrl = parallax.result_url;
-                      }
-                      if (mesh?.result_url) {
-                        const sim = getSimulacrum(detailDream.id);
-                        if (sim) {
-                          saveSimulacrum({ ...sim, meshUrl: mesh.result_url, mode: 'mesh_glb' });
+            {FEATURE_MESH_UI_ENABLED && (
+              <details className="rounded-2xl border border-sage/20 bg-sage/5 overflow-hidden group">
+                <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-sageDark list-none flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <Box className="w-4 h-4" strokeWidth={1.75} />
+                    Advanced asset pipeline (depth · skybox · 3D mesh)
+                  </span>
+                  <ChevronRight className="w-4 h-4 transition group-open:rotate-90" />
+                </summary>
+                <div className="border-t border-sage/15 bg-ink/95 text-cream rounded-b-2xl">
+                  <Suspense fallback={<p className="p-4 text-sm text-muted">Loading generator…</p>}>
+                    <DreamAssetGenerator
+                      dreamId={detailDream.id}
+                      dreamText={detailDream.narrative || detailDream.content}
+                      dreamNugget={detailDream.nugget}
+                      dreamEmotion={detailDream.emotion}
+                      dreamThemes={detailDream.themes}
+                      existingImageUrl={detailDream.generatedImage?.url}
+                      onEnterVR={({ skyboxUrl, assets }) => {
+                        navigate('vr', detailDream.id);
+                      }}
+                      onAssetsGenerated={(assets) => {
+                        const parallax = assets.find((a) => a.type === 'parallax_video' && a.result_url);
+                        const mesh = assets.find((a) => a.type === 'mesh_3d' && a.result_url);
+                        if (parallax?.result_url) {
+                          (detailDream as { parallaxVideoUrl?: string }).parallaxVideoUrl = parallax.result_url;
                         }
-                      }
-                    }}
-                  />
-                </Suspense>
-              </div>
-            </details>
+                        if (mesh?.result_url) {
+                          const sim = getSimulacrum(detailDream.id);
+                          if (sim) {
+                            saveSimulacrum({ ...sim, meshUrl: mesh.result_url, mode: 'mesh_glb' });
+                          }
+                        }
+                      }}
+                    />
+                  </Suspense>
+                </div>
+              </details>
+            )}
 
             <div className="flex items-start justify-between">
               <div>
@@ -2736,23 +2723,27 @@ const DreamJournalApp = () => {
             )}
 
             <div className="grid grid-cols-2 gap-3 pt-1">
-              <button
-                type="button"
-                onClick={() => navigate('simulacrum', detailDream.id)}
-                className="col-span-2 bg-sage hover:bg-sageDark text-cream py-3 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm shadow-paper"
-              >
-                <Box className="w-4 h-4" strokeWidth={1.75} />
-                Explore 3D Simulacrum
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate('vr', detailDream.id)}
-                disabled={!detailDream.generatedImage?.url}
-                className="border border-sage/30 bg-sage/10 hover:bg-sage/20 text-sageDark py-3 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm disabled:opacity-40"
-              >
-                <Glasses className="w-4 h-4" strokeWidth={1.75} />
-                Enter VR
-              </button>
+              {FEATURE_MESH_UI_ENABLED && (
+                <button
+                  type="button"
+                  onClick={() => navigate('simulacrum', detailDream.id)}
+                  className="col-span-2 bg-sage hover:bg-sageDark text-cream py-3 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm shadow-paper"
+                >
+                  <Box className="w-4 h-4" strokeWidth={1.75} />
+                  Explore 3D Simulacrum
+                </button>
+              )}
+              {FEATURE_VR_UI_ENABLED && (
+                <button
+                  type="button"
+                  onClick={() => navigate('vr', detailDream.id)}
+                  disabled={!detailDream.generatedImage?.url}
+                  className="border border-sage/30 bg-sage/10 hover:bg-sage/20 text-sageDark py-3 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm disabled:opacity-40"
+                >
+                  <Glasses className="w-4 h-4" strokeWidth={1.75} />
+                  Enter VR
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => shareDream(detailDream)}

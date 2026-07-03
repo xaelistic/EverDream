@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Palette, Brain, Camera, Watch, Shield, Award, Eye, ChevronRight } from 'lucide-react';
-import { FEATURE_NFT_UI_ENABLED } from '../config/features';
+import { FEATURE_NFT_UI_ENABLED, FEATURE_SKINS_UI_ENABLED } from '../config/features';
 import type { SkinId } from '../contexts/SkinContext';
 import { getSkinMeta } from '../lib/skins';
 import { SkinPickerModal } from '../components/settings/SkinPickerModal';
@@ -32,38 +32,41 @@ export function MoreScreen({ skin, isThemed, navigate }: MoreScreenProps) {
         </p>
       </div>
 
-      {/* Appearance */}
-      <div className={`rounded-2xl border overflow-hidden ${card}`}>
-        <div className={`px-4 py-3 border-b ${cardBorder}`}>
-          <h3 className="text-xs uppercase tracking-wider text-muted font-medium">Appearance</h3>
-        </div>
-        <button
-          type="button"
-          onClick={() => setSkinPickerOpen(true)}
-          className={`w-full flex items-center gap-3 p-4 text-left transition ${rowHover}`}
-        >
-          <span className={`flex h-10 w-10 items-center justify-center rounded-full border ${iconWrap}`}>
-            <Palette className="w-5 h-5 text-duskDeep" strokeWidth={1.75} />
-          </span>
-          <span className="flex-1 min-w-0">
-            <span className="block font-medium text-ink">App Skin</span>
-            <span className="block text-xs text-muted">
-              {currentSkin.name} — {currentSkin.tagline}
-            </span>
-          </span>
-          <div className="flex items-center gap-2 shrink-0">
-            <div
-              className="w-8 h-8 rounded-lg border border-white/50 shadow-sm"
-              style={{
-                background: `linear-gradient(135deg, ${currentSkin.preview[0]}, ${currentSkin.preview[1]}, ${currentSkin.preview[2]})`,
-              }}
-            />
-            <ChevronRight className="w-4 h-4 text-muted" strokeWidth={1.75} />
+      {FEATURE_SKINS_UI_ENABLED && (
+        <>
+          <div className={`rounded-2xl border overflow-hidden ${card}`}>
+            <div className={`px-4 py-3 border-b ${cardBorder}`}>
+              <h3 className="text-xs uppercase tracking-wider text-muted font-medium">Appearance</h3>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSkinPickerOpen(true)}
+              className={`w-full flex items-center gap-3 p-4 text-left transition ${rowHover}`}
+            >
+              <span className={`flex h-10 w-10 items-center justify-center rounded-full border ${iconWrap}`}>
+                <Palette className="w-5 h-5 text-duskDeep" strokeWidth={1.75} />
+              </span>
+              <span className="flex-1 min-w-0">
+                <span className="block font-medium text-ink">App Skin</span>
+                <span className="block text-xs text-muted">
+                  {currentSkin.name} — {currentSkin.tagline}
+                </span>
+              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                <div
+                  className="w-8 h-8 rounded-lg border border-white/50 shadow-sm"
+                  style={{
+                    background: `linear-gradient(135deg, ${currentSkin.preview[0]}, ${currentSkin.preview[1]}, ${currentSkin.preview[2]})`,
+                  }}
+                />
+                <ChevronRight className="w-4 h-4 text-muted" strokeWidth={1.75} />
+              </div>
+            </button>
           </div>
-        </button>
-      </div>
 
-      <SkinPickerModal isOpen={skinPickerOpen} onClose={() => setSkinPickerOpen(false)} />
+          <SkinPickerModal isOpen={skinPickerOpen} onClose={() => setSkinPickerOpen(false)} />
+        </>
+      )}
 
       {/* Features */}
       <div className={`rounded-2xl border overflow-hidden ${card}`}>

@@ -26,7 +26,7 @@
  *   500 — Unexpected server error
  */
 
-import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
+
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -195,7 +195,7 @@ async function generateWithFalAI(
 
 // ── Handler ──────────────────────────────────────────────────
 
-serve(async (req: Request): Promise<Response> => {
+Deno.serve(async (req: Request): Promise<Response> => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: CORS_HEADERS });

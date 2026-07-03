@@ -10,7 +10,7 @@
  *   { status: "ok", functions: { name, configured: boolean }[], timestamp: string }
  */
 
-import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
+
 
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -25,7 +25,7 @@ interface FunctionStatus {
   missingSecrets: string[];
 }
 
-serve(async (req: Request): Promise<Response> => {
+Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: CORS_HEADERS });
   }

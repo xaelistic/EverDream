@@ -132,8 +132,7 @@ export function VideoCaptureFlow({
   const [audioEnabled, setAudioEnabled] = useState(enableAudio);
   const [error, setError] = useState<string | null>(null);
   const [permissionGranted, setPermissionGranted] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [isFinished, setIsFinished] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [currentEmotion, setCurrentEmotion] = useState<string | null>(null);
   const [savedMediaId, setSavedMediaId] = useState<string | null>(null);
 
@@ -236,7 +235,7 @@ export function VideoCaptureFlow({
       console.log('[VideoCapture] Chunks collected:', chunksRef.current.length);
       console.log('[VideoCapture] Total size:', chunksRef.current.reduce((acc, chunk) => acc + chunk.size, 0), 'bytes');
       
-      setIsProcessing(true);
+      setIsSaving(true);
       
       const videoBlob = new Blob(chunksRef.current, { type: recorder.mimeType });
       console.log('[VideoCapture] Video blob created:', videoBlob.size, 'bytes, type:', videoBlob.type);
@@ -306,8 +305,7 @@ export function VideoCaptureFlow({
         console.error('[VideoCapture] Error in onComplete callback:', error);
       }
 
-      // Stay on processing overlay until parent navigates away (fixes camera re-opening)
-      setIsFinished(true);
+      setIsSaving(false);
     };
     
     recorder.start(1000); // Collect data every second
@@ -384,18 +382,12 @@ export function VideoCaptureFlow({
     return 'bg-rose-500';
   };
 
-  // Stay on overlay while processing OR after handoff to parent pipeline
-  if (isProcessing || isFinished) {
+  if (isSaving) {
     return (
       <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50">
         <div className="text-center text-white">
           <Loader2 className="w-12 h-12 animate-spin mx-auto mb-4" />
-          <p className="text-lg font-medium">
-            {isFinished ? 'Building your XAEL…' : 'Processing your dream...'}
-          </p>
-          <p className="text-sm text-white/60 mt-2">
-            {isFinished ? 'Transcribing, analysing emotions, generating image' : 'This won\u2019t take long'}
-          </p>
+          <p className="text-lg font-medium">Saving your recording…</p>
         </div>
       </div>
     );

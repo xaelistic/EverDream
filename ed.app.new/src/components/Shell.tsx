@@ -2,17 +2,20 @@ import {
   BookOpen,
   CalendarDays,
   Home,
+  Loader2,
   Menu,
   Moon,
   User,
 } from 'lucide-react';
 import type { RouteScreen } from '../hooks/useHashRoute';
 import { useSkinFull } from '../contexts/SkinContext';
+import { useProfile } from '../hooks/useProfile';
 
 type ShellProps = {
   active: RouteScreen;
   onNavigate: (screen: RouteScreen) => void;
   onOpenProfile: () => void;
+  processingDreamCount?: number;
   children: React.ReactNode;
 };
 
@@ -42,8 +45,9 @@ function isNavActive(active: RouteScreen, screen: RouteScreen): boolean {
   return active === screen;
 }
 
-export default function Shell({ active, onNavigate, onOpenProfile, children }: ShellProps) {
+export default function Shell({ active, onNavigate, onOpenProfile, processingDreamCount = 0, children }: ShellProps) {
   const { isThemed } = useSkinFull();
+  const { profile } = useProfile();
   const recordTarget = getRecordButtonTarget(active);
 
   return (
@@ -76,14 +80,34 @@ export default function Shell({ active, onNavigate, onOpenProfile, children }: S
               )}
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onOpenProfile}
-            className={`p-2.5 rounded-full border transition-colors shrink-0 ${isThemed ? 'border-[var(--glass-border)] bg-[var(--glass-bg)] hover:bg-white/80' : 'border-line bg-cream hover:bg-parchment'}`}
-            aria-label="Profile"
-          >
-            <User className="w-5 h-5 text-muted" strokeWidth={1.5} />
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {processingDreamCount > 0 && (
+              <div
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border text-[10px] font-medium uppercase tracking-wide ${isThemed ? 'border-[var(--glass-border)] bg-[var(--glass-bg)] text-[var(--aqua-deep)]' : 'border-sage/25 bg-sage/10 text-sageDark'}`}
+                title="Dream processing in background"
+              >
+                <Loader2 className="w-3 h-3 animate-spin" />
+                <span className="hidden sm:inline">Building XAEL</span>
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={onOpenProfile}
+              className={`w-10 h-10 rounded-full border transition-colors overflow-hidden flex items-center justify-center shrink-0 ${isThemed ? 'border-[var(--glass-border)] bg-[var(--glass-bg)] hover:bg-white/80' : 'border-line bg-cream hover:bg-parchment'}`}
+              aria-label="Profile"
+            >
+              {profile?.avatarUrl ? (
+                <img
+                  src={profile.avatarUrl}
+                  alt=""
+                  className="w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <User className="w-5 h-5 text-muted" strokeWidth={1.5} />
+              )}
+            </button>
+          </div>
         </div>
       </header>
 

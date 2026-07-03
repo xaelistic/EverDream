@@ -25,6 +25,7 @@ import { useToast } from '../ui/Toast';
 import { supabase } from '../../lib/supabase/client';
 import { Capacitor } from '@capacitor/core';
 import { getPreferredPaymentChannel } from '../../lib/subscriptions/subscriptionService';
+import { FEATURE_SKINS_UI_ENABLED } from '../../config/features';
 
 // Safe localStorage helpers with try-catch wrappers
 function safeGetLocalStorage(key: string): string | null {
@@ -586,44 +587,45 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
         </div>
       </div>
 
-      {/* Theme Variant (A/B Testing) */}
-      <div className="p-4 bg-parchment/60 rounded-xl space-y-4">
-        <h3 className="font-semibold text-ink flex items-center gap-2">
-          <Sparkles className="w-5 h-5" />
-          Theme Variant (A/B Test)
-        </h3>
-        <p className="text-xs text-muted">
-          Help us test different designs. Your feedback shapes the future of EverDream.
-        </p>
+      {FEATURE_SKINS_UI_ENABLED && (
+        <div className="p-4 bg-parchment/60 rounded-xl space-y-4">
+          <h3 className="font-semibold text-ink flex items-center gap-2">
+            <Sparkles className="w-5 h-5" />
+            Theme Variant (A/B Test)
+          </h3>
+          <p className="text-xs text-muted">
+            Help us test different designs. Your feedback shapes the future of EverDream.
+          </p>
 
-        <div className="grid grid-cols-2 gap-3">
-          {THEME_VARIANTS.map((variant) => (
-            <button
-              key={variant.id}
-              onClick={() => {
-                setThemeVariant(variant.id);
-                setSkin(variant.id === 'modern' ? 'pearl' : 'default');
-                saveThemePreferences(themeMode, variant.id, autoTheme);
-              }}
-              className={`p-4 rounded-xl border-2 text-left transition-all ${
-                themeVariant === variant.id
-                  ? 'border-sage/100 bg-sage/10'
-                  : 'border-line hover:border-sage/40'
-              }`}
-            >
-              <div className="text-2xl mb-2">{variant.preview}</div>
-              <div className="font-semibold text-ink">{variant.label}</div>
-              <div className="text-xs text-muted mt-1">{variant.description}</div>
-              {themeVariant === variant.id && (
-                <div className="mt-2 flex items-center gap-1 text-sage text-xs font-medium">
-                  <Check className="w-3 h-3" />
-                  Selected
-                </div>
-              )}
-            </button>
-          ))}
+          <div className="grid grid-cols-2 gap-3">
+            {THEME_VARIANTS.map((variant) => (
+              <button
+                key={variant.id}
+                onClick={() => {
+                  setThemeVariant(variant.id);
+                  setSkin(variant.id === 'modern' ? 'pearl' : 'default');
+                  saveThemePreferences(themeMode, variant.id, autoTheme);
+                }}
+                className={`p-4 rounded-xl border-2 text-left transition-all ${
+                  themeVariant === variant.id
+                    ? 'border-sage/100 bg-sage/10'
+                    : 'border-line hover:border-sage/40'
+                }`}
+              >
+                <div className="text-2xl mb-2">{variant.preview}</div>
+                <div className="font-semibold text-ink">{variant.label}</div>
+                <div className="text-xs text-muted mt-1">{variant.description}</div>
+                {themeVariant === variant.id && (
+                  <div className="mt-2 flex items-center gap-1 text-sage text-xs font-medium">
+                    <Check className="w-3 h-3" />
+                    Selected
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Preview Card */}
       <div className="p-4 bg-gradient-to-br from-sage/100 to-pink-500 rounded-xl text-white">
