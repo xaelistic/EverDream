@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Moon,
   Calendar,
@@ -22,16 +22,11 @@ import {
   Camera,
   Check,
   LineChart,
-  Copy,
-  Share2,
-  Box,
-  Glasses,
-  Loader2,
 } from 'lucide-react';
 import Shell from './components/Shell';
 import { TrackerScreen } from './components/tracker/TrackerScreen';
 import { HomeScreen } from './screens/HomeScreen';
-import { ReflectionScreen } from './screens/ReflectionScreen';
+
 import { JournalScreen } from './screens/JournalScreen';
 import { InsightsScreen } from './screens/InsightsScreen';
 import { MoreScreen } from './screens/MoreScreen';
@@ -44,22 +39,11 @@ import { generateDreamImage } from './modules/sleep/dreamAssetGenerator';
 import { generateParallaxVideo } from './lib/assets/pipeline';
 import type { EmotionCapture } from './components/face/FacialEmotionDetector';
 import {
-  transcribeAudio,
   transcribeAudio as transcribeWithWhisper,
   transcribeWithWebSpeech,
   isSpeechRecognitionSupported,
 } from './lib/transcriptionWhisper';
-import { startBacklogRetryLoop, subscribeBacklogStatus } from './lib/backlogRetry';
-import ProfileAndSettings from './components/settings/ProfileAndSettings';
-import { processVideoJournal } from './lib/videoJournalProcessor';
-import {
-  createVideoStub,
-  createAudioStub,
-  createTextStub,
-  runVideoProcessing,
-  runAudioProcessing,
-  runTextProcessing,
-} from './lib/dreamBackgroundProcessor';
+import { processVideoJournal, processTextJournal } from './lib/videoJournalProcessor';
 import { WearableSettings } from './components/wearables/WearableSettings';
 import type { WearableConfig, WearableSleepRecord } from './lib/wearables';
 import AdminDashboard from './components/admin/AdminDashboard';
@@ -69,39 +53,10 @@ import { initPerformanceMonitor, startAPICall, endAPICall } from './lib/performa
 import { AppLoadingScreen, ErrorBanner, LoadingOverlay } from './components/ui';
 import { TermsModal } from './components/modal';
 import { ProfileHub } from './screens/ProfileHubScreen';
-import { PublicProfileScreen } from './screens/PublicProfileScreen';
-import { PrivacyScreen } from './screens/PrivacyScreen';
-import { normalizeSleepData, dreamToShareInput } from './lib/shareCard';
 import { getOrCreateWallet, createDreamNFT, mintNFT, saveNFT, type DreamNFT, type WalletIdentity } from './lib/nft';
-import { createListingFromNFT } from './lib/nftMarketplace';
-import { notifyNFTMinted } from './lib/discord';
-import { estimateDreamXAELValue } from './lib/xaelEconomy';
-import { rewardXAELForDream } from './lib/mintDreamRewards';
-import { getSimulacrum, saveSimulacrum } from './lib/simulacra/simulacraService';
-import { getProfileIdForAssets } from './lib/assets/assetPersistence';
-import { saveNFTToSupabase } from './lib/dreamPersistence';
-import { triggerSilentMint } from './lib/silentMint';
-import {
-  FEATURE_NFT_UI_ENABLED,
-  FEATURE_MESH_UI_ENABLED,
-  FEATURE_VR_UI_ENABLED,
-} from './config/features';
-
-const DreamSimulacrumScreen = lazy(() =>
-  import('./screens/DreamSimulacrumScreen').then((m) => ({ default: m.DreamSimulacrumScreen })),
-);
-const DreamVRScreen = lazy(() =>
-  import('./screens/DreamVRScreen').then((m) => ({ default: m.DreamVRScreen })),
-);
-const XAELExchangeScreen = lazy(() =>
-  import('./screens/XAELExchangeScreen').then((m) => ({ default: m.XAELExchangeScreen })),
-);
-const DreamCombineScreen = lazy(() =>
-  import('./screens/DreamCombineScreen').then((m) => ({ default: m.DreamCombineScreen })),
-);
-const DreamAssetGenerator = lazy(() => import('./components/assets/DreamAssetGenerator'));
 import DreamVisualizer from './components/dreams/DreamVisualizer';
 import DreamCapture from './components/dreams/DreamCapture';
+import ShareModal from './components/dreams/ShareModal';
 import { VideoJournalScreen } from './screens/VideoJournalScreen';
 import { analyzeDream, type DreamAnalysis } from './lib/dream-analyzer';
 import OnboardingFlow from './components/onboarding/OnboardingFlow';
@@ -119,20 +74,13 @@ import { initDreamService, syncFromSupabase } from './lib/dreamService';
 import { supabase as supabaseClient } from './lib/supabase/client';
 import { getCurrentUser } from './lib/supabase/client';
 import { useAuth } from './hooks/use-auth';
-import { initSubscriptions } from './lib/subscriptions/subscriptionService';
-import { canGenerateImage, recordImageGeneration } from './lib/subscriptions/usageLimits';
-import { loadCachedSubscription } from './lib/subscriptions/subscriptionStore';
+import { useSubscription } from './hooks/use-subscription';
 
 const DreamJournalApp = () => {
   const { route, navigate } = useHashRoute();
   const { skin, isThemed } = useSkinFull();
-  const { user: authUser } = useAuth();
-
-  useEffect(() => {
-    if (authUser?.id) {
-      initSubscriptions(authUser.id).catch((e) => console.warn('[Subscriptions] init failed', e));
-    }
-  }, [authUser?.id]);
+  const { user } = useAuth();
+  const { isAdmin, profile: userProfile, loading: subscriptionLoading } = useSubscription();
 
   // ── Dream type ──────────────────────────────────────────────
   type Dream = {
@@ -206,7 +154,6 @@ const DreamJournalApp = () => {
     moodValence?: number;
     sourcePhotos?: string[];
     audioFile?: string;
-    processingStatus?: 'processing' | 'complete' | 'failed';
   };
 
   const [dreams, setDreams] = useState<Dream[]>([]);
@@ -214,8 +161,6 @@ const DreamJournalApp = () => {
   const [currentEntry, setCurrentEntry] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
-  const [queuedTaskCount, setQueuedTaskCount] = useState(0);
-  const [processingDreamCount, setProcessingDreamCount] = useState(0);
   const [settings, setSettings] = useState({
     alarmTime: '07:00',
     alarmEnabled: true,
@@ -272,17 +217,6 @@ const DreamJournalApp = () => {
   const [capturedEmotions, setCapturedEmotions] = useState<EmotionCapture | null>(null);
   const [wearableData, setWearableData] = useState<WearableSleepRecord[]>([]);
   const [showOnboarding, setShowOnboarding] = useState(false);
-
-  // Auto-show onboarding for first-time users (after terms). 
-  // Triggered if no onboarded_at in profile or for testing by clearing storage + profile.
-  useEffect(() => {
-    // If you want to force for testing, you can also do localStorage.setItem('forceOnboarding', '1')
-    const force = localStorage.getItem('forceOnboarding') === '1';
-    if (force && !showOnboarding) {
-      setShowOnboarding(true);
-      localStorage.removeItem('forceOnboarding');
-    }
-  }, [showOnboarding]);
   const [wearableConfigs, setWearableConfigs] = useState<WearableConfig[]>([
     { provider: 'oura', auth: { provider: 'oura', accessToken: '' }, enabled: false },
     { provider: 'apple_health', auth: { provider: 'apple_health', accessToken: '' }, enabled: false },
@@ -315,31 +249,24 @@ const DreamJournalApp = () => {
     const lastDream = dreams.find((d) => !d.isSample && d.sleepData);
     return lastDream?.sleepData || null;
   }, [wearableData, dreams]);
-
-  const shareSleepData = useMemo(
-    () => normalizeSleepData(reflectionSleepData),
-    [reflectionSleepData],
-  );
-
-  const shareDreamData = useMemo(() => {
-    const real = dreams.filter((d) => !d.isSample);
-    if (real.length === 0) return null;
-    const latest = [...real].sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
-    )[0];
-    return dreamToShareInput(latest);
-  }, [dreams]);
-
-  const shareReflectionData = useMemo(
-    () => ({
-      mood: reflectionMood || 'reflective',
-      energy: reflectionEnergy,
-      quote: reflectionQuote.text,
-      quoteSource: reflectionQuote.source,
-    }),
-    [reflectionMood, reflectionEnergy, reflectionQuote],
-  );
   const [hasAcceptedTerms, setHasAcceptedTerms] = useState(false);
+
+  // Auto-show onboarding for first-time users (after terms).
+  // Triggered if no onboarded_at in profile, or via localStorage forceOnboarding=1 for QA.
+  useEffect(() => {
+    const force = localStorage.getItem('forceOnboarding') === '1';
+    if (force && !showOnboarding) {
+      setShowOnboarding(true);
+      localStorage.removeItem('forceOnboarding');
+      return;
+    }
+
+    if (!hasAcceptedTerms || showOnboarding || subscriptionLoading) return;
+    if (!user || user.isAnonymous) return;
+    if (userProfile && !userProfile.onboarded_at) {
+      setShowOnboarding(true);
+    }
+  }, [hasAcceptedTerms, showOnboarding, subscriptionLoading, user, userProfile]);
 
   const detailDream = useMemo(() => {
     if (route.screen !== 'dream' || !route.dreamId) return null;
@@ -509,12 +436,6 @@ const DreamJournalApp = () => {
     };
   }, []);
 
-  // Start backlog retry loop and subscribe to queue status
-  useEffect(() => {
-    startBacklogRetryLoop();
-    return subscribeBacklogStatus(setQueuedTaskCount);
-  }, []);
-
   // Track screen views on route change
   useEffect(() => {
     trackScreenView(route.screen);
@@ -612,69 +533,13 @@ const DreamJournalApp = () => {
     }
   };
 
-  const enqueueDreamPipeline = (
-    dreamId: string,
-    run: () => Promise<Partial<Dream>>,
-  ) => {
-    setProcessingDreamCount((c) => c + 1);
-    run()
-      .then((patch) => {
-        setDreams((prev) => {
-          const updated = prev.map((d) =>
-            d.id === dreamId
-              ? { ...d, ...patch, processingStatus: 'complete' as const }
-              : d,
-          );
-          saveDreamsToStorage(updated).catch(console.error);
-          const finished = updated.find((d) => d.id === dreamId);
-          if (finished) {
-            syncDreamToSupabase(finished).catch((err: unknown) =>
-              console.warn('[DreamPipeline] Supabase sync error:', err),
-            );
-            rewardXAELForDream(
-              finished,
-              wallet?.address || authUser?.id || 'local-user',
-            );
-          }
-          return updated;
-        });
-      })
-      .catch((error) => {
-        console.error('[DreamPipeline] Background processing failed:', error);
-        setDreams((prev) => {
-          const updated = prev.map((d) =>
-            d.id === dreamId
-              ? {
-                  ...d,
-                  processingStatus: 'failed' as const,
-                  narrative:
-                    'Processing could not complete — your recording is saved. We will retry automatically.',
-                }
-              : d,
-          );
-          saveDreamsToStorage(updated).catch(console.error);
-          return updated;
-        });
-      })
-      .finally(() => setProcessingDreamCount((c) => Math.max(0, c - 1)));
-  };
-
   // Generate dream image using free AI image generation (Pollinations.ai)
   const generateDreamImageAsync = async (dreamData: any) => {
-    const sub = loadCachedSubscription();
-    const { allowed, limit } = canGenerateImage(sub.tier);
-    if (!allowed) {
-      console.warn('[ImageGen] Monthly limit reached for free tier');
-      alert(`You've used all ${limit} free AI images this month. Upgrade in Settings → Subscription.`);
-      return null;
-    }
-
     setIsGeneratingImage(true);
     const perfCall = startAPICall('image_gen', 'pollinations.ai', 'GET', route.screen);
     try {
       const prompt = dreamData.narrative || dreamData.nugget || dreamData.content || 'a surreal dreamscape';
       const asset = await generateDreamImage(prompt);
-      recordImageGeneration();
       endAPICall(perfCall, 200);
       return {
         url: asset.url,
@@ -1228,9 +1093,6 @@ const DreamJournalApp = () => {
     await saveDreamsToStorage(updatedDreams);
     console.log('[SaveDream] Storage save complete');
 
-    const xaelMinted = rewardXAELForDream(newDream, userId);
-    console.log('[SaveDream] XAEL minted:', xaelMinted);
-
     // Sync to Supabase (non-blocking)
     syncDreamToSupabase(newDream).catch((err: unknown) => {
       console.warn('[SaveDream] Supabase sync error:', err);
@@ -1251,7 +1113,7 @@ const DreamJournalApp = () => {
     setShowAchievement({
       id: 'asset_created',
       title: 'Journal entry saved',
-      description: `+${xaelMinted} XAEL · depth ${newDream.assetMetadata.rarityScore}`,
+      description: `Pattern depth ${newDream.assetMetadata.rarityScore}`,
       icon: '💎'
     });
     setTimeout(() => setShowAchievement(null), 3000);
@@ -1550,161 +1412,11 @@ const DreamJournalApp = () => {
       const minted = await mintNFT(nft);
       saveNFT(minted);
       setMintedNFT(minted);
-      const price = estimateDreamXAELValue(
-        {
-          structure: {
-            narrative: dream.narrative || dream.content,
-            title: dream.nugget || 'Dream',
-            characters: [],
-            locations: [],
-            objects: [],
-            actions: [],
-            themes: dream.themes || [],
-            symbols: dream.symbols || [],
-            archetypes: [],
-          },
-          emotion: {
-            detectedEmotions: [],
-            sentimentScore: 0.5,
-            emotionalIntensity: 60,
-            dominantEmotion: dream.emotion || 'neutral',
-            secondaryEmotions: [],
-          },
-        },
-        dream.assetMetadata?.rarityScore ? dream.assetMetadata.rarityScore / 50 : 1,
-      );
-      const sim = getSimulacrum(dream.id);
-      const animationUrl =
-        sim?.meshUrl || sim?.parallaxVideoUrl || dream.parallaxVideoUrl || dream.generatedImage?.url;
-      createListingFromNFT(minted, price, { animationUrl });
-      notifyNFTMinted(minted.metadata.name, minted.tokenId || minted.id, minted.owner, minted.metadata.image);
-
-      getProfileIdForAssets().then((profileId) => {
-        if (profileId) saveNFTToSupabase(minted, dream.id, profileId).catch(() => {});
-      });
-      triggerSilentMint({
-        dream_id: dream.id,
-        content: dream.narrative || dream.content,
-        category: dream.category || 'normal',
-        image_url: minted.metadata.image,
-        animation_url: animationUrl,
-        metadata_uri: minted.metadata.external_url,
-        created_at: new Date().toISOString(),
-      }).catch(() => {});
     } catch (err) {
       setMintError(err instanceof Error ? err.message : 'Minting failed');
     } finally {
       setIsMinting(false);
     }
-  };
-
-  const generateShareableImage = async () => {
-    if (!selectedDream) return;
-
-    const canvas = document.createElement('canvas');
-    const size = 1080;
-    canvas.width = size;
-    canvas.height = size;
-    const ctx = canvas.getContext('2d');
-
-    // Dreamy gradient background
-    const grad = ctx.createLinearGradient(0, 0, 0, size);
-    grad.addColorStop(0, '#0f172a');
-    grad.addColorStop(0.5, '#1e1b4b');
-    grad.addColorStop(1, '#312e81');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, size, size);
-
-    // If we have a generated image, draw it as the hero visual (with overlay)
-    const hasImage = !!selectedDream.generatedImage?.url;
-    if (hasImage) {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      await new Promise((resolve) => {
-        img.onload = () => {
-          // Draw image covering most of the card, with dark gradient overlay at bottom
-          ctx.drawImage(img, 0, 0, size, size * 0.75);
-          const overlay = ctx.createLinearGradient(0, size * 0.55, 0, size);
-          overlay.addColorStop(0, 'rgba(15,23,42,0.1)');
-          overlay.addColorStop(1, 'rgba(15,23,42,0.95)');
-          ctx.fillStyle = overlay;
-          ctx.fillRect(0, 0, size, size);
-          resolve();
-        };
-        img.onerror = () => resolve(); // fallback if load fails
-        img.src = selectedDream.generatedImage.url;
-      });
-    } else {
-      // Decorative orb for non-image dreams
-      ctx.save();
-      ctx.fillStyle = 'rgba(167, 139, 250, 0.12)';
-      ctx.beginPath();
-      ctx.arc(size * 0.22, size * 0.22, 160, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-    }
-
-    // Top branding
-    ctx.fillStyle = hasImage ? '#e0e7ff' : '#c4b5fd';
-    ctx.font = 'bold 38px system-ui, sans-serif';
-    ctx.fillText('EVERDREAM', 70, 85);
-    ctx.font = '24px system-ui, sans-serif';
-    ctx.fillStyle = hasImage ? '#c7d2fe' : '#a5b4fc';
-    ctx.fillText('🌙 Dream Journal', 70, 120);
-
-    // Main content area
-    const nugget = selectedDream.nugget || selectedDream.content || 'A dream remembered...';
-    ctx.fillStyle = '#f1e7ff';
-    ctx.font = 'bold 48px Georgia, serif';
-
-    // Word wrap the nugget
-    const maxWidth = 860;
-    const lineHeight = 62;
-    let y = hasImage ? 620 : 380;
-    const words = nugget.split(' ');
-    let line = '';
-    for (let n = 0; n < words.length; n++) {
-      const testLine = line + words[n] + ' ';
-      const metrics = ctx.measureText(testLine);
-      if (metrics.width > maxWidth && n > 0) {
-        ctx.fillText(line, 70, y);
-        line = words[n] + ' ';
-        y += lineHeight;
-      } else {
-        line = testLine;
-      }
-    }
-    ctx.fillText(line, 70, y);
-
-    // Date + details bar
-    ctx.fillStyle = hasImage ? '#e0e7ff' : '#c4b5fd';
-    ctx.font = '28px system-ui, sans-serif';
-    const dateStr = new Date(selectedDream.date).toLocaleDateString(undefined, { 
-      month: 'short', day: 'numeric' 
-    });
-    ctx.fillText(dateStr, 70, y + 55);
-
-    if (selectedDream.emotion) {
-      ctx.fillStyle = 'rgba(167, 139, 250, 0.25)';
-      ctx.fillRect(70, y + 70, 260, 42);
-      ctx.fillStyle = '#e0e7ff';
-      ctx.font = '24px system-ui, sans-serif';
-      ctx.fillText(`✨ ${selectedDream.emotion}`, 82, y + 98);
-    }
-
-    // Bottom subtle branding
-    ctx.fillStyle = '#64748b';
-    ctx.font = '22px system-ui, sans-serif';
-    ctx.fillText('EverDream • Yours forever', 70, size - 70);
-
-    // Download
-    const link = document.createElement('a');
-    link.download = `everdream-${selectedDream.date}.png`;
-    link.href = canvas.toDataURL('image/png');
-    link.click();
-
-    setShowShareModal(false);
-    alert('✅ Card downloaded! Ready to post to Stories or your feed.');
   };
 
   const saveSettingsToStorage = async (settingsToSave) => {
@@ -1890,20 +1602,33 @@ const DreamJournalApp = () => {
       active={route.screen}
       onNavigate={navigate}
       onOpenProfile={() => setShowProfile(true)}
-      processingDreamCount={processingDreamCount}
     >
 
-      {queuedTaskCount > 0 && (
-        <div className="mb-4 rounded-2xl border border-sage/20 bg-sage/5 px-4 py-2.5 flex items-center gap-2 text-sm text-sageDark">
-          <div className="w-2 h-2 rounded-full bg-sage animate-pulse" />
-          <span>{queuedTaskCount} task{queuedTaskCount !== 1 ? 's' : ''} queued — retrying automatically</span>
-        </div>
-      )}
 
-      {isGeneratingImage && (
-        <div className="mb-4 rounded-2xl border border-sage/20 bg-sage/5 px-4 py-2.5 flex items-center gap-2 text-sm text-sageDark">
-          <Loader2 className="w-4 h-4 animate-spin" />
-          <span>Painting your dream visualization…</span>
+      {(isProcessing || isGeneratingImage) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/20 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-[2rem] border border-white/10 bg-cream/95 p-6 shadow-2xl shadow-ink/10">
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <p className="text-sm uppercase tracking-[0.28em] text-muted">Saving dream</p>
+                <h3 className="text-xl font-semibold text-ink">{isProcessing ? 'Reconstructing your experience…' : 'Painting your dream visualization…'}</h3>
+              </div>
+              <div className="w-12 h-12 rounded-3xl bg-sage/10 flex items-center justify-center">
+                <div className="w-8 h-8 border-4 border-sage border-t-transparent rounded-full animate-spin" />
+              </div>
+            </div>
+            <div className="space-y-3 text-sm text-muted">
+              <p>{isProcessing ? 'Finding themes, tone, and symbols in your entry.' : 'Rendering the mood, color, and composition for your dream image.'}</p>
+              <div className="rounded-2xl border border-line bg-parchment/90 p-4">
+                <div className="text-xs uppercase tracking-[0.2em] text-muted mb-2">What we are doing</div>
+                <ul className="space-y-2">
+                  <li>• Identifying the story and emotion</li>
+                  <li>• Verifying what feels true to you</li>
+                  <li>• Preparing a visual companion if enabled</li>
+                </ul>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1934,13 +1659,9 @@ const DreamJournalApp = () => {
             sleep={
               reflectionSleepData
                 ? {
-                    durationMinutes: (reflectionSleepData as { sleepDuration?: number; durationMinutes?: number }).sleepDuration
-                      ?? (reflectionSleepData as { durationMinutes?: number }).durationMinutes,
-                    quality: (reflectionSleepData as { quality?: number; sleepQuality?: number; score?: number }).quality
-                      ?? (reflectionSleepData as { sleepQuality?: number }).sleepQuality
-                      ?? (reflectionSleepData as { score?: number }).score,
-                    remMinutes: (reflectionSleepData as { estimatedREM?: number; remMinutes?: number }).estimatedREM
-                      ?? (reflectionSleepData as { remMinutes?: number }).remMinutes,
+                    durationMinutes: reflectionSleepData.sleepDuration,
+                    quality: reflectionSleepData.quality || reflectionSleepData.sleepQuality,
+                    remMinutes: reflectionSleepData.estimatedREM,
                     source: reflectionSleepData.source,
                   }
                 : null
@@ -1962,21 +1683,6 @@ const DreamJournalApp = () => {
               setShowDailyReflection(false);
               navigate('home');
             }}
-          />
-        )}
-
-        {route.screen === 'reflection' && (
-          <ReflectionScreen
-            navigate={navigate}
-            reflectionSleepData={reflectionSleepData}
-            reflectionQuote={reflectionQuote}
-            reflectionMood={reflectionMood}
-            setReflectionMood={setReflectionMood}
-            reflectionEnergy={reflectionEnergy}
-            setReflectionEnergy={setReflectionEnergy}
-            shareReflection={shareReflectionData}
-            shareSleep={shareSleepData}
-            shareDream={shareDreamData}
           />
         )}
 
@@ -2045,24 +1751,24 @@ const DreamJournalApp = () => {
             <h2 className="text-2xl font-bold mb-4">Your Dream Assets</h2>
             
             {/* Asset Overview */}
-            <div className="bg-gradient-to-br from-sage to-sageDark rounded-xl p-6 text-cream">
+            <div className="bg-gradient-to-br from-purple-600 to-pink-600 rounded-xl p-6">
               <h3 className="text-xl font-bold mb-4">Asset Portfolio</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <div className="text-3xl font-bold">{dreams.filter(d => !d.isSample).length}</div>
-                  <div className="text-sm text-cream/80">Total Assets</div>
+                  <div className="text-sm text-purple-100">Total Assets</div>
                 </div>
                 <div>
                   <div className="text-3xl font-bold">{insights?.avgRarity || '0.00'}</div>
-                  <div className="text-sm text-cream/80">Avg Rarity</div>
+                  <div className="text-sm text-purple-100">Avg Rarity</div>
                 </div>
                 <div>
                   <div className="text-3xl font-bold">${insights?.totalAssetValue || 0}</div>
-                  <div className="text-sm text-cream/80">Est. Value</div>
+                  <div className="text-sm text-purple-100">Est. Value</div>
                 </div>
                 <div>
                   <div className="text-3xl font-bold">{dreams.filter(d => !d.isSample && d.generatedImage).length}</div>
-                  <div className="text-sm text-cream/80">With Images</div>
+                  <div className="text-sm text-purple-100">With Images</div>
                 </div>
               </div>
             </div>
@@ -2078,7 +1784,7 @@ const DreamJournalApp = () => {
                 <p>• You retain full ownership and control</p>
                 <p>• Dreams are licensed, never sold</p>
                 <p>• Revocable at any time</p>
-                {FEATURE_NFT_UI_ENABLED ? <p>• NFT minting ready when you choose</p> : null}
+                <p>• NFT minting ready when you choose</p>
               </div>
             </div>
 
@@ -2252,79 +1958,204 @@ const DreamJournalApp = () => {
         )}
 
         {route.screen === 'privacy' && (
-          <PrivacyScreen
-            privacySettings={privacySettings}
-            setPrivacySettings={setPrivacySettings}
-            savePrivacySettings={savePrivacySettings}
-            exportAllData={exportAllData}
-            deleteAllUserData={deleteAllUserData}
-            setShowLicensing={setShowLicensing}
-            setShowTerms={setShowTerms}
-          />
+          <div className="space-y-4">
+            <h2 className="text-2xl font-bold mb-4">Privacy & Data Sovereignty</h2>
+            
+            {/* Quick Actions */}
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={exportAllData}
+                className="bg-blue-600 hover:bg-blue-700 py-3 rounded-lg transition flex items-center justify-center gap-2"
+              >
+                <Download className="w-4 h-4" />
+                Export All Data
+              </button>
+              <button
+                onClick={deleteAllUserData}
+                className="bg-red-600 hover:bg-red-700 py-3 rounded-lg transition flex items-center justify-center gap-2"
+              >
+                <X className="w-4 h-4" />
+                Delete Everything
+              </button>
+            </div>
+
+            {/* Privacy Settings */}
+            <div className="bg-white bg-opacity-10 backdrop-blur-sm rounded-xl p-4 border border-white border-opacity-10">
+              <h3 className="font-semibold mb-4 flex items-center gap-2">
+                <Shield className="w-5 h-5 text-cyan-300" />
+                Granular Privacy Controls
+              </h3>
+              <div className="space-y-4">
+                <PrivacyToggle
+                  label="AI Dream Analysis"
+                  description="Allow Claude AI to analyze dream content"
+                  value={privacySettings.aiAnalysis}
+                  onChange={(v) => {
+                    const newSettings = {...privacySettings, aiAnalysis: v};
+                    setPrivacySettings(newSettings);
+                    savePrivacySettings(newSettings);
+                  }}
+                  required={true}
+                  note="Required for core functionality"
+                />
+                
+                <PrivacyToggle
+                  label="Image Generation"
+                  description="Generate AI images from dreams"
+                  value={privacySettings.imageGeneration}
+                  onChange={(v) => {
+                    const newSettings = {...privacySettings, imageGeneration: v};
+                    setPrivacySettings(newSettings);
+                    savePrivacySettings(newSettings);
+                  }}
+                />
+
+                <PrivacyToggle
+                  label="Wearable Data Sync"
+                  description="Sync sleep data from wearable devices"
+                  value={privacySettings.wearableSync}
+                  onChange={(v) => {
+                    const newSettings = {...privacySettings, wearableSync: v};
+                    setPrivacySettings(newSettings);
+                    savePrivacySettings(newSettings);
+                  }}
+                />
+
+                <PrivacyToggle
+                  label="Anonymous Analytics"
+                  description="Share anonymous usage patterns (helps improve app)"
+                  value={privacySettings.anonymousAnalytics}
+                  onChange={(v) => {
+                    const newSettings = {...privacySettings, anonymousAnalytics: v};
+                    setPrivacySettings(newSettings);
+                    savePrivacySettings(newSettings);
+                  }}
+                />
+
+                <PrivacyToggle
+                  label="Third-Party Data Sharing"
+                  description="Allow dream baskets to license your content"
+                  value={privacySettings.thirdPartySharing}
+                  onChange={(v) => {
+                    const newSettings = {...privacySettings, thirdPartySharing: v};
+                    setPrivacySettings(newSettings);
+                    savePrivacySettings(newSettings);
+                  }}
+                  note="Required for monetization (Phase 3)"
+                />
+              </div>
+            </div>
+
+            {/* Data Storage Info */}
+            <div className="bg-white bg-opacity-10 backdrop-blur-sm rounded-xl p-4 border border-white border-opacity-10">
+              <h3 className="font-semibold mb-3">Where Your Data Lives</h3>
+              <div className="space-y-3 text-sm">
+                <div className="flex items-start gap-3">
+                  <Shield className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-semibold text-green-300">Local Storage (Primary)</div>
+                    <div className="text-purple-200">Browser IndexedDB on your device</div>
+                    <div className="text-xs text-purple-300 mt-1">You control this data completely</div>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <Cpu className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-semibold text-blue-300">Data Processors</div>
+                    <div className="text-purple-200">• Claude AI (Anthropic) - Analysis only</div>
+                    <div className="text-purple-200">• DALL-E (OpenAI) - Image generation</div>
+                    <div className="text-xs text-purple-300 mt-1">No data retention, processing only</div>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <Activity className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-semibold text-yellow-300">Transmission</div>
+                    <div className="text-purple-200">HTTPS/TLS 1.3 encrypted</div>
+                    <div className="text-xs text-purple-300 mt-1">All API calls are encrypted in transit</div>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <Moon className="w-5 h-5 text-purple-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-semibold text-purple-300">Future: Ethereum Storage</div>
+                    <div className="text-purple-200">IPFS + Ethereum for NFT minting</div>
+                    <div className="text-xs text-purple-300 mt-1">Phase 3: Decentralized storage option</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* GDPR Rights */}
+            <div className="bg-green-600 bg-opacity-20 rounded-xl p-4 border border-green-500 border-opacity-30">
+              <h3 className="font-semibold mb-2">Your GDPR Rights</h3>
+              <div className="text-sm space-y-1 text-green-100">
+                <div>✓ Right to Access (export your data anytime)</div>
+                <div>✓ Right to Rectification (edit your dreams)</div>
+                <div>✓ Right to Erasure (delete everything)</div>
+                <div>✓ Right to Data Portability (JSON export)</div>
+                <div>✓ Right to Object (opt-out controls)</div>
+                <div>✓ Right to Restrict Processing (granular controls)</div>
+              </div>
+            </div>
+
+            {/* Licensing Info */}
+            <button
+              onClick={() => setShowLicensing(true)}
+              className="w-full bg-purple-600 hover:bg-purple-700 py-3 rounded-lg transition"
+            >
+              View Open Source Licensing
+            </button>
+
+            {/* Terms */}
+            <button
+              onClick={() => setShowTerms(true)}
+              className="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg transition"
+            >
+              View Terms & Conditions
+            </button>
+          </div>
         )}
-
-        {route.screen === 'profile' && route.profileHandle && (
-          <PublicProfileScreen handle={route.profileHandle} navigate={navigate} />
-        )}
-
-        <Suspense fallback={<AppLoadingScreen message="Loading immersive view…" />}>
-          {FEATURE_MESH_UI_ENABLED && route.screen === 'simulacrum' && route.dreamId && (() => {
-            const d = dreams.find((x) => x.id === route.dreamId);
-            if (!d) return <p className="text-muted text-center py-12">Dream not found.</p>;
-            return (
-              <DreamSimulacrumScreen
-                dreamId={d.id}
-                title={d.nugget || 'Dream'}
-                narrative={d.narrative || d.content}
-                imageUrl={d.generatedImage?.url}
-                navigate={navigate}
-              />
-            );
-          })()}
-
-          {FEATURE_VR_UI_ENABLED && route.screen === 'vr' && route.dreamId && (() => {
-            const d = dreams.find((x) => x.id === route.dreamId);
-            if (!d) return null;
-            return (
-              <DreamVRScreen
-                dreamId={d.id}
-                title={d.nugget || 'Dream'}
-                imageUrl={d.generatedImage?.url}
-                parallaxVideoUrl={d.parallaxVideoUrl || undefined}
-                navigate={navigate}
-              />
-            );
-          })()}
-
-          {FEATURE_NFT_UI_ENABLED && route.screen === 'exchange' && (
-            <XAELExchangeScreen navigate={navigate} walletAddress={wallet?.address} />
-          )}
-
-          {FEATURE_NFT_UI_ENABLED && route.screen === 'combine' && (
-            <DreamCombineScreen navigate={navigate} />
-          )}
-        </Suspense>
 
       {/* Record (full page) — uses DreamCapture with pipeline progress */}
       {(route.screen === 'record' || route.screen === 'capture') && (
         <RecordScreen
           onComplete={async (result, text) => {
-            let newDream: Dream;
-            let backgroundJob: (() => Promise<Partial<Dream>>) | null = null;
+            let newDream;
 
-            if (result.uploadedText && text.trim().length >= 10) {
-              newDream = createTextStub(text, result.fileName) as Dream;
-              backgroundJob = () => runTextProcessing(text);
+            // Audio pipeline already built the XAEL (record or audio upload)
+            if (result.id && result.captureMode === 'audio' && result.narrative) {
+              newDream = result;
+            } else if (result.uploadedText && text.trim().length >= 10) {
+              setIsProcessing(true);
+              try {
+                const { analysis, generatedImage } = await processTextJournal(text.trim());
+                newDream = {
+                  id: `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                  date: new Date().toISOString(),
+                  content: text.trim(),
+                  category: analysis.category,
+                  themes: analysis.themes,
+                  emotion: analysis.emotion,
+                  symbols: analysis.symbols,
+                  narrative: analysis.narrative,
+                  nugget: analysis.nugget,
+                  interpretation: analysis.interpretation,
+                  captureMode: 'text',
+                  sourceFile: result.fileName,
+                  generatedImage,
+                  isSample: false,
+                };
+              } finally {
+                setIsProcessing(false);
+              }
             } else if (result.videoUrl || result.videoBlob) {
-              newDream = createVideoStub({
-                videoUrl: result.videoUrl,
-                thumbnail: result.thumbnail,
-                duration: result.duration,
-                mediaId: result.mediaId,
-              }) as Dream;
-              const dreamId = newDream.id;
-              backgroundJob = async () => {
-                const patch = await runVideoProcessing({
+              setIsProcessing(true);
+              try {
+                const { dream } = await processVideoJournal({
                   videoBlob: result.videoBlob,
                   videoUrl: result.videoUrl,
                   thumbnail: result.thumbnail,
@@ -2332,51 +2163,65 @@ const DreamJournalApp = () => {
                   mediaId: result.mediaId,
                   hasAudio: result.hasAudio,
                 });
+                newDream = dream;
+
                 if (result.videoBlob && supabaseClient) {
                   try {
                     const user = await getCurrentUser();
-                    if (user && patch.videoCapture) {
+                    if (user) {
                       const path = `${user.id || 'anon'}/video-${Date.now()}.webm`;
                       const { error: uploadErr } = await supabaseClient.storage
                         .from('dream-media')
-                        .upload(path, result.videoBlob, {
-                          contentType: result.videoBlob.type || 'video/webm',
-                          upsert: true,
-                        });
+                        .upload(path, result.videoBlob, { contentType: result.videoBlob.type || 'video/webm', upsert: true });
                       if (!uploadErr) {
-                        const { data: pub } = supabaseClient.storage
-                          .from('dream-media')
-                          .getPublicUrl(path);
-                        if (pub?.publicUrl) {
-                          patch.videoCapture = {
-                            ...patch.videoCapture,
-                            url: pub.publicUrl,
-                          };
+                        const { data: pub } = supabaseClient.storage.from('dream-media').getPublicUrl(path);
+                        if (pub?.publicUrl && newDream.videoCapture) {
+                          newDream.videoCapture.url = pub.publicUrl;
+                          console.log('[VideoRecord] Video uploaded to Supabase Storage:', pub.publicUrl);
                         }
+                      } else {
+                        console.warn('[VideoRecord] Supabase Storage upload failed:', uploadErr.message);
                       }
                     }
                   } catch (e) {
                     console.warn('[VideoRecord] Supabase video upload error (non-fatal):', e);
                   }
                 }
-                return { ...patch, id: dreamId };
-              };
-            } else if (result.audioUrl || result.audioBlob) {
-              newDream = createAudioStub({
-                audioUrl: result.audioUrl,
-                duration: result.duration || 0,
-                mediaId: result.mediaId,
-              }) as Dream;
-              backgroundJob = () =>
-                runAudioProcessing({
-                  audioBlob: result.audioBlob,
-                  audioUrl: result.audioUrl,
-                  duration: result.duration || 0,
-                  mediaId: result.mediaId,
-                });
-            } else if (result.analysis) {
+              } catch (error) {
+                console.error('[RecordScreen] Video journal processing failed:', error);
+                alert('Saved your video but transcription/analysis failed. You can edit the entry in your journal.');
+                newDream = {
+                  id: `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                  date: new Date().toISOString(),
+                  content: 'Video journal entry - processing failed, watch video for details',
+                  category: 'video-journal',
+                  themes: ['video', 'personal-recording'],
+                  emotion: 'neutral',
+                  symbols: [],
+                  narrative: 'Video journal recording (processing failed)',
+                  nugget: `Video journal (${Math.floor(result.duration / 60)}:${(result.duration % 60).toString().padStart(2, '0')})`,
+                  interpretation: { symbols: {}, meaning: 'Video saved but AI processing failed', commonPattern: '' },
+                  captureMode: 'video',
+                  videoCapture: {
+                    url: result.videoUrl,
+                    capturedAt: new Date().toISOString(),
+                    duration: result.duration,
+                    thumbnail: result.thumbnail,
+                    mediaId: result.mediaId,
+                  },
+                  generatedImage: result.thumbnail
+                    ? { url: result.thumbnail, prompt: 'Video thumbnail', style: 'photo', generatedAt: new Date().toISOString(), source: 'video-capture' }
+                    : null,
+                  isSample: false,
+                };
+              } finally {
+                setIsProcessing(false);
+              }
+            } else {
+              // Text capture result from DreamCapture
               const analysis = result.analysis;
               const imageAsset = result.image;
+
               newDream = {
                 id: `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
                 date: new Date().toISOString(),
@@ -2403,30 +2248,21 @@ const DreamJournalApp = () => {
                     }
                   : null,
                 captureMode: 'text',
-                processingStatus: 'complete',
                 isSample: false,
               };
-            } else {
-              return;
             }
 
+            // Save to state
             const updatedDreams = [newDream, ...dreams];
             setDreams(updatedDreams);
             await saveDreamsToStorage(updatedDreams);
 
+            // Sync to Supabase (non-blocking)
             syncDreamToSupabase(newDream).catch((err: unknown) => {
               console.warn('[RecordScreen] Supabase sync error:', err);
             });
 
-            if (backgroundJob) {
-              enqueueDreamPipeline(newDream.id, backgroundJob);
-            } else {
-              rewardXAELForDream(
-                newDream,
-                wallet?.address || authUser?.id || 'local-user',
-              );
-            }
-
+            // Navigate to the new dream detail
             navigate('dream', newDream.id);
           }}
           onCancel={() => navigate('home')}
@@ -2442,30 +2278,29 @@ const DreamJournalApp = () => {
               return;
             }
 
-            const newDream = createVideoStub({
-              videoUrl,
-              thumbnail: thumbnailUrl || undefined,
-              duration,
-            }) as Dream;
-
-            const updatedDreams = [newDream, ...dreams];
-            setDreams(updatedDreams);
-            await saveDreamsToStorage(updatedDreams);
-            syncDreamToSupabase(newDream).catch((err: unknown) => {
-              console.warn('[VideoJournal] Supabase sync error:', err);
-            });
-
-            enqueueDreamPipeline(newDream.id, () =>
-              runVideoProcessing({
+            setIsProcessing(true);
+            try {
+              const { dream: newDream } = await processVideoJournal({
                 videoBlob,
                 videoUrl,
                 thumbnail: thumbnailUrl || undefined,
                 duration,
                 capturedEmotion: capturedEmotionFromVideo,
-              }),
-            );
+              });
 
-            navigate('dream', newDream.id);
+              const updatedDreams = [newDream, ...dreams];
+              setDreams(updatedDreams);
+              await saveDreamsToStorage(updatedDreams);
+              syncDreamToSupabase(newDream).catch((err: unknown) => {
+                console.warn('[VideoJournal] Supabase sync error:', err);
+              });
+              navigate('dream', newDream.id);
+            } catch (error) {
+              console.error('[VideoJournal] Processing failed:', error);
+              alert('Failed to process video journal. Please try again.');
+            } finally {
+              setIsProcessing(false);
+            }
           }}
           onCancel={() => navigate('record')}
         />
@@ -2490,18 +2325,6 @@ const DreamJournalApp = () => {
             >
               <ArrowLeft className="w-4 h-4" strokeWidth={1.75} /> Journal
             </button>
-
-            {detailDream.processingStatus === 'processing' && (
-              <div className="rounded-2xl border border-sage/20 bg-sage/5 px-4 py-3 flex items-center gap-3 text-sm text-sageDark">
-                <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-                <span>Building your XAEL in the background — you can keep browsing while we transcribe, analyse, and generate your image.</span>
-              </div>
-            )}
-            {detailDream.processingStatus === 'failed' && (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                Processing could not finish yet — your recording is saved and we will retry automatically.
-              </div>
-            )}
           <div className="rounded-3xl border border-line bg-cream shadow-lift overflow-hidden">
           <div className="space-y-4 p-5 sm:p-6">
             {/* Dream Visualizer — "Visualize Dream" button + image display */}
@@ -2519,46 +2342,6 @@ const DreamJournalApp = () => {
                 }
               }}
             />
-
-            {FEATURE_MESH_UI_ENABLED && (
-              <details className="rounded-2xl border border-sage/20 bg-sage/5 overflow-hidden group">
-                <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-sageDark list-none flex items-center justify-between">
-                  <span className="flex items-center gap-2">
-                    <Box className="w-4 h-4" strokeWidth={1.75} />
-                    Advanced asset pipeline (depth · skybox · 3D mesh)
-                  </span>
-                  <ChevronRight className="w-4 h-4 transition group-open:rotate-90" />
-                </summary>
-                <div className="border-t border-sage/15 bg-ink/95 text-cream rounded-b-2xl">
-                  <Suspense fallback={<p className="p-4 text-sm text-muted">Loading generator…</p>}>
-                    <DreamAssetGenerator
-                      dreamId={detailDream.id}
-                      dreamText={detailDream.narrative || detailDream.content}
-                      dreamNugget={detailDream.nugget}
-                      dreamEmotion={detailDream.emotion}
-                      dreamThemes={detailDream.themes}
-                      existingImageUrl={detailDream.generatedImage?.url}
-                      onEnterVR={({ skyboxUrl, assets }) => {
-                        navigate('vr', detailDream.id);
-                      }}
-                      onAssetsGenerated={(assets) => {
-                        const parallax = assets.find((a) => a.type === 'parallax_video' && a.result_url);
-                        const mesh = assets.find((a) => a.type === 'mesh_3d' && a.result_url);
-                        if (parallax?.result_url) {
-                          (detailDream as { parallaxVideoUrl?: string }).parallaxVideoUrl = parallax.result_url;
-                        }
-                        if (mesh?.result_url) {
-                          const sim = getSimulacrum(detailDream.id);
-                          if (sim) {
-                            saveSimulacrum({ ...sim, meshUrl: mesh.result_url, mode: 'mesh_glb' });
-                          }
-                        }
-                      }}
-                    />
-                  </Suspense>
-                </div>
-              </details>
-            )}
 
             <div className="flex items-start justify-between">
               <div>
@@ -2722,55 +2505,23 @@ const DreamJournalApp = () => {
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              {FEATURE_MESH_UI_ENABLED && (
-                <button
-                  type="button"
-                  onClick={() => navigate('simulacrum', detailDream.id)}
-                  className="col-span-2 bg-sage hover:bg-sageDark text-cream py-3 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm shadow-paper"
-                >
-                  <Box className="w-4 h-4" strokeWidth={1.75} />
-                  Explore 3D Simulacrum
-                </button>
-              )}
-              {FEATURE_VR_UI_ENABLED && (
-                <button
-                  type="button"
-                  onClick={() => navigate('vr', detailDream.id)}
-                  disabled={!detailDream.generatedImage?.url}
-                  className="border border-sage/30 bg-sage/10 hover:bg-sage/20 text-sageDark py-3 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm disabled:opacity-40"
-                >
-                  <Glasses className="w-4 h-4" strokeWidth={1.75} />
-                  Enter VR
-                </button>
-              )}
+            <div className="flex gap-3 pt-1">
               <button
                 type="button"
                 onClick={() => shareDream(detailDream)}
-                className="border border-line bg-parchment hover:bg-cream py-3 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm"
+                className="flex-1 bg-sage hover:bg-sageDark text-cream py-3 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm shadow-paper"
               >
                 <Upload className="w-4 h-4" strokeWidth={1.75} />
                 Share
               </button>
-              {FEATURE_NFT_UI_ENABLED ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => handleOpenMintModal(detailDream)}
-                    className="border-2 border-dusk/30 bg-dusk/5 hover:bg-dusk/10 text-duskDeep py-3 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm"
-                  >
-                    <Award className="w-4 h-4" strokeWidth={1.75} />
-                    Mint NFT
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => navigate('exchange')}
-                    className="border border-line bg-parchment hover:bg-cream py-3 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm"
-                  >
-                    XAEL Exchange
-                  </button>
-                </>
-              ) : null}
+              <button
+                type="button"
+                onClick={() => handleOpenMintModal(detailDream)}
+                className="flex-1 border-2 border-dusk/30 bg-dusk/5 hover:bg-dusk/10 text-duskDeep py-3 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm"
+              >
+                <Award className="w-4 h-4" strokeWidth={1.75} />
+                Mint NFT
+              </button>
             </div>
           </div>
           </div>
@@ -2798,17 +2549,29 @@ const DreamJournalApp = () => {
         />
       )}
 
-      {route.screen === 'settings' && (
-        <ProfileAndSettings
-          user={authUser ? { email: authUser.email, name: authUser.email?.split('@')[0] } : undefined}
-          onClose={() => navigate('home')}
-          onExportData={exportAllData}
-          onNavigate={navigate}
-        />
-      )}
-
       {route.screen === 'admin' && (
-        <AdminDashboard onClose={() => navigate('home')} />
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-serif text-2xl font-medium text-ink">Analytics Dashboard</h2>
+            <button
+              type="button"
+              onClick={() => navigate('more')}
+              className="p-2 rounded-full border border-line bg-cream hover:bg-parchment transition"
+              aria-label="Back"
+            >
+              <ArrowLeft className="w-5 h-5 text-muted" strokeWidth={1.5} />
+            </button>
+          </div>
+          {isAdmin ? (
+            <AdminDashboard onClose={() => navigate('more')} />
+          ) : (
+            <div className="rounded-2xl border border-line bg-cream p-6 text-center text-muted">
+              <Shield className="w-8 h-8 mx-auto mb-3 text-muted" strokeWidth={1.5} />
+              <p className="font-medium text-ink mb-1">Admin access required</p>
+              <p className="text-sm">Sign in with <code className="text-xs">admin@everdream.test</code> to view analytics.</p>
+            </div>
+          )}
+        </div>
       )}
 
       </div>
@@ -2827,65 +2590,64 @@ const DreamJournalApp = () => {
               />
             )}
 
-            <div className="bg-gradient-to-r from-sage/90 to-sageDark rounded-lg p-4 text-cream">
+            <div className="bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg p-4">
               <h3 className="font-semibold mb-3">Asset Metadata</h3>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-cream/80">Asset ID:</span>
+                  <span className="text-purple-200">Asset ID:</span>
                   <span className="font-mono text-xs">{selectedDream.id}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-cream/80">Created:</span>
+                  <span className="text-purple-200">Created:</span>
                   <span>{new Date(selectedDream.date).toLocaleDateString()}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-cream/80">Rarity Score:</span>
+                  <span className="text-purple-200">Rarity Score:</span>
                   <span className="font-bold">{selectedDream.assetMetadata?.rarityScore}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-cream/80">Uniqueness:</span>
+                  <span className="text-purple-200">Uniqueness:</span>
                   <span className="font-bold">{selectedDream.assetMetadata?.uniquenessScore}</span>
                 </div>
               </div>
             </div>
 
-            {FEATURE_NFT_UI_ENABLED ? (
-              <div className="bg-sage/10 border border-sage/20 rounded-lg p-4">
-                <h3 className="font-semibold mb-3 flex items-center gap-2 text-ink">
-                  <Shield className="w-4 h-4 text-sage" />
-                  NFT Component Breakdown
-                </h3>
-                <div className="space-y-3">
-                  {getNFTComponents(selectedDream).map((component) => (
-                    <div key={component.id} className="bg-cream border border-line rounded p-3">
-                      <div className="flex items-start justify-between mb-1">
-                        <div>
-                          <div className="text-sm font-semibold text-ink">{component.component}</div>
-                          <div className="text-xs text-muted">{component.type}</div>
-                        </div>
-                        {component.readyForMinting && (
-                          <span className="text-xs bg-sage text-cream px-2 py-0.5 rounded">Ready</span>
-                        )}
+            {/* NFT Component Breakdown */}
+            <div className="bg-blue-600 bg-opacity-20 rounded-lg p-4">
+              <h3 className="font-semibold mb-3 flex items-center gap-2">
+                <Shield className="w-4 h-4" />
+                NFT Component Breakdown
+              </h3>
+              <div className="space-y-3">
+                {getNFTComponents(selectedDream).map((component, i) => (
+                  <div key={component.id} className="bg-blue-700 bg-opacity-30 rounded p-3">
+                    <div className="flex items-start justify-between mb-1">
+                      <div>
+                        <div className="text-sm font-semibold text-blue-200">{component.component}</div>
+                        <div className="text-xs text-blue-300">{component.type}</div>
                       </div>
-                      <div className="text-xs space-y-1 mt-2">
-                        <div className="text-muted">{component.description}</div>
-                        <div className="flex justify-between text-muted">
-                          <span>Size: {component.size}</span>
-                          <span>License: {component.license}</span>
-                        </div>
-                        <div className="text-sageDark font-semibold">Ownership: {component.ownership}</div>
-                        {component.note && (
-                          <div className="text-duskDeep text-xs mt-1">ℹ️ {component.note}</div>
-                        )}
-                      </div>
+                      {component.readyForMinting && (
+                        <span className="text-xs bg-green-500 px-2 py-0.5 rounded">Ready</span>
+                      )}
                     </div>
-                  ))}
-                </div>
-                <div className="mt-3 text-xs text-muted bg-parchment p-2 rounded border border-line">
-                  💡 Each component can be minted separately or bundled into a single NFT. You control the composition.
-                </div>
+                    <div className="text-xs space-y-1 mt-2">
+                      <div className="text-blue-200">{component.description}</div>
+                      <div className="flex justify-between text-blue-300">
+                        <span>Size: {component.size}</span>
+                        <span>License: {component.license}</span>
+                      </div>
+                      <div className="text-green-300 font-semibold">Ownership: {component.ownership}</div>
+                      {component.note && (
+                        <div className="text-yellow-300 text-xs mt-1">ℹ️ {component.note}</div>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
-            ) : null}
+              <div className="mt-3 text-xs text-blue-200 bg-blue-700 bg-opacity-30 p-2 rounded">
+                💡 Each component can be minted separately or bundled into a single NFT. You control the composition.
+              </div>
+            </div>
 
             {selectedDream.watermark && (
               <div className="bg-cyan-600 bg-opacity-20 rounded-lg p-4">
@@ -2908,25 +2670,23 @@ const DreamJournalApp = () => {
                 <div>✓ Full ownership retained (100%)</div>
                 <div>✓ Licensed, never sold</div>
                 <div>✓ Revocable at any time</div>
-                {FEATURE_NFT_UI_ENABLED ? <div>✓ NFT-ready for blockchain minting</div> : null}
+                <div>✓ NFT-ready for blockchain minting</div>
                 <div>✓ Choose your license: CC-BY, CC-BY-SA, All Rights Reserved</div>
               </div>
             </div>
 
-            {FEATURE_NFT_UI_ENABLED ? (
-              <div className="bg-dusk/10 border border-dusk/20 rounded-lg p-4">
-                <h3 className="font-semibold mb-2 text-sm text-ink">Future: Ethereum NFT</h3>
-                <div className="text-xs text-muted space-y-1">
-                  <div>When ready, mint to:</div>
-                  <div className="font-mono bg-parchment border border-line p-2 rounded mt-1 text-ink">
-                    Ethereum Mainnet or Polygon (lower fees)
-                  </div>
-                  <div className="mt-2">Smart Contract: GPL-3.0 (open source)</div>
-                  <div>Storage: IPFS (decentralized)</div>
-                  <div>Gas fees: You pay only at minting time</div>
+            <div className="bg-purple-600 bg-opacity-20 rounded-lg p-4">
+              <h3 className="font-semibold mb-2 text-sm">Future: Ethereum NFT</h3>
+              <div className="text-xs text-purple-200 space-y-1">
+                <div>When ready, mint to:</div>
+                <div className="font-mono bg-purple-700 bg-opacity-30 p-2 rounded mt-1">
+                  Ethereum Mainnet or Polygon (lower fees)
                 </div>
+                <div className="mt-2">Smart Contract: GPL-3.0 (open source)</div>
+                <div>Storage: IPFS (decentralized)</div>
+                <div>Gas fees: You pay only at minting time</div>
               </div>
-            ) : null}
+            </div>
 
             <button
               onClick={() => {
@@ -2938,7 +2698,7 @@ const DreamJournalApp = () => {
                 a.download = `dream-asset-${selectedDream.id}.json`;
                 a.click();
               }}
-              className="w-full bg-sage hover:bg-sageDark text-cream py-3 rounded-lg transition flex items-center justify-center gap-2"
+              className="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg transition flex items-center justify-center gap-2"
             >
               <Download className="w-4 h-4" />
               Download Asset Metadata (JSON)
@@ -2948,7 +2708,7 @@ const DreamJournalApp = () => {
       )}
 
       {/* Mint NFT Modal */}
-      {FEATURE_NFT_UI_ENABLED && showMintModal && selectedDream && (
+      {showMintModal && selectedDream && (
         <Modal onClose={() => setShowMintModal(false)}>
           <div className="space-y-4">
             <h2 className="text-xl font-semibold flex items-center gap-2">
@@ -3058,117 +2818,11 @@ const DreamJournalApp = () => {
         <ProfileHub onClose={() => setShowProfile(false)} navigate={navigate} />
       )}
 
-      {/* Share Modal - polished, functional share dream screen */}
-      {showShareModal && selectedDream && (
-        <Modal onClose={() => setShowShareModal(false)}>
-          <div className="space-y-5">
-            <div>
-              <h2 className="text-2xl font-serif font-medium text-ink">Share this dream</h2>
-              <p className="text-sm text-muted mt-1">Create a beautiful card or quick copy.</p>
-            </div>
-
-            {/* Refined light preview card — matches the app's parchment/cream aesthetic */}
-            <div className="rounded-3xl border border-line bg-parchment p-5 shadow-paper">
-              {selectedDream.generatedImage?.url ? (
-                <img 
-                  src={selectedDream.generatedImage.url} 
-                  alt="Dream visualization" 
-                  className="w-full h-52 object-cover rounded-2xl border border-line mb-4" 
-                />
-              ) : selectedDream.videoCapture?.url ? (
-                <div className="relative mb-4 rounded-2xl overflow-hidden border border-line">
-                  <video 
-                    src={selectedDream.videoCapture.url} 
-                    className="w-full h-52 object-cover" 
-                    muted 
-                    controls
-                  />
-                  <div className="absolute top-3 right-3 bg-ink/70 text-cream text-[10px] px-2 py-0.5 rounded">VIDEO DREAM</div>
-                </div>
-              ) : selectedDream.audioCapture?.url ? (
-                <div className="mb-4 rounded-2xl border border-line bg-cream p-4 flex items-center gap-3">
-                  <div className="text-4xl">🎙️</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-ink">Audio journal</div>
-                    <div className="text-xs text-muted">{selectedDream.audioCapture.duration || 0}s • {new Date(selectedDream.date).toLocaleDateString()}</div>
-                  </div>
-                </div>
-              ) : (
-                <div className="mb-4 rounded-2xl border border-line bg-cream p-6 text-center">
-                  <div className="text-6xl mb-3 opacity-70">🌙</div>
-                  <p className="text-lg font-serif italic text-ink leading-tight">"{selectedDream.nugget}"</p>
-                </div>
-              )}
-
-              <div className="text-sm text-ink leading-snug mb-2">
-                {selectedDream.nugget || selectedDream.content?.slice(0, 120) + (selectedDream.content?.length > 120 ? '...' : '')}
-              </div>
-
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
-                <span>{new Date(selectedDream.date).toLocaleDateString()}</span>
-                {selectedDream.emotion && <span>• {selectedDream.emotion}</span>}
-                {selectedDream.symbols?.length > 0 && <span>• {selectedDream.symbols.slice(0, 2).join(' ')}</span>}
-                {selectedDream.category && <span>• {selectedDream.category}</span>}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <button
-                onClick={generateShareableImage}
-                className="w-full bg-sage hover:bg-sageDark active:bg-ink text-cream py-3.5 rounded-2xl font-semibold transition flex items-center justify-center gap-2 shadow-sm"
-              >
-                <Download className="w-5 h-5" />
-                Download share card
-              </button>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <button
-                  onClick={() => {
-                    const text = `"${selectedDream.nugget || selectedDream.content}"\n\n— from my EverDream journal`;
-                    navigator.clipboard.writeText(text);
-                    setShowShareModal(false);
-                  }}
-                  className="flex items-center justify-center gap-2 py-3 rounded-2xl border border-line bg-white/80 hover:bg-white active:bg-parchment text-sm font-medium transition"
-                >
-                  <Copy className="w-4 h-4" /> Copy text
-                </button>
-
-                <button
-                  onClick={() => {
-                    if (navigator.share) {
-                      navigator.share({
-                        title: selectedDream.nugget || 'My dream',
-                        text: selectedDream.nugget || selectedDream.content,
-                      }).catch(() => {});
-                    } else {
-                      alert("Your browser doesn't support native sharing — use Copy or Download.");
-                    }
-                    setShowShareModal(false);
-                  }}
-                  className="flex items-center justify-center gap-2 py-3 rounded-2xl border border-line bg-white/80 hover:bg-white active:bg-parchment text-sm font-medium transition"
-                >
-                  <Share2 className="w-4 h-4" /> Device share
-                </button>
-
-                <button
-                  onClick={() => {
-                    const text = encodeURIComponent(`"${selectedDream.nugget || selectedDream.content}" — from my dream journal 🌙`);
-                    window.open(`https://twitter.com/intent/tweet?text=${text}`, '_blank');
-                    setShowShareModal(false);
-                  }}
-                  className="flex items-center justify-center gap-2 py-3 rounded-2xl border border-line bg-white/80 hover:bg-white active:bg-parchment text-sm font-medium transition"
-                >
-                  <span>𝕏</span> Post to X
-                </button>
-              </div>
-            </div>
-
-            {selectedDream.videoCapture?.url && (
-              <p className="text-center text-[10px] text-muted">Video dreams work best with the downloaded card (or export the original recording from the entry).</p>
-            )}
-          </div>
-        </Modal>
-      )}
+      <ShareModal
+        dream={selectedDream}
+        isOpen={showShareModal && !!selectedDream}
+        onClose={() => setShowShareModal(false)}
+      />
 
       {/* Achievement Popup */}
       {showAchievement && (
@@ -3212,30 +2866,30 @@ const DreamJournalApp = () => {
               </div>
             </div>
 
-            <div className="bg-sage/10 border border-sage/20 rounded-lg p-4">
-              <h3 className="font-semibold mb-2 text-ink">Your Dream Data</h3>
-              <div className="space-y-1 text-muted">
-                <div><strong className="text-ink">License:</strong> CC-BY-4.0 (Creative Commons Attribution) OR User's Choice</div>
-                <div><strong className="text-ink">You Choose:</strong></div>
+            <div className="bg-purple-600 bg-opacity-20 rounded-lg p-4">
+              <h3 className="font-semibold mb-2 text-purple-300">Your Dream Data</h3>
+              <div className="space-y-1 text-purple-100">
+                <div><strong>License:</strong> CC-BY-4.0 (Creative Commons Attribution) OR User's Choice</div>
+                <div><strong>You Choose:</strong></div>
                 <ul className="list-disc list-inside ml-2 space-y-1 text-xs">
                   <li>CC-BY-4.0: Others can share with attribution</li>
                   <li>CC-BY-SA-4.0: Share-alike (copyleft)</li>
                   <li>CC-BY-NC-4.0: Non-commercial only</li>
                   <li>All Rights Reserved: No sharing without permission</li>
                 </ul>
-                <div className="mt-2 text-xs bg-parchment border border-line p-2 rounded text-ink">
+                <div className="mt-2 text-xs bg-purple-700 bg-opacity-30 p-2 rounded">
                   💡 <strong>Recommendation:</strong> CC-BY-4.0 allows participation in Dream Economy baskets while maintaining attribution rights.
                 </div>
               </div>
             </div>
 
-            <div className="bg-dusk/10 border border-dusk/20 rounded-lg p-4">
-              <h3 className="font-semibold mb-2 text-ink">NFT Smart Contracts</h3>
-              <div className="space-y-1 text-muted text-xs">
-                <div><strong className="text-ink">License:</strong> GPL-3.0 (GNU General Public License)</div>
-                <div><strong className="text-ink">Why GPL?</strong> Strong copyleft ensures modifications to our NFT contracts remain open source and benefit everyone.</div>
-                <div className="mt-2"><strong className="text-ink">Contract Address (Future):</strong></div>
-                <div className="font-mono bg-parchment border border-line p-2 rounded text-ink">
+            <div className="bg-blue-600 bg-opacity-20 rounded-lg p-4">
+              <h3 className="font-semibold mb-2 text-blue-300">NFT Smart Contracts</h3>
+              <div className="space-y-1 text-blue-100 text-xs">
+                <div><strong>License:</strong> GPL-3.0 (GNU General Public License)</div>
+                <div><strong>Why GPL?</strong> Strong copyleft ensures modifications to our NFT contracts remain open source and benefit everyone.</div>
+                <div className="mt-2"><strong>Contract Address (Future):</strong></div>
+                <div className="font-mono bg-blue-700 bg-opacity-30 p-2 rounded">
                   0x... (Ethereum Mainnet)<br/>
                   0x... (Polygon for lower fees)
                 </div>
@@ -3437,6 +3091,30 @@ const Modal = ({ children, onClose }) => (
         <X className="w-5 h-5" strokeWidth={1.75} />
       </button>
       {children}
+    </div>
+  </div>
+);
+
+const PrivacyToggle = ({ label, description, value, onChange, required = false, note }) => (
+  <div className="border-b border-line pb-4 last:border-0">
+    <div className="flex items-start justify-between gap-3 mb-1">
+      <div className="flex-1 min-w-0">
+        <div className="font-semibold text-sm text-ink">{label}</div>
+        <div className="text-xs text-muted mt-0.5 leading-relaxed">{description}</div>
+        {note && (
+          <div className="text-xs text-duskDeep mt-1.5">{note}</div>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={() => !required && onChange(!value)}
+        disabled={required}
+        className={`ml-2 w-12 h-7 rounded-full transition flex-shrink-0 border border-line ${
+          value ? 'bg-sage' : 'bg-parchment'
+        } ${required ? 'opacity-45 cursor-not-allowed' : ''}`}
+      >
+        <div className={`w-5 h-5 bg-cream rounded-full shadow-sm transition transform mt-0.5 ${value ? 'translate-x-6' : 'translate-x-1'}`} />
+      </button>
     </div>
   </div>
 );

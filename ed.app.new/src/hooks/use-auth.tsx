@@ -14,8 +14,8 @@
  */
 
 import { useState, useEffect, useCallback, createContext, useContext, type ReactNode } from 'react';
-import { FEATURE_REQUIRE_AUTH } from '../config/features';
 import { supabase, getCurrentUser } from '../lib/supabase/client';
+import { getEmailConfirmRedirectUrl, getPasswordResetRedirectUrl, isRecoveryHash } from '../lib/auth/redirects';
 
 export interface AuthUser {
   id: string;
@@ -27,8 +27,11 @@ export interface AuthState {
   user: AuthUser | null;
   loading: boolean;
   error: Error | null;
-  signIn: (email: string) => Promise<void>;
+  isRecoveryMode: boolean;
+  signIn: (email: string, password?: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
+  resetPasswordForEmail: (email: string) => Promise<{ error: Error | null }>;
+  updatePassword: (password: string) => Promise<{ error: Error | null }>;
   signInAnonymously: () => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -68,6 +71,7 @@ function useAuthInternal(): AuthState {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [isRecoveryMode, setIsRecoveryMode] = useState(() => isRecoveryHash());
 
   // Check current auth state on mount
   useEffect(() => {
@@ -84,11 +88,15 @@ function useAuthInternal(): AuthState {
             email: currentUser.email,
             isAnonymous: currentUser.is_anonymous ?? true,
           });
-        } else if (!FEATURE_REQUIRE_AUTH) {
+        } else if (import.meta.env.VITE_REQUIRE_AUTH === 'true') {
+          setUser(null);
+        } else {
+          // No session — sign in anonymously (skipped when login is required)
           const { data, error: signInError } = await supabase.auth.signInAnonymously();
           if (!mounted) return;
 
           if (signInError) {
+            // If anonymous auth fails, allow offline mode (user = null but not loading)
             console.warn('[useAuth] Anonymous sign-in failed, running in offline mode:', signInError.message);
             setUser(null);
           } else if (data.user) {
@@ -98,8 +106,6 @@ function useAuthInternal(): AuthState {
               isAnonymous: true,
             });
           }
-        } else {
-          setUser(null);
         }
       } catch (err) {
         if (!mounted) return;
@@ -116,14 +122,22 @@ function useAuthInternal(): AuthState {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
 
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsRecoveryMode(true);
+      }
+
       if (event === 'SIGNED_IN' && session?.user) {
         setUser({
           id: session.user.id,
           email: session.user.email,
           isAnonymous: session.user.is_anonymous ?? true,
         });
+        if (isRecoveryHash()) {
+          setIsRecoveryMode(true);
+        }
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
+        setIsRecoveryMode(false);
       }
     });
 
@@ -133,36 +147,66 @@ function useAuthInternal(): AuthState {
     };
   }, []);
 
-  const signIn = useCallback(async (email: string, password?: string) => {
+  const signIn = useCallback(async (email: string, password?: string): Promise<{ error: Error | null }> => {
     setError(null);
-    // If password provided, use password sign-in; otherwise use OTP magic link
     if (password) {
       const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
       if (signInError) {
         setError(signInError);
-        throw signInError;
+        return { error: signInError };
       }
-    } else {
-      const { error: signInError } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-          emailRedirectTo: window.location.origin,
-        },
-      });
-      if (signInError) {
-        setError(signInError);
-        throw signInError;
-      }
+      return { error: null };
     }
+
+    const { error: signInError } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: window.location.origin,
+      },
+    });
+    if (signInError) {
+      setError(signInError);
+      return { error: signInError };
+    }
+    return { error: null };
   }, []);
 
   const signUp = useCallback(async (email: string, password: string): Promise<{ error: Error | null }> => {
     setError(null);
-    const { error: signUpError } = await supabase.auth.signUp({ email, password });
+    const { error: signUpError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: getEmailConfirmRedirectUrl(),
+      },
+    });
     if (signUpError) {
       setError(signUpError);
       return { error: signUpError };
     }
+    return { error: null };
+  }, []);
+
+  const resetPasswordForEmail = useCallback(async (email: string): Promise<{ error: Error | null }> => {
+    setError(null);
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: getPasswordResetRedirectUrl(),
+    });
+    if (resetError) {
+      setError(resetError);
+      return { error: resetError };
+    }
+    return { error: null };
+  }, []);
+
+  const updatePassword = useCallback(async (password: string): Promise<{ error: Error | null }> => {
+    setError(null);
+    const { error: updateError } = await supabase.auth.updateUser({ password });
+    if (updateError) {
+      setError(updateError);
+      return { error: updateError };
+    }
+    setIsRecoveryMode(false);
     return { error: null };
   }, []);
 
@@ -192,5 +236,16 @@ function useAuthInternal(): AuthState {
     setUser(null);
   }, []);
 
-  return { user, loading, error, signIn, signUp, signInAnonymously, signOut };
+  return {
+    user,
+    loading,
+    error,
+    isRecoveryMode,
+    signIn,
+    signUp,
+    resetPasswordForEmail,
+    updatePassword,
+    signInAnonymously,
+    signOut,
+  };
 }

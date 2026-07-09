@@ -1,8 +1,8 @@
 import React from 'react';
-import { FEATURE_REQUIRE_AUTH } from '../../config/features';
 import { useAuth } from '../../hooks/use-auth';
 import { Spinner } from '../ui';
 import LoginScreen from './LoginScreen';
+import ResetPasswordScreen from './ResetPasswordScreen';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -18,7 +18,8 @@ interface ProtectedRouteProps {
  * </ProtectedRoute>
  */
 export default function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { user, loading } = useAuth();
+  const { user, loading, isRecoveryMode } = useAuth();
+  const requireAuth = import.meta.env.VITE_REQUIRE_AUTH === 'true';
 
   if (loading) {
     return (
@@ -34,7 +35,11 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     );
   }
 
-  if (!user || (FEATURE_REQUIRE_AUTH && user.isAnonymous)) {
+  if (isRecoveryMode) {
+    return <ResetPasswordScreen />;
+  }
+
+  if (requireAuth && (!user || user.isAnonymous)) {
     return <LoginScreen />;
   }
 

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Moon, Mail, Lock, Eye, EyeOff, AlertCircle, Sparkles, Loader2, Phone } from 'lucide-react';
+import { Moon, Mail, Lock, Eye, EyeOff, AlertCircle, Sparkles, Loader2, Phone, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../../hooks/use-auth';
 import { Button, Input } from '../ui';
 import { Card } from '../ui/Card';
 import { supabase } from '../../lib/supabase/client';
+import { signInWithSocialProvider } from '../../lib/auth/socialAuth';
 
 /**
  * LoginScreen — Updated to spec
@@ -15,8 +16,10 @@ import { supabase } from '../../lib/supabase/client';
  * Matches dream aesthetic
  */
 export default function LoginScreen() {
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, resetPasswordForEmail } = useAuth();
   const [isSignUp, setIsSignUp] = useState(false);
+  const [mode, setMode] = useState<'login' | 'forgot' | 'check-email'>('login');
+  const [pendingEmailAction, setPendingEmailAction] = useState<'signup' | 'reset' | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [phone, setPhone] = useState('');
@@ -73,7 +76,35 @@ export default function LoginScreen() {
       const { error: authError } = await fn(email.trim(), password);
       if (authError) {
         setError(authError.message || 'Authentication failed. Please try again.');
+        return;
       }
+      if (isSignUp) {
+        setPendingEmailAction('signup');
+        setMode('check-email');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An unexpected error occurred.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (!email.trim()) {
+      setError('Enter the email for your account.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const { error: resetError } = await resetPasswordForEmail(email.trim());
+      if (resetError) {
+        setError(resetError.message || 'Could not send reset email.');
+        return;
+      }
+      setPendingEmailAction('reset');
+      setMode('check-email');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred.');
     } finally {
@@ -92,12 +123,9 @@ export default function LoginScreen() {
         return;
       }
 
-      const supabaseProvider = provider === 'google' ? 'google' : 'facebook';
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: supabaseProvider as any,
-        options: { redirectTo: window.location.origin + '/#/' },
-      });
-      if (error) throw error;
+      const authProvider = provider === 'google' ? 'google' : 'meta';
+      const result = await signInWithSocialProvider(authProvider, 'login');
+      if (!result.ok) throw new Error(result.message || 'OAuth sign-in failed');
     } catch (e: any) {
       setError(e.message || 'OAuth sign-in failed');
       setOauthLoading(null);
@@ -230,6 +258,56 @@ export default function LoginScreen() {
           border: '1px solid oklch(0.9 0.02 280)',
           boxShadow: 'var(--shadow-soft, 0 20px 60px -30px oklch(0.4 0.08 275 / 0.25))',
         }}>
+          {mode === 'check-email' && (
+            <div style={{ textAlign: 'center', padding: '0.5rem 0' }}>
+              <CheckCircle2 size={36} color="oklch(0.55 0.12 155)" style={{ margin: '0 auto 0.75rem' }} />
+              <h2 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '0.5rem' }}>Check your inbox</h2>
+              <p style={{ fontSize: '0.8rem', color: 'oklch(0.45 0.02 270 / 0.8)', lineHeight: 1.5 }}>
+                {pendingEmailAction === 'reset'
+                  ? <>We sent a password reset link to <strong>{email}</strong>. Open it on this device to choose a new password.</>
+                  : <>We sent a confirmation link to <strong>{email}</strong>. Confirm your email, then sign in.</>}
+              </p>
+              <button
+                type="button"
+                onClick={() => { setMode('login'); setPendingEmailAction(null); setError(null); }}
+                style={{ marginTop: '1rem', fontSize: '0.8rem', color: 'oklch(0.45 0.09 275)', background: 'none', border: 'none', textDecoration: 'underline', cursor: 'pointer' }}
+              >
+                Back to sign in
+              </button>
+            </div>
+          )}
+
+          {mode === 'forgot' && (
+            <form onSubmit={handleForgotPassword} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <div>
+                <h2 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '0.35rem' }}>Reset your password</h2>
+                <p style={{ fontSize: '0.8rem', color: 'oklch(0.45 0.02 270 / 0.75)' }}>
+                  Enter your account email and we&apos;ll send a reset link.
+                </p>
+              </div>
+              <div>
+                <label style={{ fontSize: '0.7rem', fontWeight: 600, display: 'block', marginBottom: '0.25rem' }}>Email</label>
+                <div style={inputRowStyle}>
+                  <Mail size={16} color="oklch(0.45 0.02 270 / 0.5)" />
+                  <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email" style={inputStyle} />
+                </div>
+              </div>
+              {error && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.6rem', background: 'oklch(0.97 0.03 30)', borderRadius: '0.5rem', fontSize: '0.7rem' }}>
+                  <AlertCircle size={14} color="oklch(0.55 0.15 30)" />
+                  <span>{error}</span>
+                </div>
+              )}
+              <Button type="submit" variant="primary" size="lg" fullWidth loading={loading} icon={<Mail size={15} />}>
+                Send reset link
+              </Button>
+              <button type="button" onClick={() => { setMode('login'); setError(null); }} style={{ fontSize: '0.8rem', color: 'oklch(0.45 0.09 275)', background: 'none', border: 'none', textDecoration: 'underline', cursor: 'pointer' }}>
+                Back to sign in
+              </button>
+            </form>
+          )}
+
+          {mode === 'login' && (<>
           {/* Primary buttons: Google / Meta / Phone / Email */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginBottom: '1rem' }}>
             <button onClick={() => handleOAuth('google')} disabled={!!oauthLoading} style={primaryBtnStyle(!!oauthLoading)}>
@@ -290,7 +368,7 @@ export default function LoginScreen() {
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.2rem' }}>
                 <label style={{ fontSize: '0.7rem', fontWeight: 600, color: 'oklch(0.25 0.04 270)' }}>Password</label>
-                <button type="button" onClick={() => setError('Password reset coming soon!')} style={{ fontSize: '0.65rem', color: 'oklch(0.45 0.02 270 / 0.7)', background: 'none', border: 'none', textDecoration: 'underline' }}>Forgot?</button>
+                <button type="button" onClick={() => { setMode('forgot'); setError(null); }} style={{ fontSize: '0.65rem', color: 'oklch(0.45 0.02 270 / 0.7)', background: 'none', border: 'none', textDecoration: 'underline' }}>Forgot?</button>
               </div>
               <div style={inputRowStyle}>
                 <Lock size={16} color="oklch(0.45 0.02 270 / 0.5)" />
@@ -323,6 +401,7 @@ export default function LoginScreen() {
           <div style={{ fontSize: '0.6rem', textAlign: 'center', marginTop: '0.8rem', color: 'oklch(0.5 0.01 270 / 0.5)' }}>
             Google &amp; Meta create your account on first use. Phone &amp; email supported for sign up too. Your session is saved for automatic login next time.
           </div>
+          </>)}
         </Card>
 
         {/* Footer legal */}

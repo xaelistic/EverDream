@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { ensureBrowserStorage } from './lib/storage';
 import { SkinProvider } from './contexts/SkinContext';
 import { AuthProvider } from './hooks/use-auth';
+import { SubscriptionProvider } from './hooks/use-subscription';
 import { ToastProvider } from './components/ui/Toast';
 import App from './App';
 import './index.css';
@@ -25,9 +26,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <SkinProvider>
       <AuthProvider>
-        <ToastProvider>
-          <App />
-        </ToastProvider>
+        <SubscriptionProvider>
+          <ToastProvider>
+            <App />
+          </ToastProvider>
+        </SubscriptionProvider>
       </AuthProvider>
     </SkinProvider>
   </React.StrictMode>,

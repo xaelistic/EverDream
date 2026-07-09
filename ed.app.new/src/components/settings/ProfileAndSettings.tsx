@@ -1,10 +1,17 @@
 /**
- * Settings Component — account & app preferences only.
- *
- * Public profile, services, and social network live in ProfileHub.
- * Wearable device connections live in #/wearables (WearableSettings).
- *
- * Tabs: Account, Theme, Notifications, Subscription, Privacy
+ * Profile & Settings Component
+ * EverDream V2 MVP - Complete Settings Hub
+ * 
+ * 7 Tabs: Profile, Account, Theme, Notifications, Devices, Subscription, Privacy
+ * 
+ * Features:
+ * - A/B Theme Variants (Classic vs Modern)
+ * - Light/Dark Mode Toggle
+ * - Wearable Integrations (Oura, Whoop, Apple Health, etc.)
+ * - Social Account Linking (Google, Apple, Facebook)
+ * - Privacy Controls (Data Export, Account Deletion, AI Training Opt-in/out)
+ * - Notification Preferences
+ * - Subscription Management
  */
 
 import React, { useState, useEffect } from 'react';
@@ -18,14 +25,11 @@ import {
   Camera, Mic, Video, Database, Cloud, HardDrive, Key,
   Fingerprint, MessageSquare, Sleep, Brain, TrendingUp
 } from 'lucide-react';
-import { useSkinFull } from '../../contexts/SkinContext';
-import { useAuth } from '../../hooks/use-auth';
-import { useSubscription } from '../../hooks/useSubscription';
-import { useToast } from '../ui/Toast';
-import { supabase } from '../../lib/supabase/client';
-import { Capacitor } from '@capacitor/core';
-import { getPreferredPaymentChannel } from '../../lib/subscriptions/subscriptionService';
-import { FEATURE_SKINS_UI_ENABLED } from '../../config/features';
+import { useSkinFull } from '../contexts/SkinContext';
+import { connectSocialProvider, disconnectSocialProvider } from '../../lib/social/shareService';
+import { isProviderLinkedInDb } from '../../lib/social/socialAccounts';
+import { useSocialAuth } from '../../hooks/use-social-auth';
+import type { SocialProviderId } from '../../lib/socialShare';
 
 // Safe localStorage helpers with try-catch wrappers
 function safeGetLocalStorage(key: string): string | null {
@@ -54,13 +58,11 @@ function safeClearLocalStorage(): void {
 }
 
 interface ProfileAndSettingsProps {
-  user?: { email?: string; name?: string };
+  user?: any;
   onClose: () => void;
-  onExportData?: () => void;
-  onNavigate?: (screen: string) => void;
 }
 
-type TabId = 'account' | 'theme' | 'notifications' | 'subscription' | 'privacy';
+type TabId = 'profile' | 'account' | 'theme' | 'notifications' | 'devices' | 'subscription' | 'privacy';
 
 interface ThemeVariant {
   id: 'classic' | 'modern';
@@ -84,11 +86,26 @@ const THEME_VARIANTS: ThemeVariant[] = [
   }
 ];
 
-const SOCIAL_PROVIDERS = [
-  { id: 'google', name: 'Google', icon: 'G', color: '#DB4437' },
-  { id: 'apple', name: 'Apple', icon: '', color: '#000000' },
-  { id: 'facebook', name: 'Facebook', icon: 'f', color: '#1877F2' }
+const WEARABLE_PROVIDERS = [
+  { id: 'oura', name: 'Oura Ring', icon: '💍', color: '#7C3AED' },
+  { id: 'whoop', name: 'WHOOP', icon: '💪', color: '#000000' },
+  { id: 'apple_health', name: 'Apple Health', icon: '❤️', color: '#FF2D55' },
+  { id: 'garmin', name: 'Garmin Connect', icon: '⌚', color: '#007CC3' },
+  { id: 'fitbit', name: 'Fitbit', icon: '🏃', color: '#00B0B9' },
+  { id: 'google_fit', name: 'Google Fit', icon: '👟', color: '#4285F4' },
+  { id: 'samsung_health', name: 'Samsung Health', icon: '📱', color: '#1428A0' },
+  { id: 'withings', name: 'Withings', icon: '⚖️', color: '#FF5F5F' },
+  { id: 'polar', name: 'Polar', icon: '❄️', color: '#E30613' },
+  { id: 'amazfit', name: 'Amazfit', icon: '🎯', color: '#00BCF2' }
 ];
+
+const SOCIAL_PROVIDERS = [
+  { id: 'meta', name: 'Meta (Facebook)', icon: 'f', color: '#1877F2', oauth: true },
+  { id: 'tiktok', name: 'TikTok', icon: '♪', color: '#000000', oauth: true },
+  { id: 'spotify', name: 'Spotify', icon: '♫', color: '#1DB954', oauth: false },
+  { id: 'google', name: 'Google', icon: 'G', color: '#DB4437', oauth: true },
+  { id: 'apple', name: 'Apple', icon: '', color: '#000000', oauth: true },
+] as const;
 
 const NOTIFICATION_CATEGORIES = [
   {
@@ -155,7 +172,7 @@ const SUBSCRIPTION_PLANS = [
   {
     id: 'plus',
     name: 'EverDream+',
-    price: '$5.99',
+    price: '$4.99',
     period: 'month',
     popular: true,
     features: [
@@ -185,27 +202,23 @@ const SUBSCRIPTION_PLANS = [
   }
 ];
 
-export default function ProfileAndSettings({ user, onClose, onExportData, onNavigate }: ProfileAndSettingsProps) {
-  const { setSkin, isPearl } = useSkinFull();
-  const { signOut } = useAuth();
-  const { addToast } = useToast();
-  const {
-    tier,
-    state: subscriptionState,
-    offerings,
-    loading: subLoading,
-    purchasing,
-    error: subError,
-    enabled: subsEnabled,
-    subscribe,
-    restore,
-    manage,
-    limits,
-  } = useSubscription();
-  const paymentChannel = getPreferredPaymentChannel();
-  const [activeTab, setActiveTab] = useState<TabId>('account');
+export default function ProfileAndSettings({ user, onClose }: ProfileAndSettingsProps) {
+  const { accounts, refreshAccounts } = useSocialAuth();
+  const { skin, setSkin, isPearl } = useSkinFull();
+  const [activeTab, setActiveTab] = useState<TabId>('profile');
   const [isLoading, setIsLoading] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+
+  // Profile State
+  const [profileData, setProfileData] = useState({
+    displayName: user?.name || 'Dreamer',
+    email: user?.email || '',
+    phone: '',
+    avatar: null as string | null,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    language: 'en',
+    dateOfBirth: ''
+  });
 
   // Theme State
   const [themeMode, setThemeMode] = useState<'light' | 'dark'>('light');
@@ -223,7 +236,9 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
     wearable_sync: true
   });
 
-  const [linkedSocials, setLinkedSocials] = useState<Set<string>>(new Set());
+  // Devices State
+  const [connectedWearables, setConnectedWearables] = useState<Set<string>>(new Set());
+
 
   // Privacy State
   const [privacySettings, setPrivacySettings] = useState({
@@ -267,6 +282,7 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
         console.error('Failed to parse notification preferences:', e);
       }
     }
+
   }, []);
 
   // Save theme preferences
@@ -287,77 +303,67 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
     safeSetLocalStorage('everdream-privacy', JSON.stringify(settings));
   };
 
-  const oauthProviderMap: Record<string, 'google' | 'apple' | 'facebook'> = {
-    google: 'google',
-    apple: 'apple',
-    facebook: 'facebook',
-  };
-
-  const handleSocialLink = async (providerId: string) => {
-    const provider = oauthProviderMap[providerId];
-    if (!provider) return;
+  // Handle wearable connection
+  const handleWearableConnect = async (providerId: string) => {
     setIsLoading(true);
     try {
-      const { error } = await supabase.auth.linkIdentity({ provider });
-      if (error) {
-        const { error: signInErr } = await supabase.auth.signInWithOAuth({
-          provider,
-          options: { redirectTo: window.location.origin },
-        });
-        if (signInErr) throw signInErr;
-      } else {
-        setLinkedSocials((prev) => new Set([...prev, providerId]));
-        addToast({ type: 'success', message: `${providerId} account linked!` });
-      }
+      // Simulate OAuth flow
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      setConnectedWearables(prev => new Set([...prev, providerId]));
     } catch (e) {
-      addToast({
-        type: 'error',
-        message: e instanceof Error ? e.message : 'Failed to link account',
-      });
+      console.error('Failed to connect wearable:', e);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleSignOut = async () => {
-    try {
-      await signOut();
-      addToast({ type: 'success', message: 'Signed out successfully.' });
-      onClose();
-    } catch {
-      addToast({ type: 'error', message: 'Sign out failed.' });
-    }
-  };
-
-  // Handle social account unlinking
-  const handleSocialUnlink = (providerId: string) => {
-    setLinkedSocials(prev => {
+  // Handle wearable disconnect
+  const handleWearableDisconnect = (providerId: string) => {
+    setConnectedWearables(prev => {
       const next = new Set(prev);
       next.delete(providerId);
       return next;
     });
   };
 
-  const handleExportData = async () => {
-    if (onExportData) {
-      onExportData();
-      return;
-    }
+  const handleSocialLink = async (providerId: string) => {
     setIsLoading(true);
     try {
+      const result = await connectSocialProvider(providerId as SocialProviderId);
+      if (!result.ok) {
+        console.error('Failed to link social account:', result.message);
+        return;
+      }
+      await refreshAccounts();
+    } catch (e) {
+      console.error('Failed to link social account:', e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSocialUnlink = async (providerId: string) => {
+    await disconnectSocialProvider(providerId as SocialProviderId);
+    await refreshAccounts();
+  };
+
+  // Export data
+  const handleExportData = async () => {
+    setIsLoading(true);
+    try {
+      // Gather all user data
       const exportData = {
         version: '1.0',
         exportedAt: new Date().toISOString(),
-        account: {
-          email: user?.email || null,
-        },
+        profile: profileData,
         dreams: [], // Would gather from app state
         preferences: {
           theme: { mode: themeMode, variant: themeVariant },
           notifications: notificationPrefs,
           privacy: privacySettings
         },
-        linkedSocials: Array.from(linkedSocials),
+        wearables: Array.from(connectedWearables),
+        social: accounts.map((a) => a.provider)
       };
 
       // Create downloadable file
@@ -397,21 +403,27 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
   };
 
   const tabs: Array<{ id: TabId; label: string; icon: any }> = [
+    { id: 'profile', label: 'Profile', icon: User },
     { id: 'account', label: 'Account', icon: Lock },
     { id: 'theme', label: 'Theme', icon: Palette },
     { id: 'notifications', label: 'Notifications', icon: Bell },
+    { id: 'devices', label: 'Devices', icon: Smartphone },
     { id: 'subscription', label: 'Subscription', icon: CreditCard },
     { id: 'privacy', label: 'Privacy', icon: Shield }
   ];
 
   const renderTabContent = () => {
     switch (activeTab) {
+      case 'profile':
+        return renderProfileTab();
       case 'account':
         return renderAccountTab();
       case 'theme':
         return renderThemeTab();
       case 'notifications':
         return renderNotificationsTab();
+      case 'devices':
+        return renderDevicesTab();
       case 'subscription':
         return renderSubscriptionTab();
       case 'privacy':
@@ -421,42 +433,124 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
     }
   };
 
-  const renderAccountTab = () => (
+  const renderProfileTab = () => (
     <div className="space-y-6">
-      <p className="text-sm text-muted bg-parchment/60 rounded-xl p-3">
-        Your public profile, services, and friends are managed from the Profile screen (avatar in the header).
-      </p>
+      {/* Avatar Section */}
+      <div className="flex flex-col items-center p-6 bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl">
+        <div className="relative">
+          <div className="w-24 h-24 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-3xl font-bold shadow-lg">
+            {profileData.displayName.charAt(0).toUpperCase()}
+          </div>
+          <button className="absolute bottom-0 right-0 w-8 h-8 bg-white rounded-full shadow-md flex items-center justify-center hover:bg-gray-50 transition">
+            <Camera className="w-4 h-4 text-gray-600" />
+          </button>
+        </div>
+        <h3 className="mt-4 text-xl font-semibold text-gray-900">{profileData.displayName}</h3>
+        <p className="text-sm text-gray-500">Dream Journal Member</p>
+      </div>
 
-      {user?.email && (
-        <div className="p-4 bg-parchment/60 rounded-xl">
-          <label className="block text-sm font-medium text-ink mb-2">Signed in as</label>
-          <div className="flex items-center gap-2 text-sm text-ink">
-            <Mail className="w-4 h-4 text-gray-400" />
-            {user.email}
+      {/* Form Fields */}
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Display Name</label>
+          <input
+            type="text"
+            value={profileData.displayName}
+            onChange={(e) => setProfileData(prev => ({ ...prev, displayName: e.target.value }))}
+            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+          <div className="relative">
+            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="email"
+              value={profileData.email}
+              onChange={(e) => setProfileData(prev => ({ ...prev, email: e.target.value }))}
+              className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
+            />
           </div>
         </div>
-      )}
 
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Phone (Optional)</label>
+          <div className="relative">
+            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="tel"
+              value={profileData.phone}
+              onChange={(e) => setProfileData(prev => ({ ...prev, phone: e.target.value }))}
+              placeholder="+1 (555) 000-0000"
+              className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Timezone</label>
+            <select
+              value={profileData.timezone}
+              onChange={(e) => setProfileData(prev => ({ ...prev, timezone: e.target.value }))}
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition bg-white"
+            >
+              <option value={profileData.timezone}>{profileData.timezone}</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Language</label>
+            <select
+              value={profileData.language}
+              onChange={(e) => setProfileData(prev => ({ ...prev, language: e.target.value }))}
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition bg-white"
+            >
+              <option value="en">English</option>
+              <option value="es">Español</option>
+              <option value="fr">Français</option>
+              <option value="de">Deutsch</option>
+              <option value="ja">日本語</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <button
+        onClick={() => {
+          // Save profile
+          console.log('Profile saved:', profileData);
+        }}
+        className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-medium hover:shadow-lg transition"
+      >
+        Save Changes
+      </button>
+    </div>
+  );
+
+  const renderAccountTab = () => (
+    <div className="space-y-6">
       {/* Security Section */}
-      <div className="p-4 bg-parchment/60 rounded-xl space-y-4">
-        <h3 className="font-semibold text-ink flex items-center gap-2">
+      <div className="p-4 bg-gray-50 rounded-xl space-y-4">
+        <h3 className="font-semibold text-gray-900 flex items-center gap-2">
           <Lock className="w-5 h-5" />
           Security
         </h3>
 
         <div className="space-y-3">
-          <button className="w-full flex items-center justify-between p-3 bg-cream rounded-lg border border-line hover:border-sage/40 transition">
+          <button className="w-full flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200 hover:border-purple-300 transition">
             <div className="flex items-center gap-3">
               <Key className="w-5 h-5 text-gray-400" />
-              <span className="text-sm font-medium text-ink">Change Password</span>
+              <span className="text-sm font-medium text-gray-700">Change Password</span>
             </div>
             <ChevronRight className="w-4 h-4 text-gray-400" />
           </button>
 
-          <button className="w-full flex items-center justify-between p-3 bg-cream rounded-lg border border-line hover:border-sage/40 transition">
+          <button className="w-full flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200 hover:border-purple-300 transition">
             <div className="flex items-center gap-3">
               <Fingerprint className="w-5 h-5 text-gray-400" />
-              <span className="text-sm font-medium text-ink">Two-Factor Authentication</span>
+              <span className="text-sm font-medium text-gray-700">Two-Factor Authentication</span>
             </div>
             <ToggleLeft className="w-5 h-5 text-gray-400" />
           </button>
@@ -464,19 +558,22 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
       </div>
 
       {/* Linked Social Accounts */}
-      <div className="p-4 bg-parchment/60 rounded-xl space-y-4">
-        <h3 className="font-semibold text-ink flex items-center gap-2">
+      <div className="p-4 bg-gray-50 rounded-xl space-y-4">
+        <h3 className="font-semibold text-gray-900 flex items-center gap-2">
           <LinkIcon className="w-5 h-5" />
           Linked Accounts
         </h3>
+        <p className="text-xs text-gray-500">
+          Connect Meta for Facebook login. Instagram and TikTok use device share when posting dreams.
+        </p>
 
         <div className="space-y-2">
           {SOCIAL_PROVIDERS.map((provider) => {
-            const isLinked = linkedSocials.has(provider.id);
+            const isLinked = isProviderLinkedInDb(accounts, provider.id as SocialProviderId);
             return (
               <div
                 key={provider.id}
-                className="flex items-center justify-between p-3 bg-cream rounded-lg border border-line"
+                className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200"
               >
                 <div className="flex items-center gap-3">
                   <div
@@ -485,7 +582,7 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
                   >
                     {provider.icon}
                   </div>
-                  <span className="text-sm font-medium text-ink">{provider.name}</span>
+                  <span className="text-sm font-medium text-gray-700">{provider.name}</span>
                 </div>
                 {isLinked ? (
                   <button
@@ -499,7 +596,7 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
                   <button
                     onClick={() => handleSocialLink(provider.id)}
                     disabled={isLoading}
-                    className="flex items-center gap-1 px-3 py-1.5 text-sm text-sage hover:bg-sage/10 rounded-lg transition disabled:opacity-50"
+                    className="flex items-center gap-1 px-3 py-1.5 text-sm text-purple-600 hover:bg-purple-50 rounded-lg transition disabled:opacity-50"
                   >
                     <LinkIcon className="w-4 h-4" />
                     Link
@@ -513,11 +610,7 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
 
       {/* Account Actions */}
       <div className="p-4 bg-red-50 rounded-xl space-y-3">
-      <button
-          type="button"
-          onClick={handleSignOut}
-          className="w-full flex items-center justify-center gap-2 py-3 text-rose-600 font-medium hover:bg-rose-50 rounded-lg transition"
-        >
+        <button className="w-full flex items-center justify-center gap-2 py-3 text-red-600 font-medium hover:bg-red-100 rounded-lg transition">
           <LogOut className="w-5 h-5" />
           Sign Out
         </button>
@@ -528,8 +621,8 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
   const renderThemeTab = () => (
     <div className="space-y-6">
       {/* Appearance Mode */}
-      <div className="p-4 bg-parchment/60 rounded-xl space-y-4">
-        <h3 className="font-semibold text-ink flex items-center gap-2">
+      <div className="p-4 bg-gray-50 rounded-xl space-y-4">
+        <h3 className="font-semibold text-gray-900 flex items-center gap-2">
           <Palette className="w-5 h-5" />
           Appearance
         </h3>
@@ -537,11 +630,11 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             {themeMode === 'dark' ? (
-              <Moon className="w-5 h-5 text-sage" />
+              <Moon className="w-5 h-5 text-purple-600" />
             ) : (
               <Sun className="w-5 h-5 text-orange-500" />
             )}
-            <span className="text-sm font-medium text-ink">
+            <span className="text-sm font-medium text-gray-700">
               {themeMode === 'dark' ? 'Dark Mode' : 'Light Mode'}
             </span>
           </div>
@@ -552,7 +645,7 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
               saveThemePreferences(newMode, themeVariant, autoTheme);
             }}
             className={`relative w-14 h-8 rounded-full transition ${
-              themeMode === 'dark' ? 'bg-sage' : 'bg-gray-300'
+              themeMode === 'dark' ? 'bg-purple-600' : 'bg-gray-300'
             }`}
           >
             <div
@@ -566,7 +659,7 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Zap className="w-5 h-5 text-yellow-500" />
-            <span className="text-sm font-medium text-ink">Auto (System)</span>
+            <span className="text-sm font-medium text-gray-700">Auto (System)</span>
           </div>
           <button
             onClick={() => {
@@ -575,7 +668,7 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
               saveThemePreferences(themeMode, themeVariant, newValue);
             }}
             className={`relative w-14 h-8 rounded-full transition ${
-              autoTheme ? 'bg-sage' : 'bg-gray-300'
+              autoTheme ? 'bg-purple-600' : 'bg-gray-300'
             }`}
           >
             <div
@@ -587,56 +680,54 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
         </div>
       </div>
 
-      {FEATURE_SKINS_UI_ENABLED && (
-        <div className="p-4 bg-parchment/60 rounded-xl space-y-4">
-          <h3 className="font-semibold text-ink flex items-center gap-2">
-            <Sparkles className="w-5 h-5" />
-            Theme Variant (A/B Test)
-          </h3>
-          <p className="text-xs text-muted">
-            Help us test different designs. Your feedback shapes the future of EverDream.
-          </p>
+      {/* Theme Variant (A/B Testing) */}
+      <div className="p-4 bg-gray-50 rounded-xl space-y-4">
+        <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+          <Sparkles className="w-5 h-5" />
+          Theme Variant (A/B Test)
+        </h3>
+        <p className="text-xs text-gray-500">
+          Help us test different designs. Your feedback shapes the future of EverDream.
+        </p>
 
-          <div className="grid grid-cols-2 gap-3">
-            {THEME_VARIANTS.map((variant) => (
-              <button
-                key={variant.id}
-                onClick={() => {
-                  setThemeVariant(variant.id);
-                  setSkin(variant.id === 'modern' ? 'pearl' : 'default');
-                  saveThemePreferences(themeMode, variant.id, autoTheme);
-                }}
-                className={`p-4 rounded-xl border-2 text-left transition-all ${
-                  themeVariant === variant.id
-                    ? 'border-sage/100 bg-sage/10'
-                    : 'border-line hover:border-sage/40'
-                }`}
-              >
-                <div className="text-2xl mb-2">{variant.preview}</div>
-                <div className="font-semibold text-ink">{variant.label}</div>
-                <div className="text-xs text-muted mt-1">{variant.description}</div>
-                {themeVariant === variant.id && (
-                  <div className="mt-2 flex items-center gap-1 text-sage text-xs font-medium">
-                    <Check className="w-3 h-3" />
-                    Selected
-                  </div>
-                )}
-              </button>
-            ))}
-          </div>
+        <div className="grid grid-cols-2 gap-3">
+          {THEME_VARIANTS.map((variant) => (
+            <button
+              key={variant.id}
+              onClick={() => {
+                setThemeVariant(variant.id);
+                saveThemePreferences(themeMode, variant.id, autoTheme);
+              }}
+              className={`p-4 rounded-xl border-2 text-left transition-all ${
+                themeVariant === variant.id
+                  ? 'border-purple-500 bg-purple-50'
+                  : 'border-gray-200 hover:border-purple-300'
+              }`}
+            >
+              <div className="text-2xl mb-2">{variant.preview}</div>
+              <div className="font-semibold text-gray-900">{variant.label}</div>
+              <div className="text-xs text-gray-600 mt-1">{variant.description}</div>
+              {themeVariant === variant.id && (
+                <div className="mt-2 flex items-center gap-1 text-purple-600 text-xs font-medium">
+                  <Check className="w-3 h-3" />
+                  Selected
+                </div>
+              )}
+            </button>
+          ))}
         </div>
-      )}
+      </div>
 
       {/* Preview Card */}
-      <div className="p-4 bg-gradient-to-br from-sage/100 to-pink-500 rounded-xl text-white">
+      <div className="p-4 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl text-white">
         <h4 className="font-semibold mb-2">Preview</h4>
         <div className={`p-4 rounded-lg ${
           themeVariant === 'modern' 
-            ? 'bg-cream/20 backdrop-blur-md' 
-            : 'bg-cream/90'
+            ? 'bg-white/20 backdrop-blur-md' 
+            : 'bg-white/90'
         }`}>
           <p className={`text-sm ${
-            themeVariant === 'modern' ? 'text-white' : 'text-ink'
+            themeVariant === 'modern' ? 'text-white' : 'text-gray-900'
           }`}>
             {themeVariant === 'modern' 
               ? 'Modern variant with heavy glassmorphism and larger typography' 
@@ -650,10 +741,10 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
   const renderNotificationsTab = () => (
     <div className="space-y-4">
       {NOTIFICATION_CATEGORIES.map((category) => (
-        <div key={category.id} className="p-4 bg-parchment/60 rounded-xl space-y-3">
+        <div key={category.id} className="p-4 bg-gray-50 rounded-xl space-y-3">
           <div className="flex items-center gap-2 mb-2">
-            <category.icon className="w-5 h-5 text-sage" />
-            <h3 className="font-semibold text-ink">{category.label}</h3>
+            <category.icon className="w-5 h-5 text-purple-600" />
+            <h3 className="font-semibold text-gray-900">{category.label}</h3>
           </div>
 
           <div className="space-y-2">
@@ -662,9 +753,9 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
               return (
                 <div
                   key={option.id}
-                  className="flex items-center justify-between p-3 bg-cream rounded-lg"
+                  className="flex items-center justify-between p-3 bg-white rounded-lg"
                 >
-                  <span className="text-sm font-medium text-ink">{option.label}</span>
+                  <span className="text-sm font-medium text-gray-700">{option.label}</span>
                   <button
                     onClick={() => {
                       const newPrefs = {
@@ -675,7 +766,7 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
                       safeSetLocalStorage('everdream-notifications', JSON.stringify(newPrefs));
                     }}
                     className={`relative w-12 h-6 rounded-full transition ${
-                      isEnabled ? 'bg-sage' : 'bg-gray-300'
+                      isEnabled ? 'bg-purple-600' : 'bg-gray-300'
                     }`}
                   >
                     <div
@@ -693,139 +784,150 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
     </div>
   );
 
-  const handleSubscribe = async (planId: 'plus' | 'pro') => {
-    try {
-      const offering = offerings.find((o) => o.tier === planId);
-      await subscribe(planId, offering?.packageIdentifier);
-      addToast(`Subscribed to EverDream ${planId === 'pro' ? 'Pro' : '+'}`, 'success');
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Purchase failed';
-      if (!msg.toLowerCase().includes('cancel')) {
-        addToast(msg, 'error');
-      }
-    }
-  };
+  const renderDevicesTab = () => (
+    <div className="space-y-6">
+      {/* Wearables */}
+      <div className="p-4 bg-gray-50 rounded-xl space-y-4">
+        <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+          <Watch className="w-5 h-5" />
+          Wearable Devices
+        </h3>
+        <p className="text-xs text-gray-500">
+          Connect your fitness tracker for enhanced sleep analysis
+        </p>
 
-  const tierLabel = tier === 'pro' ? 'EverDream Pro' : tier === 'plus' ? 'EverDream+' : 'Free';
+        <div className="space-y-2">
+          {WEARABLE_PROVIDERS.map((provider) => {
+            const isConnected = connectedWearables.has(provider.id);
+            return (
+              <div
+                key={provider.id}
+                className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="text-2xl">{provider.icon}</div>
+                  <div>
+                    <div className="font-medium text-gray-900">{provider.name}</div>
+                    {isConnected && (
+                      <div className="text-xs text-green-600 flex items-center gap-1">
+                        <Check className="w-3 h-3" />
+                        Connected
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {isConnected ? (
+                  <button
+                    onClick={() => handleWearableDisconnect(provider.id)}
+                    className="px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition"
+                  >
+                    Disconnect
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleWearableConnect(provider.id)}
+                    disabled={isLoading}
+                    className="px-3 py-1.5 text-sm text-purple-600 hover:bg-purple-50 rounded-lg transition disabled:opacity-50"
+                  >
+                    Connect
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Biometric Permissions */}
+      <div className="p-4 bg-blue-50 rounded-xl space-y-3">
+        <h3 className="font-semibold text-blue-900 flex items-center gap-2">
+          <Activity className="w-5 h-5" />
+          Biometric Data
+        </h3>
+        <p className="text-xs text-blue-700">
+          Control how biometric data is used for analysis
+        </p>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between p-3 bg-white rounded-lg">
+            <span className="text-sm font-medium text-gray-700">Heart Rate Analysis</span>
+            <ToggleRight className="w-5 h-5 text-purple-600" />
+          </div>
+          <div className="flex items-center justify-between p-3 bg-white rounded-lg">
+            <span className="text-sm font-medium text-gray-700">Sleep Stage Detection</span>
+            <ToggleRight className="w-5 h-5 text-purple-600" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
   const renderSubscriptionTab = () => (
     <div className="space-y-4">
-      <div className="p-6 bg-gradient-to-br from-sage to-pink-600 rounded-2xl text-white">
+      {/* Current Plan */}
+      <div className="p-6 bg-gradient-to-br from-purple-600 to-pink-600 rounded-2xl text-white">
         <div className="flex items-center justify-between mb-4">
           <div>
             <p className="text-purple-200 text-sm">Current Plan</p>
-            <h3 className="text-2xl font-bold">{subLoading ? '…' : tierLabel}</h3>
-            {subscriptionState?.source && tier !== 'free' && (
-              <p className="text-xs text-purple-200 mt-1 capitalize">
-                via {subscriptionState.source}
-                {subscriptionState.expiresAt &&
-                  ` · renews ${new Date(subscriptionState.expiresAt).toLocaleDateString()}`}
-              </p>
-            )}
+            <h3 className="text-2xl font-bold">Free</h3>
           </div>
           <CreditCard className="w-8 h-8 text-purple-200" />
         </div>
-        <p className="text-sm text-purple-100 mb-2">
-          {tier === 'free'
-            ? 'Upgrade to unlock cloud sync, unlimited AI images, and more'
-            : `${Number.isFinite(limits.aiImagesPerMonth) ? limits.aiImagesPerMonth : 'Unlimited'} AI images · ${limits.cloudSync ? 'Cloud sync on' : 'Local only'}`}
+        <p className="text-sm text-purple-100 mb-4">
+          Upgrade to unlock advanced features
         </p>
-        <p className="text-[11px] text-purple-200/80 mb-4">
-          {Capacitor.isNativePlatform()
-            ? subsEnabled
-              ? 'Billing via Google Play / App Store'
-              : 'Add RevenueCat API keys to enable in-app purchase'
-            : subsEnabled
-              ? 'Billing via Stripe Checkout'
-              : 'Add Stripe keys to enable web checkout'}
-        </p>
-        {tier !== 'pro' && (
-          <button
-            type="button"
-            disabled={purchasing || subLoading}
-            onClick={() => handleSubscribe(tier === 'free' ? 'plus' : 'pro')}
-            className="w-full py-3 bg-cream text-sage rounded-xl font-semibold hover:bg-sage/10 transition disabled:opacity-50"
-          >
-            {purchasing ? 'Processing…' : tier === 'free' ? 'Upgrade to EverDream+' : 'Upgrade to Pro'}
-          </button>
-        )}
-        {tier !== 'free' && subsEnabled && (
-          <button
-            type="button"
-            onClick={() => manage().catch((e) => addToast(String(e), 'error'))}
-            className="w-full mt-2 py-2.5 border border-white/30 rounded-xl text-sm font-medium hover:bg-white/10"
-          >
-            {paymentChannel === 'stripe' ? 'Manage billing' : 'Restore purchases'}
-          </button>
-        )}
-        {Capacitor.isNativePlatform() && (
-          <button
-            type="button"
-            onClick={() => restore().then(() => addToast('Purchases restored', 'success')).catch((e) => addToast(String(e), 'error'))}
-            className="w-full mt-2 py-2 text-xs text-purple-200 underline"
-          >
-            Restore purchases
-          </button>
-        )}
+        <button className="w-full py-3 bg-white text-purple-600 rounded-xl font-semibold hover:bg-purple-50 transition">
+          Upgrade Now
+        </button>
       </div>
 
-      {subError && (
-        <p className="text-sm text-rose-600 bg-rose-50 border border-rose-100 rounded-xl px-3 py-2">{subError}</p>
-      )}
-
+      {/* Plan Options */}
       <div className="space-y-3">
-        {SUBSCRIPTION_PLANS.filter((p) => p.id !== 'free').map((plan) => {
-          const planTier = plan.id as 'plus' | 'pro';
-          const offering = offerings.find((o) => o.tier === planTier);
-          const isCurrent = tier === plan.id;
-          const priceDisplay = offering?.priceString ?? plan.price;
-
-          return (
-            <div
-              key={plan.id}
-              className={`p-4 rounded-xl border-2 ${
-                plan.popular ? 'border-sage/100 bg-sage/10' : 'border-line bg-cream'
-              } ${isCurrent ? 'ring-2 ring-sage/40' : ''}`}
-            >
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <h4 className="font-semibold text-ink">{plan.name}</h4>
-                  <p className="text-2xl font-bold text-ink">
-                    {priceDisplay}
-                    {!offering?.priceString && (
-                      <span className="text-sm font-normal text-muted">/{plan.period}</span>
-                    )}
-                  </p>
-                </div>
-                {isCurrent ? (
-                  <span className="px-2 py-1 bg-sage text-white text-xs font-medium rounded-full">Current</span>
-                ) : plan.popular ? (
-                  <span className="px-2 py-1 bg-sage text-white text-xs font-medium rounded-full">Popular</span>
-                ) : null}
+        {SUBSCRIPTION_PLANS.map((plan) => (
+          <div
+            key={plan.id}
+            className={`p-4 rounded-xl border-2 ${
+              plan.popular
+                ? 'border-purple-500 bg-purple-50'
+                : 'border-gray-200 bg-white'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h4 className="font-semibold text-gray-900">{plan.name}</h4>
+                <p className="text-2xl font-bold text-gray-900">
+                  {plan.price}
+                  <span className="text-sm font-normal text-gray-500">/{plan.period}</span>
+                </p>
               </div>
+              {plan.popular && (
+                <span className="px-2 py-1 bg-purple-600 text-white text-xs font-medium rounded-full">
+                  Most Popular
+                </span>
+              )}
+            </div>
 
-              <ul className="space-y-2 mb-4">
-                {plan.features.map((feature, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-ink">
-                    <Check className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
-                    {feature}
+            <ul className="space-y-2 mb-4">
+              {plan.features.map((feature, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                  <Check className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
+                  {feature}
+                </li>
+              ))}
+            </ul>
+
+            {plan.limitations && (
+              <ul className="space-y-2">
+                {plan.limitations.map((limitation, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm text-gray-500">
+                    <X className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" />
+                    {limitation}
                   </li>
                 ))}
               </ul>
-
-              {!isCurrent && planTier !== 'free' && (
-                <button
-                  type="button"
-                  disabled={purchasing || !subsEnabled || (tier === 'pro' && planTier === 'plus')}
-                  onClick={() => handleSubscribe(planTier)}
-                  className="w-full py-2.5 rounded-xl bg-sage text-cream text-sm font-semibold disabled:opacity-40"
-                >
-                  {subsEnabled ? `Subscribe — ${plan.name}` : 'Coming soon'}
-                </button>
-              )}
-            </div>
-          );
-        })}
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -833,15 +935,15 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
   const renderPrivacyTab = () => (
     <div className="space-y-6">
       {/* Data Visibility */}
-      <div className="p-4 bg-parchment/60 rounded-xl space-y-4">
-        <h3 className="font-semibold text-ink flex items-center gap-2">
+      <div className="p-4 bg-gray-50 rounded-xl space-y-4">
+        <h3 className="font-semibold text-gray-900 flex items-center gap-2">
           <Eye className="w-5 h-5" />
           Data Visibility
         </h3>
 
         <div className="space-y-3">
           <div>
-            <label className="block text-sm font-medium text-ink mb-2">Profile Visibility</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Profile Visibility</label>
             <select
               value={privacySettings.profileVisibility}
               onChange={(e) => {
@@ -849,7 +951,7 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
                 setPrivacySettings(newSettings);
                 savePrivacySettings(newSettings);
               }}
-              className="w-full px-4 py-3 border border-line rounded-xl focus:ring-2 focus:ring-sage/100 focus:border-transparent transition bg-cream"
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition bg-white"
             >
               <option value="private">🔒 Private (Only me)</option>
               <option value="friends">👥 Friends Only</option>
@@ -858,7 +960,7 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-ink mb-2">Dream Sharing Default</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Dream Sharing Default</label>
             <select
               value={privacySettings.dreamSharing}
               onChange={(e) => {
@@ -866,7 +968,7 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
                 setPrivacySettings(newSettings);
                 savePrivacySettings(newSettings);
               }}
-              className="w-full px-4 py-3 border border-line rounded-xl focus:ring-2 focus:ring-sage/100 focus:border-transparent transition bg-cream"
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition bg-white"
             >
               <option value="private">🔒 Private (Only me)</option>
               <option value="friends">👥 Friends Only</option>
@@ -877,7 +979,7 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
       </div>
 
       {/* AI & Research */}
-      <div className="p-4 bg-sage/10 rounded-xl space-y-4">
+      <div className="p-4 bg-purple-50 rounded-xl space-y-4">
         <h3 className="font-semibold text-purple-900 flex items-center gap-2">
           <Brain className="w-5 h-5" />
           AI & Research
@@ -887,10 +989,10 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
         </p>
 
         <div className="space-y-3">
-          <div className="flex items-center justify-between p-3 bg-cream rounded-lg">
+          <div className="flex items-center justify-between p-3 bg-white rounded-lg">
             <div>
-              <div className="font-medium text-ink text-sm">AI Dream Analysis</div>
-              <div className="text-xs text-muted">Allow AI to analyze your dreams</div>
+              <div className="font-medium text-gray-900 text-sm">AI Dream Analysis</div>
+              <div className="text-xs text-gray-500">Allow AI to analyze your dreams</div>
             </div>
             <button
               onClick={() => {
@@ -899,7 +1001,7 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
                 savePrivacySettings(newSettings);
               }}
               className={`relative w-12 h-6 rounded-full transition ${
-                privacySettings.allowAIAnalysis ? 'bg-sage' : 'bg-gray-300'
+                privacySettings.allowAIAnalysis ? 'bg-purple-600' : 'bg-gray-300'
               }`}
             >
               <div
@@ -910,10 +1012,10 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
             </button>
           </div>
 
-          <div className="flex items-center justify-between p-3 bg-cream rounded-lg">
+          <div className="flex items-center justify-between p-3 bg-white rounded-lg">
             <div>
-              <div className="font-medium text-ink text-sm">Research Participation</div>
-              <div className="text-xs text-muted">Contribute to sleep research</div>
+              <div className="font-medium text-gray-900 text-sm">Research Participation</div>
+              <div className="text-xs text-gray-500">Contribute to sleep research</div>
             </div>
             <button
               onClick={() => {
@@ -922,7 +1024,7 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
                 savePrivacySettings(newSettings);
               }}
               className={`relative w-12 h-6 rounded-full transition ${
-                privacySettings.allowResearchUse ? 'bg-sage' : 'bg-gray-300'
+                privacySettings.allowResearchUse ? 'bg-purple-600' : 'bg-gray-300'
               }`}
             >
               <div
@@ -946,10 +1048,10 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
         </p>
 
         <div className="space-y-3">
-          <div className="flex items-center justify-between p-3 bg-cream rounded-lg">
+          <div className="flex items-center justify-between p-3 bg-white rounded-lg">
             <div>
-              <div className="font-medium text-ink text-sm">Biometric Data Processing</div>
-              <div className="text-xs text-muted">HRV, sleep stages, heart rate</div>
+              <div className="font-medium text-gray-900 text-sm">Biometric Data Processing</div>
+              <div className="text-xs text-gray-500">HRV, sleep stages, heart rate</div>
             </div>
             <button
               onClick={() => {
@@ -969,10 +1071,10 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
             </button>
           </div>
 
-          <div className="flex items-center justify-between p-3 bg-cream rounded-lg">
+          <div className="flex items-center justify-between p-3 bg-white rounded-lg">
             <div>
-              <div className="font-medium text-ink text-sm">Facial Analysis</div>
-              <div className="text-xs text-muted">Emotion detection during recall</div>
+              <div className="font-medium text-gray-900 text-sm">Facial Analysis</div>
+              <div className="text-xs text-gray-500">Emotion detection during recall</div>
             </div>
             <button
               onClick={() => {
@@ -995,8 +1097,8 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
       </div>
 
       {/* GDPR Actions */}
-      <div className="p-4 bg-parchment/60 rounded-xl space-y-3">
-        <h3 className="font-semibold text-ink flex items-center gap-2">
+      <div className="p-4 bg-gray-50 rounded-xl space-y-3">
+        <h3 className="font-semibold text-gray-900 flex items-center gap-2">
           <Shield className="w-5 h-5" />
           Your Rights (GDPR)
         </h3>
@@ -1004,7 +1106,7 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
         <button
           onClick={handleExportData}
           disabled={isLoading}
-          className="w-full flex items-center justify-center gap-2 py-3 bg-cream border border-line rounded-xl font-medium text-ink hover:bg-parchment/60 transition disabled:opacity-50"
+          className="w-full flex items-center justify-center gap-2 py-3 bg-white border border-gray-200 rounded-xl font-medium text-gray-700 hover:bg-gray-50 transition disabled:opacity-50"
         >
           <Download className="w-5 h-5" />
           Export My Data (Article 15)
@@ -1022,33 +1124,38 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
 
       {/* Legal Links */}
       <div className="p-4 space-y-2">
-        <button type="button" onClick={() => { onClose(); onNavigate?.('privacy'); }} className="block text-sm text-sageDark hover:underline text-left">Privacy Policy</button>
-        <button type="button" onClick={() => { onClose(); onNavigate?.('privacy'); }} className="block text-sm text-sageDark hover:underline text-left">Terms of Service</button>
+        <a href="#" className="block text-sm text-purple-600 hover:underline">Privacy Policy</a>
+        <a href="#" className="block text-sm text-purple-600 hover:underline">Terms of Service</a>
+        <a href="#" className="block text-sm text-purple-600 hover:underline">Cookie Policy</a>
+        <a href="#" className="block text-sm text-purple-600 hover:underline">Data Processing Agreement</a>
       </div>
     </div>
   );
 
-  const shellCard = isPearl ? 'bg-[var(--glass-bg)] border-[var(--glass-border)]' : 'bg-cream border-line';
-
   return (
-    <div className="fixed inset-0 bg-ink/30 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
       <motion.div
         initial={{ opacity: 0, y: 100 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: 100 }}
-        className={`w-full sm:max-w-2xl sm:rounded-3xl max-h-[90vh] flex flex-col overflow-hidden border ${shellCard}`}
+        className="bg-white w-full sm:max-w-2xl sm:rounded-2xl max-h-[90vh] flex flex-col overflow-hidden"
       >
-        <div className={`p-4 border-b flex items-center justify-between ${isPearl ? 'border-[var(--glass-border)] bg-[rgba(247,245,255,0.95)]' : 'border-line bg-cream'}`}>
+        {/* Header */}
+        <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-purple-600 to-pink-600 text-white">
           <div>
-            <h2 className="text-xl font-serif font-medium text-ink">Settings</h2>
-            <p className="text-sm text-muted">Account, theme, notifications & privacy</p>
+            <h2 className="text-xl font-bold">Settings</h2>
+            <p className="text-sm text-purple-200">Manage your account and preferences</p>
           </div>
-          <button type="button" onClick={onClose} className="p-2 hover:bg-sage/10 rounded-full transition">
-            <X className="w-6 h-6 text-muted" />
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-white/20 rounded-full transition"
+          >
+            <X className="w-6 h-6" />
           </button>
         </div>
 
-        <div className={`overflow-x-auto border-b ${isPearl ? 'border-[var(--glass-border)] bg-parchment/40' : 'border-line bg-parchment/60'}`}>
+        {/* Tab Navigation */}
+        <div className="overflow-x-auto border-b border-gray-200 bg-gray-50">
           <div className="flex p-2 gap-1 min-w-max">
             {tabs.map((tab) => {
               const Icon = tab.icon;
@@ -1056,12 +1163,11 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
               return (
                 <button
                   key={tab.id}
-                  type="button"
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-sm transition whitespace-nowrap ${
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition whitespace-nowrap ${
                     isActive
-                      ? isPearl ? 'bg-[var(--aqua-deep)] text-white' : 'bg-sage text-cream'
-                      : 'text-muted hover:text-ink hover:bg-cream/80'
+                      ? 'bg-white text-purple-600 shadow-sm'
+                      : 'text-gray-600 hover:bg-gray-200'
                   }`}
                 >
                   <Icon className="w-4 h-4" />
@@ -1088,20 +1194,20 @@ export default function ProfileAndSettings({ user, onClose, onExportData, onNavi
         </div>
 
         {/* Footer */}
-        <div className={`p-4 border-t flex items-center justify-between ${isPearl ? 'border-[var(--glass-border)]' : 'border-line'}`}>
-          <button type="button" onClick={onClose} className="px-4 py-2 text-muted font-medium hover:bg-parchment rounded-xl transition">
-            Close
+        <div className="p-4 border-t border-gray-200 bg-gray-50 flex items-center justify-between">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-gray-600 font-medium hover:bg-gray-200 rounded-lg transition"
+          >
+            Cancel
           </button>
           <button
-            type="button"
             onClick={() => {
-              saveThemePreferences(themeMode, themeVariant, autoTheme);
-              savePrivacySettings(privacySettings);
-              safeSetLocalStorage('everdream-notifications', JSON.stringify(notificationPrefs));
-              addToast({ type: 'success', message: 'Settings saved!' });
+              // Save all settings
+              console.log('All settings saved');
               onClose();
             }}
-            className={`px-6 py-2 rounded-xl font-medium transition ${isPearl ? 'bg-[var(--aqua-deep)] text-white' : 'bg-sage text-cream hover:bg-sageDark'}`}
+            className="px-6 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg font-medium hover:shadow-lg transition"
           >
             Save Changes
           </button>

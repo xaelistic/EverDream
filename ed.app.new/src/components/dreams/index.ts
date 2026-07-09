@@ -16,7 +16,7 @@ export { InsightCard } from './InsightCard';
 export { NFTMintButton } from './NFTMintButton';
 export { PipelineProgress } from './PipelineProgress';
 export { PrivacyToggle } from './PrivacyToggle';
-export { ShareModal } from './ShareModal';
+export { default as ShareModal } from './ShareModal';
 export { XPScoreDisplay, CompactCEN } from './XPScoreDisplay';
 
 // Re-export types

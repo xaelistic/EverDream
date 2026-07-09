@@ -18,12 +18,14 @@
     "cap:android": "npx cap run android",
     "cap:ios": "npx cap run ios",
     "cap:open:android": "npx cap open android",
-    "cap:open:ios": "npx cap open ios"
+    "cap:open:ios": "npx cap open ios",
+    "seed:admin": "node scripts/seed-admin.mjs"
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.12.0",
     "@capacitor/core": "^8.4.0",
     "@capacitor/local-notifications": "^8.2.0",
+    "@capacitor/share": "^8.0.1",
     "@react-three/drei": "^9.122.0",
     "@react-three/fiber": "^8.18.0",
     "@react-three/xr": "^6.6.29",

@@ -8,6 +8,7 @@ export type RouteScreen =
   | 'record'
   | 'capture'
   | 'dream'
+  | 'share'
   | 'insights'
   | 'dashboard'
   | 'wearables'
@@ -17,33 +18,24 @@ export type RouteScreen =
   | 'more'
   | 'import-photos'
   | 'admin'
-  | 'settings'
-  | 'video-journal'
-  | 'profile'
-  | 'simulacrum'
-  | 'vr'
-  | 'exchange'
-  | 'combine';
+  | 'video-journal';
 
 export type AppRoute = {
   screen: RouteScreen;
   dreamId: string | null;
-  profileHandle: string | null;
+  shareSlug: string | null;
 };
 
 function parseHash(): AppRoute {
   const raw = window.location.hash.replace(/^#\/?/, '').trim();
-  if (!raw) return { screen: 'home', dreamId: null, profileHandle: null };
+  if (!raw) return { screen: 'home', dreamId: null, shareSlug: null };
 
   const parts = raw.split('/').filter(Boolean);
   if (parts[0] === 'dream' && parts[1]) {
-    return { screen: 'dream', dreamId: decodeURIComponent(parts[1]), profileHandle: null };
+    return { screen: 'dream', dreamId: decodeURIComponent(parts[1]), shareSlug: null };
   }
-  if (parts[0] === 'profile' && parts[1]) {
-    return { screen: 'profile', dreamId: null, profileHandle: decodeURIComponent(parts[1]) };
-  }
-  if ((parts[0] === 'simulacrum' || parts[0] === 'vr') && parts[1]) {
-    return { screen: parts[0] as 'simulacrum' | 'vr', dreamId: decodeURIComponent(parts[1]), profileHandle: null };
+  if (parts[0] === 'share' && parts[1]) {
+    return { screen: 'share', dreamId: null, shareSlug: decodeURIComponent(parts[1]) };
   }
 
   const screen = parts[0] as RouteScreen;
@@ -63,27 +55,21 @@ function parseHash(): AppRoute {
     'more',
     'import-photos',
     'admin',
-    'settings',
     'video-journal',
-    'profile',
-    'simulacrum',
-    'vr',
-    'exchange',
-    'combine',
   ];
   if (screen === 'reflection') {
-    return { screen: 'home', dreamId: null };
+    return { screen: 'home', dreamId: null, shareSlug: null };
   }
 
   if (allowed.includes(screen)) {
-    return { screen, dreamId: null, profileHandle: null };
+    return { screen, dreamId: null, shareSlug: null };
   }
-  return { screen: 'home', dreamId: null, profileHandle: null };
+  return { screen: 'home', dreamId: null, shareSlug: null };
 }
 
 export function useHashRoute() {
   const [route, setRouteState] = useState<AppRoute>(() =>
-    typeof window !== 'undefined' ? parseHash() : { screen: 'home', dreamId: null, profileHandle: null }
+    typeof window !== 'undefined' ? parseHash() : { screen: 'home', dreamId: null, shareSlug: null }
   );
 
   useEffect(() => {
@@ -92,17 +78,9 @@ export function useHashRoute() {
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
 
-  const navigate = useCallback((screen: RouteScreen, id?: string | null) => {
-    if (screen === 'dream' && id) {
-      window.location.hash = `#/dream/${encodeURIComponent(id)}`;
-      return;
-    }
-    if (screen === 'profile' && id) {
-      window.location.hash = `#/profile/${encodeURIComponent(id)}`;
-      return;
-    }
-    if ((screen === 'simulacrum' || screen === 'vr') && id) {
-      window.location.hash = `#/${screen}/${encodeURIComponent(id)}`;
+  const navigate = useCallback((screen: RouteScreen, dreamId?: string | null) => {
+    if (screen === 'dream' && dreamId) {
+      window.location.hash = `#/dream/${encodeURIComponent(dreamId)}`;
       return;
     }
     window.location.hash = `#/${screen === 'home' ? '' : screen}`;
