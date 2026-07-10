@@ -21,6 +21,7 @@ export function VideoJournalScreen({ onComplete, onCancel }: VideoJournalScreenP
   const [capturedEmotion, setCapturedEmotion] = useState<EmotionCapture | null>(null);
   
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const previewVideoRef = useRef<HTMLVideoElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -186,6 +187,16 @@ export function VideoJournalScreen({ onComplete, onCancel }: VideoJournalScreenP
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Force autoplay for preview video (fixes common browser autoplay policy issues)
+  useEffect(() => {
+    if (previewUrl && previewVideoRef.current) {
+      const v = previewVideoRef.current;
+      v.play().catch((e) => {
+        console.warn('[VideoJournal] Autoplay prevented for preview, user may need to click play:', e);
+      });
+    }
+  }, [previewUrl]);
+
   if (hasPermission === false) {
     return (
       <div className="space-y-6">
@@ -252,6 +263,7 @@ export function VideoJournalScreen({ onComplete, onCancel }: VideoJournalScreenP
           ) : (
             <>
               <video
+                ref={previewVideoRef}
                 src={previewUrl}
                 controls
                 autoPlay
