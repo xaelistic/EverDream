@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { ArrowLeft, Upload, Award, Shield, Eye, Camera, MessageCircle } from 'lucide-react';
 import { FEATURE_NFT_UI_ENABLED } from '../config/features';
 import DreamVisualizer from '../components/dreams/DreamVisualizer';
@@ -83,6 +83,7 @@ export function DreamDetailScreen({
   const [resolvedVideoUrl, setResolvedVideoUrl] = useState<string | null>(
     detailDream.videoCapture?.url ?? null,
   );
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     let objectUrl: string | null = null;
@@ -113,6 +114,23 @@ export function DreamDetailScreen({
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [detailDream.id, detailDream.videoCapture?.mediaId, detailDream.videoCapture?.url]);
+
+  // Force autoplay for video journal in detail view (fixes autoplay policy + timing issues)
+  useEffect(() => {
+    if (resolvedVideoUrl && videoRef.current) {
+      const v = videoRef.current;
+      const tryPlay = () => {
+        v.play().catch((e) => {
+          console.warn('[DreamDetail] Video autoplay prevented:', e);
+        });
+      };
+      if (v.readyState >= 2) {
+        tryPlay();
+      } else {
+        v.onloadeddata = tryPlay;
+      }
+    }
+  }, [resolvedVideoUrl]);
 
   return (
     <div className="space-y-5">
@@ -200,8 +218,13 @@ export function DreamDetailScreen({
               </div>
               <div className="rounded-2xl border border-line bg-black overflow-hidden">
                 <video
+                  ref={videoRef}
                   src={resolvedVideoUrl || detailDream.videoCapture.url}
                   controls
+                  autoPlay
+                  muted
+                  playsInline
+                  loop
                   className="w-full"
                   poster={detailDream.videoCapture.thumbnail || detailDream.generatedImage?.url}
                 />
