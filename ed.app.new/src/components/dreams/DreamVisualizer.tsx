@@ -214,7 +214,8 @@ export default function DreamVisualizer({
               textTransform: 'uppercase',
               letterSpacing: '0.1em',
             }}>
-              {asset.source === 'pollinations' ? '✨ Pollinations.ai' : asset.source === 'fallback' ? '📷 Stock Photo' : `✨ ${asset.source}`}
+              {asset.metadata?.provider ? `✨ ${asset.metadata.provider}` : (asset.source === 'pollinations' ? '✨ Pollinations.ai' : asset.source === 'fallback' ? '📷 Stock Photo' : `✨ ${asset.source}`)}
+              {asset.metadata?.estimated_cost_usd ? ` (~$${asset.metadata.estimated_cost_usd})` : ''}
             </span>
             <div style={{ display: 'flex', gap: '8px' }}>
               <Button variant="ghost" size="sm" onClick={handleDownload} icon={<Download size={14} />}>

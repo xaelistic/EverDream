@@ -71,6 +71,7 @@ import {
 import LoadingScreen from './components/loading-screen';
 import type { DreamAsset } from './modules/sleep/types';
 import { initDreamService, syncFromSupabase } from './lib/dreamService';
+import { updateUserProfileFromDream } from './lib/userProfile';
 import { supabase as supabaseClient, getCurrentUser, getProfile } from './lib/supabase/client';
 import { useAuth } from './hooks/use-auth';
 import { useSubscription } from './hooks/use-subscription';
@@ -1094,6 +1095,19 @@ const DreamJournalApp = () => {
     syncDreamToSupabase(newDream).catch((err: unknown) => {
       console.warn('[SaveDream] Supabase sync error:', err);
     });
+
+    // Update iterative profile (client-side merge, no AI yet)
+    try {
+      const user = await getCurrentUser();
+      if (user) {
+        const { data: profile } = await supabaseClient.from('profiles').select('id').eq('auth_user_id', user.id).single();
+        if (profile?.id) {
+          await updateUserProfileFromDream(profile.id, newDream, newDream.sleepData, newDream.generatedImage);
+        }
+      }
+    } catch (e) {
+      console.warn('[Profile] Non-blocking update failed:', e);
+    }
 
     await checkAchievements(updatedDreams);
     

@@ -20,7 +20,28 @@ function makeId() { return 'asset-' + Date.now() + '-' + Math.random().toString(
 function buildDreamPrompt(base: string) { return `${base}, surreal dreamlike visualization, cinematic lighting, ethereal atmosphere, high detail`; }
 async function validateImageUrl(url: string) { const res = await fetch(url, { method: 'HEAD' }); if (!res.ok) throw new Error('Invalid image url'); }
 
-// Prioritize the most reliable FREE path: Edge Function (Pollinations proxy) or direct Pollinations
+// Provider selection (per SPEC-14: OpenRouter priority for cost, but stubbed without real AI call for now)
+// In full intelligence layer, this will call OpenRouter / Fal etc. with real keys.
+const IMAGE_PROVIDER = (import.meta as any).env?.VITE_IMAGE_PROVIDER || 'pollinations'; // 'openrouter' | 'fal' | 'pollinations' | 'hf'
+
+async function generateWithOpenRouterStub(prompt: string, style = 'dreamlike'): Promise<DreamAsset> {
+  console.log('[AssetGen] OpenRouter path (stub - no real AI call yet per instructions). Falling back to reliable free.');
+  // TODO in intelligence layer: real call with cost tracking
+  // Mock cost for now
+  const mockCost = 0.012;
+  const enhanced = buildDreamPrompt(prompt);
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhanced)}?width=1024&height=1024&seed=${Date.now()}&nologo=true&safe=true`;
+  return { 
+    id: makeId(), 
+    prompt: enhanced, 
+    url, 
+    source: 'openrouter-stub', 
+    style, 
+    generatedAt: new Date().toISOString(), 
+    metadata: { provider: 'openrouter-stub-flux', estimated_cost_usd: mockCost, note: 'stub until intelligence layer' } 
+  };
+}
+
 async function generateWithReliableFree(prompt: string, style = 'dreamlike'): Promise<DreamAsset> {
   console.log('[AssetGen] Trying reliable FREE path (Edge > Direct Pollinations)...');
   const supabase = getSupabase();
@@ -128,7 +149,16 @@ async function generateWithOllama(prompt: string, style: string = 'dreamlike'): 
 // Main exported function - simplified and robust
 // Ollama NWE is tried FIRST when VITE_OLLAMA_URL is set (Brief 1 requirement)
 export async function generateDreamImage(prompt: string, style = 'dreamlike'): Promise<DreamAsset> {
-  console.log('[AssetGen] Starting image generation for dream...');
+  console.log('[AssetGen] Starting image generation for dream... Provider preference:', IMAGE_PROVIDER);
+
+  // SPEC-14: Respect IMAGE_PROVIDER (stub for openrouter until intelligence layer)
+  if (IMAGE_PROVIDER === 'openrouter') {
+    try {
+      return await generateWithOpenRouterStub(prompt, style);
+    } catch (error) {
+      console.warn('[AssetGen] OpenRouter stub failed, falling back:', error);
+    }
+  }
 
   // Phase 4: Try Ollama NWE as #1 provider when enabled
   const ollamaEnabled = import.meta.env.VITE_OLLAMA_ENABLED !== 'false' && !!import.meta.env.VITE_OLLAMA_URL;
