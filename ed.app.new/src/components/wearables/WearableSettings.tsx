@@ -166,6 +166,23 @@ export function WearableSettings({
   });
   const [error, setError] = useState<string | null>(null);
 
+  // Load test tokens from localStorage on mount (for SPEC-13 test flow until full DB connections)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('wearable_test_tokens');
+      if (saved) {
+        const tokens = JSON.parse(saved);
+        const updated = configs.map(c => {
+          if (tokens[c.provider]) {
+            return { ...c, auth: { ...c.auth, accessToken: tokens[c.provider] }, enabled: true };
+          }
+          return c;
+        });
+        onConfigsChange(updated);
+      }
+    } catch (e) { /* ignore */ }
+  }, []); // run once
+
   const handleConnect = (provider: WearableProvider) => {
     const clientId = clientIdMap[provider];
     if (!clientId && PROVIDER_INFO[provider].authType !== 'placeholder') {
