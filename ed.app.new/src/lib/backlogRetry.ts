@@ -16,6 +16,7 @@ import {
 import { transcribeWithWhisper } from './transcriptionWhisper';
 import { analyzeDreamWithAI } from './api/ai-provider';
 import { generateDreamImage } from '../modules/sleep/dreamAssetGenerator';
+import { loadCurrentUserProfile, enrichImagePromptWithProfile } from './userProfile';
 
 const RETRY_INTERVAL_MS = 15 * 60 * 1000;
 
@@ -59,7 +60,9 @@ async function executeTask(task: BacklogTask): Promise<boolean> {
       case 'image-generation': {
         const prompt = task.payload.prompt as string;
         if (!prompt) throw new Error('Image prompt missing from backlog');
-        const result = await generateDreamImage(prompt);
+        const p = await loadCurrentUserProfile();
+        const enriched = enrichImagePromptWithProfile(prompt, p);
+        const result = await generateDreamImage(enriched);
         await markCompleted(task.id, result);
         return true;
       }

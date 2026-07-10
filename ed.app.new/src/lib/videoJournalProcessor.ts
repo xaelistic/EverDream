@@ -11,6 +11,11 @@
 import { transcribeAudio as transcribeWithWhisper } from './transcriptionWhisper';
 import { analyzeDream, type DreamAnalysis } from './dream-analyzer';
 import { generateDreamImage } from '../modules/sleep/dreamAssetGenerator';
+import { 
+  loadCurrentUserProfile, 
+  enrichAnalysisWithProfile, 
+  enrichImagePromptWithProfile 
+} from './userProfile';
 import { mediaStorageManager } from './mediaStorage';
 import { trackEvent } from './analytics';
 import type { EmotionCapture } from '../components/face/FacialEmotionDetector';
@@ -353,6 +358,11 @@ export async function processVideoJournal(
   try {
     logStage('analysis_start');
     finalAnalysis = await analyzeDream(transcriptText);
+
+    // Enrich with profile
+    const profile = await loadCurrentUserProfile();
+    finalAnalysis = enrichAnalysisWithProfile(finalAnalysis, profile);
+
     logStage('analysis_complete', { narrativeLength: finalAnalysis.narrative?.length ?? 0 });
   } catch (error) {
     logError('analysis', error);
@@ -386,7 +396,9 @@ export async function processVideoJournal(
 
   try {
     logStage('image_gen_start', { promptLength: imagePrompt.length });
-    const asset = await generateDreamImage(imagePrompt);
+    const p = await loadCurrentUserProfile();
+    const enrichedPrompt = enrichImagePromptWithProfile(imagePrompt, p);
+    const asset = await generateDreamImage(enrichedPrompt);
     generatedImage = {
       url: asset.url,
       prompt: asset.prompt,
@@ -530,7 +542,9 @@ export async function processAudioJournal(
   const imagePrompt = finalAnalysis.narrative || finalAnalysis.nugget || transcriptText;
 
   try {
-    const asset = await generateDreamImage(imagePrompt);
+    const p2 = await loadCurrentUserProfile();
+    const ep2 = enrichImagePromptWithProfile(imagePrompt, p2);
+    const asset = await generateDreamImage(ep2);
     generatedImage = {
       url: asset.url,
       prompt: asset.prompt,
@@ -591,7 +605,9 @@ export async function processTextJournal(text: string): Promise<{
   const analysis = await analyzeDream(trimmed);
   let generatedImage: VideoJournalDream['generatedImage'] = null;
   try {
-    const asset = await generateDreamImage(analysis.narrative || analysis.nugget || trimmed);
+    const p3 = await loadCurrentUserProfile();
+    const ep3 = enrichImagePromptWithProfile(analysis.narrative || analysis.nugget || trimmed, p3);
+    const asset = await generateDreamImage(ep3);
     generatedImage = {
       url: asset.url,
       prompt: asset.prompt,

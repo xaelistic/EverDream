@@ -159,3 +159,89 @@ export async function getUserProfile(userId: string): Promise<UserProfile> {
     version: 0
   };
 }
+
+/**
+ * Enrich a DreamAnalysis result with data from the user's progressive profile.
+ * This makes analysis refer back to what we know about the user (SPEC-16 intelligence layer).
+ */
+export function enrichAnalysisWithProfile(analysis: any, profile: UserProfile | null): any {
+  if (!profile) return analysis;
+
+  const enriched = { ...analysis };
+
+  // Add known recurring themes if not already present
+  if (profile.recurring_themes?.length) {
+    const known = profile.recurring_themes.filter(
+      (t: string) => !enriched.themes?.includes(t)
+    );
+    if (known.length) {
+      enriched.themes = [...(enriched.themes || []), ...known.slice(0, 3)];
+    }
+  }
+
+  // Inject personal context note into narrative if we have key insights
+  if (profile.key_insights?.length && enriched.narrative) {
+    const note = ` (This aligns with your established pattern: ${profile.key_insights[0]})`;
+    enriched.narrative = enriched.narrative + note;
+  }
+
+  // Attach full personal context for downstream consumers (image gen, UI, etc.)
+  enriched.personalContext = {
+    recurringThemes: profile.recurring_themes || [],
+    imagePrefs: profile.image_style_prefs || [],
+    emotionalTendencies: profile.emotional_tendencies || [],
+    lastUpdated: profile.last_updated,
+    version: profile.version
+  };
+
+  return enriched;
+}
+
+/**
+ * Enrich an image generation prompt using the user's profile preferences.
+ * Refers back to known styles and motifs (SPEC-14 + SPEC-16).
+ */
+export function enrichImagePromptWithProfile(basePrompt: string, profile: UserProfile | null): string {
+  if (!profile) return basePrompt;
+
+  let enhanced = basePrompt;
+
+  const enhancements: string[] = [];
+
+  if (profile.image_style_prefs?.length) {
+    enhancements.push(`in the style of ${profile.image_style_prefs.slice(0, 2).join(' and ')}`);
+  }
+
+  if (profile.recurring_themes?.length) {
+    enhancements.push(`incorporating recurring motifs like ${profile.recurring_themes.slice(0, 3).join(', ')}`);
+  }
+
+  if (enhancements.length) {
+    enhanced = `${enhanced}, ${enhancements.join(', ')}`;
+  }
+
+  return enhanced;
+}
+
+/**
+ * Helper to load profile for current user and return it (or null).
+ * Used in analysis and generation paths to enable "referring against what we know".
+ */
+export async function loadCurrentUserProfile(): Promise<UserProfile | null> {
+  try {
+    // This assumes supabase client is set up with session; callers should handle auth
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('user_profile')
+      .eq('auth_user_id', user.id)
+      .single();
+
+    return profile?.user_profile || null;
+  } catch (e) {
+    console.warn('[Profile] Failed to load current user profile:', e);
+    return null;
+  }
+}

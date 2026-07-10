@@ -17,6 +17,11 @@
 import { transcribeAudio, type TranscriptionResult } from './transcriptionWhisper';
 import { analyzeDream, type DreamAnalysis } from './dream-analyzer';
 import { generateDreamImage, type DreamAsset } from '../modules/sleep/dreamAssetGenerator';
+import { 
+  loadCurrentUserProfile, 
+  enrichAnalysisWithProfile, 
+  enrichImagePromptWithProfile 
+} from './userProfile';
 import { generateParallaxVideo } from './assets/pipeline';
 
 // ============================================================
@@ -151,6 +156,11 @@ export async function runDreamPipeline(
 
     try {
       analysis = await analyzeDream(dreamText);
+
+      // Enrich with profile (intelligence layer)
+      const profile = await loadCurrentUserProfile();
+      analysis = enrichAnalysisWithProfile(analysis, profile);
+
       report(
         STEP_NAMES.analyze,
         'done',
@@ -173,7 +183,10 @@ export async function runDreamPipeline(
     report(STEP_NAMES.image, 'running', 'Generating dream image...');
 
     try {
-      const imagePrompt = analysis.narrative || analysis.nugget || dreamText;
+      let imagePrompt = analysis.narrative || analysis.nugget || dreamText;
+      const profile = await loadCurrentUserProfile();
+      imagePrompt = enrichImagePromptWithProfile(imagePrompt, profile);
+
       image = await generateDreamImage(imagePrompt);
       report(STEP_NAMES.image, 'done', `Image generated (${image.source})`);
     } catch (err) {

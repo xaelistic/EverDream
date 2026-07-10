@@ -71,7 +71,12 @@ import {
 import LoadingScreen from './components/loading-screen';
 import type { DreamAsset } from './modules/sleep/types';
 import { initDreamService, syncFromSupabase } from './lib/dreamService';
-import { updateUserProfileFromDream } from './lib/userProfile';
+import { 
+  updateUserProfileFromDream, 
+  enrichAnalysisWithProfile, 
+  enrichImagePromptWithProfile,
+  loadCurrentUserProfile 
+} from './lib/userProfile';
 import { supabase as supabaseClient, getCurrentUser, getProfile } from './lib/supabase/client';
 import { useAuth } from './hooks/use-auth';
 import { useSubscription } from './hooks/use-subscription';
@@ -538,8 +543,17 @@ const DreamJournalApp = () => {
     setIsGeneratingImage(true);
     const perfCall = startAPICall('image_gen', 'pollinations.ai', 'GET', route.screen);
     try {
-      const prompt = dreamData.narrative || dreamData.nugget || dreamData.content || 'a surreal dreamscape';
-      const asset = await generateDreamImage(prompt);
+      let basePrompt = dreamData.narrative || dreamData.nugget || dreamData.content || 'a surreal dreamscape';
+
+      // Enrich using user profile (refers back - SPEC-16)
+      try {
+        const profile = await loadCurrentUserProfile();
+        basePrompt = enrichImagePromptWithProfile(basePrompt, profile);
+      } catch (e) {
+        console.warn('[Intelligence] Profile enrichment for image failed (non-blocking)');
+      }
+
+      const asset = await generateDreamImage(basePrompt);
       endAPICall(perfCall, 200);
       return {
         url: asset.url,
@@ -615,11 +629,24 @@ const DreamJournalApp = () => {
   };
 
   // AI Analysis with image generation — uses dream-analyzer module (edge function + fallback)
+  // Intelligence layer enhancement: load progressive user profile and enrich analysis
+  // (client-side for now; full LLM referral will happen in intelligence edge per SPEC-16)
   const runDreamAnalysis = async (text: string) => {
     setIsProcessing(true);
     const perfCall = startAPICall('dream-analyzer', 'analyze-dream', 'POST', route.screen);
     try {
       const result = await analyzeDream(text);
+
+      // Enrich with user profile (refers back to what we know about the user)
+      try {
+        const profile = await loadCurrentUserProfile();
+        const enriched = enrichAnalysisWithProfile(result, profile);
+        Object.assign(result, enriched);
+        console.log('[Intelligence] Analysis enriched with user profile');
+      } catch (profileErr) {
+        console.warn('[Intelligence] Profile enrichment for analysis failed:', profileErr);
+      }
+
       endAPICall(perfCall, 200);
       return result;
     } catch (error) {

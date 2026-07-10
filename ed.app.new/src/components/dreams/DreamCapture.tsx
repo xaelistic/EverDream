@@ -8,6 +8,11 @@ import { generateDreamImage } from '../../modules/sleep/dreamAssetGenerator';
 import { ServiceOverloadedError } from '../../lib/api/errorHandling';
 import type { DreamAnalysis } from '../../lib/dream-analyzer';
 import type { DreamAsset } from '../../modules/sleep/types';
+import { 
+  loadCurrentUserProfile, 
+  enrichAnalysisWithProfile, 
+  enrichImagePromptWithProfile 
+} from '../../lib/userProfile';
 
 export interface DreamCaptureResult {
   analysis: DreamAnalysis;
@@ -101,6 +106,11 @@ export default function DreamCapture({
     let analysis: DreamAnalysis;
     try {
       analysis = await analyzeDream(text.trim());
+
+      // Enrich with user profile
+      const profile = await loadCurrentUserProfile();
+      analysis = enrichAnalysisWithProfile(analysis, profile);
+
       setAnalysisResult(analysis);
       updateStep('Dream Analysis', { status: 'done', message: `Category: ${analysis.category}` });
     } catch (err) {
@@ -117,7 +127,10 @@ export default function DreamCapture({
     updateStep('Image Generation', { status: 'running', message: 'Creating your dream visualization...' });
     let generatedImage: DreamAsset | null = null;
     try {
-      const imagePrompt = analysis.narrative || analysis.nugget || text;
+      let imagePrompt = analysis.narrative || analysis.nugget || text;
+      const profile = await loadCurrentUserProfile();
+      imagePrompt = enrichImagePromptWithProfile(imagePrompt, profile);
+
       generatedImage = await generateDreamImage(imagePrompt);
       setImageResult(generatedImage);
       updateStep('Image Generation', { status: 'done', message: `Image ready (${generatedImage.source})` });

@@ -335,7 +335,13 @@ export default function PhotoUploadFlow({
       );
 
       try {
-        const analysis = await analyzeDream(entry.editedText);
+        let analysis = await analyzeDream(entry.editedText);
+
+        // Enrich with profile
+        try {
+          const profile = await loadCurrentUserProfile();
+          analysis = enrichAnalysisWithProfile(analysis, profile);
+        } catch {}
         setExtractedEntries((prev) =>
           prev.map((e, idx) =>
             idx === i ? { ...e, analysis, analyzing: false } : e,
