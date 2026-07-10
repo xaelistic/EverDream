@@ -470,8 +470,10 @@ export default function DreamAssetGenerator({
                 <video
                   src={asset.result_url}
                   controls
+                  autoPlay
                   loop
                   muted
+                  playsInline
                   style={{ width: '100%', display: 'block' }}
                 />
               ) : (

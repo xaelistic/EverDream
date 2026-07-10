@@ -70,7 +70,10 @@ export function DreamCard({ dream, getCategoryBadgeClass, getEmotionEmoji: getEm
           <video
             src={dream.videoCapture.url}
             style={{ width: '100%', height: '180px', objectFit: 'cover', display: 'block' }}
+            autoPlay
+            loop
             muted
+            playsInline
             preload="metadata"
           />
           <div style={{

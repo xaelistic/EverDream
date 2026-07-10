@@ -333,6 +333,10 @@ function FullscreenViewer({
           <video
             src={asset.url}
             controls
+            autoPlay
+            loop
+            muted
+            playsInline
             style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 8 }}
           />
         )}

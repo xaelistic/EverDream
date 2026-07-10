@@ -71,8 +71,7 @@ import {
 import LoadingScreen from './components/loading-screen';
 import type { DreamAsset } from './modules/sleep/types';
 import { initDreamService, syncFromSupabase } from './lib/dreamService';
-import { supabase as supabaseClient } from './lib/supabase/client';
-import { getCurrentUser } from './lib/supabase/client';
+import { supabase as supabaseClient, getCurrentUser, getProfile } from './lib/supabase/client';
 import { useAuth } from './hooks/use-auth';
 import { useSubscription } from './hooks/use-subscription';
 
@@ -930,41 +929,39 @@ const DreamJournalApp = () => {
     };
   };
 
-  // Simulate wearable sync
+  // Real wearable sync using the library + service (wired from SPEC-13)
   const syncWearableData = async () => {
-    const newSession = {
-      id: Date.now(),
-      date: new Date().toISOString(),
-      source: 'apple_watch',
-      sleepDuration: 450,
-      sleepQuality: 82,
-      remDuration: 115,
-      deepDuration: 95,
-      stages: [
-        { phase: 'awake', start: '23:45', duration: 15 },
-        { phase: 'light', start: '00:00', duration: 90 },
-        { phase: 'deep', start: '01:30', duration: 60 },
-        { phase: 'rem', start: '02:30', duration: 35 },
-        { phase: 'light', start: '03:05', duration: 45 },
-        { phase: 'deep', start: '03:50', duration: 35 },
-        { phase: 'rem', start: '04:25', duration: 40 },
-        { phase: 'light', start: '05:05', duration: 50 },
-        { phase: 'rem', start: '05:55', duration: 40 },
-        { phase: 'awake', start: '06:35', duration: 10 }
-      ],
-      heartRate: { avg: 58, min: 52, max: 68 },
-      hrv: 65,
-      movement: 23
-    };
-
-    const updatedData = [newSession, ...wearableData].slice(0, 30);
-    setWearableData(updatedData);
-    
     try {
-      await window.storage.set('wearableData', JSON.stringify(updatedData));
-      alert('✅ Synced sleep data from Apple Watch!\n\nLast night: 7.5 hours, 82% quality, 115min REM');
+      const profile = await getProfile(); // from supabase client helpers
+      if (!profile?.id) {
+        alert('Please sign in to sync wearables.');
+        return;
+      }
+
+      // Load saved configs (in real app, load from user_settings or wearable_connections)
+      // For now use the state wearableConfigs which can hold tokens from settings UI
+      const enabledConfigs = wearableConfigs.filter(c => c.enabled && c.auth?.accessToken);
+
+      if (enabledConfigs.length === 0) {
+        alert('No wearables connected. Go to Wearables settings to connect (paste test token or complete OAuth).');
+        return;
+      }
+
+      const { syncAndPersistWearableData } = await import('./lib/wearableService');
+      const records = await syncAndPersistWearableData(profile.id, enabledConfigs, 30);
+
+      if (records.length > 0) {
+        setWearableData(records);
+        try {
+          await window.storage.set('wearableData', JSON.stringify(records));
+        } catch {}
+        alert(`✅ Synced ${records.length} nights from wearable(s)! Data saved to your sleep log.`);
+      } else {
+        alert('No new wearable data found for the last 30 days.');
+      }
     } catch (error) {
       console.error('Wearable sync error:', error);
+      alert('Wearable sync failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
     }
   };
 

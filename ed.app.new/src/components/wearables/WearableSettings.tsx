@@ -188,6 +188,25 @@ export function WearableSettings({
       return;
     }
 
+    // For quick testing / SPEC-13 MVP: allow pasting a personal access token
+    const testToken = window.prompt(
+      `For testing: Paste ${PROVIDER_INFO[provider].name} access token (Oura personal tokens work great).\nLeave empty to start OAuth flow.`,
+      ''
+    );
+
+    if (testToken && testToken.trim()) {
+      const newConfig: WearableConfig = {
+        provider,
+        auth: { provider, accessToken: testToken.trim() },
+        enabled: true,
+      };
+      const updated = [...configs.filter((c) => c.provider !== provider), newConfig];
+      onConfigsChange(updated);
+      setError(null);
+      return;
+    }
+
+    // Fallback to OAuth
     const state = `${provider}-${Date.now()}`;
     sessionStorage.setItem('wearable_oauth_state', state);
     sessionStorage.setItem('wearable_oauth_provider', provider);
