@@ -12,6 +12,7 @@ import {
   Loader2, X, Eye, Trash2, Copy, ExternalLink, Zap
 } from 'lucide-react';
 import { XAELData, generateImagePrompt, ImageGenerationPrompt } from '../utils/xael';
+import { useToast } from '../ui/Toast';
 
 interface DreamStudioProps {
   xaelData?: XAELData;
@@ -54,6 +55,7 @@ const ASPECT_RATIOS = [
 ];
 
 export default function DreamStudio({ xaelData, onClose }: DreamStudioProps) {
+  const { addToast } = useToast();
   const [prompt, setPrompt] = useState('');
   const [negativePrompt, setNegativePrompt] = useState('');
   const [selectedStyle, setSelectedStyle] = useState('surreal');
@@ -274,7 +276,7 @@ export default function DreamStudio({ xaelData, onClose }: DreamStudioProps) {
     } else {
       // Fallback: copy link
       navigator.clipboard.writeText(image.url);
-      alert('Image link copied to clipboard');
+      addToast({ type: 'success', message: 'Image link copied to clipboard' });
     }
   };
 

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { useToast } from '../components/ui/Toast';
 import DreamCapture from '../components/dreams/DreamCapture';
 import VideoCaptureFlow from '../components/capture/VideoCaptureFlow';
 import type { VideoCaptureData } from '../components/capture/VideoCaptureFlow';
@@ -152,7 +153,7 @@ function AudioJournalCapture({
       }, 1000);
     } catch (error) {
       console.error('[AudioJournal] Failed to start:', error);
-      alert('Unable to access microphone. Please check permissions.');
+      addToast({ type: 'error', message: 'Unable to access microphone. Please check permissions.' });
       cleanup();
     }
   };
@@ -359,6 +360,7 @@ function UploadCapturePanel({
 }
 
 export function RecordScreen({ onComplete, onCancel }: RecordScreenProps) {
+  const { addToast } = useToast();
   const [mode, setMode] = useState<CaptureMode>('video');
 
   const handleModeChange = (next: CaptureMode) => {

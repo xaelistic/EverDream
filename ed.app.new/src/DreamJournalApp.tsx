@@ -51,6 +51,7 @@ import { useSkinFull } from './contexts/SkinContext';
 import { trackScreenView, startSession, endSession } from './lib/analytics';
 import { initPerformanceMonitor, startAPICall, endAPICall } from './lib/performance';
 import { AppLoadingScreen, ErrorBanner, LoadingOverlay } from './components/ui';
+import { useToast } from './components/ui/Toast';
 import { TermsModal } from './components/modal';
 import { ProfileHub } from './screens/ProfileHubScreen';
 import { getOrCreateWallet, createDreamNFT, mintNFT, saveNFT, type DreamNFT, type WalletIdentity } from './lib/nft';
@@ -80,8 +81,10 @@ import {
 import { supabase as supabaseClient, getCurrentUser, getProfile } from './lib/supabase/client';
 import { useAuth } from './hooks/use-auth';
 import { useSubscription } from './hooks/use-subscription';
+import { useToast } from './components/ui/Toast';
 
 const DreamJournalApp = () => {
+  const { addToast } = useToast();
   const { route, navigate } = useHashRoute();
   const { skin, isThemed } = useSkinFull();
   const { user } = useAuth();
@@ -674,7 +677,7 @@ const DreamJournalApp = () => {
   // Speech transcription helper
   const startSpeechRecording = () => {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      alert('Voice recognition not supported. Please use Chrome or Edge browser.');
+      addToast({ type: 'error', message: 'Voice recognition not supported. Please use Chrome or Edge browser.' });
       return;
     }
 
@@ -696,7 +699,7 @@ const DreamJournalApp = () => {
     recognition.onerror = (event) => {
       console.error('Speech recognition error', event.error);
       setIsRecording(false);
-      alert('Voice recording error: ' + event.error);
+      addToast({ type: 'error', message: `Voice recording error: ${event.error}` });
     };
 
     recognition.onend = () => setIsRecording(false);
@@ -718,7 +721,7 @@ const DreamJournalApp = () => {
     console.log('[VideoCapture] Starting video capture...');
     if (!navigator.mediaDevices?.getUserMedia) {
       console.error('[VideoCapture] getUserMedia not supported');
-      alert('Video capture is not supported in this browser.');
+      addToast({ type: 'error', message: 'Video capture is not supported in this browser.' });
       return;
     }
 
@@ -777,7 +780,7 @@ const DreamJournalApp = () => {
       startSpeechRecording();
     } catch (error) {
       console.error('[VideoCapture] Error:', error);
-      alert('Unable to access camera.');
+      addToast({ type: 'error', message: 'Unable to access camera. Please check permissions.' });
     }
   };
 
@@ -824,12 +827,12 @@ const DreamJournalApp = () => {
     if (!file) return;
 
     if (!file.type.startsWith('audio/')) {
-      alert('Please select an audio file');
+      addToast({ type: 'error', message: 'Please select an audio file.' });
       return;
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      alert('File too large. Please select a file under 5MB.');
+      addToast({ type: 'error', message: 'File too large. Please select a file under 5MB.' });
       return;
     }
 
@@ -861,7 +864,7 @@ const DreamJournalApp = () => {
       reader.readAsDataURL(file);
     } catch (error) {
       console.error('Import error:', error);
-      alert('Error importing audio file');
+      addToast({ type: 'error', message: 'Error importing audio file. Please try again.' });
       setIsTranscribing(false);
     }
   };
@@ -929,10 +932,10 @@ const DreamJournalApp = () => {
       });
       setCurrentEntry('');
       setIsTranscribing(false);
-      alert('Could not transcribe audio automatically. Please type your dream manually.');
+      addToast({ type: 'warning', message: 'Could not transcribe audio automatically. Please type your dream manually.' });
     } catch (error) {
       console.error('[DreamJournal] Transcription error:', error);
-      alert('Error transcribing audio. Please try again.');
+      addToast({ type: 'error', message: 'Error transcribing audio. Please try again.' });
       setIsTranscribing(false);
     }
   };
@@ -962,7 +965,7 @@ const DreamJournalApp = () => {
     try {
       const profile = await getProfile(); // from supabase client helpers
       if (!profile?.id) {
-        alert('Please sign in to sync wearables.');
+        addToast({ type: 'error', message: 'Please sign in to sync wearables.' });
         return;
       }
 
@@ -971,7 +974,7 @@ const DreamJournalApp = () => {
       const enabledConfigs = wearableConfigs.filter(c => c.enabled && c.auth?.accessToken);
 
       if (enabledConfigs.length === 0) {
-        alert('No wearables connected. Go to Wearables settings to connect (paste test token or complete OAuth).');
+        addToast({ type: 'warning', message: 'No wearables connected. Go to Wearables settings to connect.' });
         return;
       }
 
@@ -983,13 +986,13 @@ const DreamJournalApp = () => {
         try {
           await window.storage.set('wearableData', JSON.stringify(records));
         } catch {}
-        alert(`✅ Synced ${records.length} nights from wearable(s)! Data saved to your sleep log.`);
+        addToast({ type: 'success', message: `Synced ${records.length} nights from wearable(s)! Data saved to your sleep log.` });
       } else {
-        alert('No new wearable data found for the last 30 days.');
+        addToast({ type: 'info', message: 'No new wearable data found for the last 30 days.' });
       }
     } catch (error) {
       console.error('Wearable sync error:', error);
-      alert('Wearable sync failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      addToast({ type: 'error', message: `Wearable sync failed: ${error instanceof Error ? error.message : 'Unknown error'}` });
     }
   };
 
@@ -1491,7 +1494,7 @@ const DreamJournalApp = () => {
 
     const confirmation = prompt('Type DELETE to confirm permanent deletion:');
     if (confirmation !== 'DELETE') {
-      alert('Deletion cancelled.');
+      addToast({ type: 'info', message: 'Deletion cancelled.' });
       return;
     }
 
@@ -1518,13 +1521,13 @@ const DreamJournalApp = () => {
       setAudioFiles([]);
       setHasAcceptedTerms(false);
       
-      alert('✅ All data deleted.\n\nYour data has been permanently removed from storage. You may now close the app or start fresh.');
+      addToast({ type: 'success', message: 'All data deleted. Your data has been permanently removed from storage.' });
       
       // Show terms again for fresh start
       setShowTerms(true);
     } catch (error) {
       console.error('Deletion error:', error);
-      alert('Error during deletion. Some data may remain.');
+      addToast({ type: 'error', message: 'Error during deletion. Some data may remain.' });
     }
   };
 
@@ -1556,7 +1559,7 @@ const DreamJournalApp = () => {
     a.download = `dreamscape-full-export-${new Date().toISOString().split('T')[0]}.json`;
     a.click();
     
-    alert('✅ Full data export complete!\n\nYour data is now downloaded. This export includes:\n• All dreams and NFT metadata\n• Wearable data\n• Privacy settings\n• Data processor information\n\nYou own this data under your chosen license.');
+    addToast({ type: 'success', message: 'Full data export complete. Your data has been downloaded.' });
   };
 
   // Get NFT component breakdown
@@ -2227,7 +2230,7 @@ const DreamJournalApp = () => {
                 }
               } catch (error) {
                 console.error('[RecordScreen] Video journal processing failed:', error);
-                alert('Saved your video but transcription/analysis failed. You can edit the entry in your journal.');
+                addToast({ type: 'warning', message: 'Saved your video but transcription/analysis failed. You can edit the entry in your journal.' });
                 newDream = {
                   id: `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
                   date: new Date().toISOString(),
@@ -2312,7 +2315,7 @@ const DreamJournalApp = () => {
         <VideoJournalScreen
           onComplete={async (videoUrl, thumbnailUrl, duration, videoBlob, capturedEmotionFromVideo) => {
             if (!videoBlob) {
-              alert('Video data missing — please try recording again.');
+              addToast({ type: 'error', message: 'Video data missing — please try recording again.' });
               return;
             }
 
@@ -2335,7 +2338,7 @@ const DreamJournalApp = () => {
               navigate('dream', newDream.id);
             } catch (error) {
               console.error('[VideoJournal] Processing failed:', error);
-              alert('Failed to process video journal. Please try again.');
+              addToast({ type: 'error', message: 'Failed to process video journal. Please try again.' });
             } finally {
               setIsProcessing(false);
             }
