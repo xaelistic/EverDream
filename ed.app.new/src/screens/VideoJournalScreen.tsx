@@ -254,6 +254,9 @@ export function VideoJournalScreen({ onComplete, onCancel }: VideoJournalScreenP
               <video
                 src={previewUrl}
                 controls
+                autoPlay
+                muted
+                playsInline
                 className="w-full h-full object-cover"
               />
               {thumbnailUrl && (
