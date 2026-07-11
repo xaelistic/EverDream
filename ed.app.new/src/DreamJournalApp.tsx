@@ -81,7 +81,6 @@ import {
 import { supabase as supabaseClient, getCurrentUser, getProfile } from './lib/supabase/client';
 import { useAuth } from './hooks/use-auth';
 import { useSubscription } from './hooks/use-subscription';
-import { useToast } from './components/ui/Toast';
 
 const DreamJournalApp = () => {
   const { addToast } = useToast();
