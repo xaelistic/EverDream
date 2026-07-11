@@ -282,7 +282,7 @@ function deriveAddressFromSeed(seed: string): string {
 /**
  * Get or create wallet identity for this device
  */
-export async function getOrCreateWallet(): Promise<WalletIdentity> {
+export function getOrCreateWallet(): WalletIdentity {
   // Check for existing wallet
   const stored = safeGetLocalStorage(WALLET_STORAGE_KEY);
   if (stored) {
