@@ -51,7 +51,7 @@ export default function DreamDetail({
   // If used as modal
   if (isOpen !== undefined) {
     return (
-      <Modal isOpen={isOpen} onClose={onClose || (() = data-component="DreamDetail"> {})} title={dream?.title || 'Dream Detail'} size="lg">
+      <Modal isOpen={isOpen} onClose={onClose || (() => {})} title={dream?.title || 'Dream Detail'} size="lg" data-component="DreamDetail">
         {dream && <DreamDetailContent
           dream={dream}
           onBack={onClose}

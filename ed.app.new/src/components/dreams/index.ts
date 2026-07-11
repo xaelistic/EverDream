@@ -5,16 +5,16 @@
  */
 
 export { DreamCard } from './DreamCard';
-export { DreamDetail } from './DreamDetail';
-export { DreamEntryForm } from './DreamEntryForm';
-export { DreamJournal } from './DreamJournal';
-export { DreamList } from './DreamList';
-export { DreamSkeleton } from './DreamSkeleton';
-export { DreamStatsDashboard } from './DreamStatsDashboard';
-export { DreamVisualizer } from './DreamVisualizer';
+export { default as DreamDetail } from './DreamDetail';
+export { default as DreamEntryForm } from './DreamEntryForm';
+export { default as DreamJournal } from './DreamJournal';
+export { default as DreamList } from './DreamList';
+export { default as DreamSkeleton } from './DreamSkeleton';
+export { default as DreamStatsDashboard } from './DreamStatsDashboard';
+export { default as DreamVisualizer } from './DreamVisualizer';
 export { InsightCard } from './InsightCard';
-export { NFTMintButton } from './NFTMintButton';
-export { PipelineProgress } from './PipelineProgress';
+export { default as NFTMintButton } from './NFTMintButton';
+export { default as PipelineProgress } from './PipelineProgress';
 export { PrivacyToggle } from './PrivacyToggle';
 export { default as ShareModal } from './ShareModal';
 export { default as DreamCapture } from './DreamCapture';
