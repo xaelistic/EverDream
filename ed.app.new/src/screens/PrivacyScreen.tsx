@@ -35,7 +35,7 @@ export function PrivacyScreen({
       <div className="grid grid-cols-2 gap-3">
         <button
           onClick={exportAllData}
-          className="bg-sage hover:bg-sageDark text-cream py-3 rounded-lg transition flex items-center justify-center gap-2"
+          className="bg-sage hover:bg-sageDark text-cream py-3 rounded-2xl transition flex items-center justify-center gap-2 font-medium text-sm shadow-paper"
           aria-label="Export all data"
         >
           <Download className="w-4 h-4" strokeWidth={1.75} />
@@ -43,7 +43,7 @@ export function PrivacyScreen({
         </button>
         <button
           onClick={deleteAllUserData}
-          className="bg-red-600 hover:bg-red-700 py-3 rounded-lg transition flex items-center justify-center gap-2"
+          className="border border-red-600/40 text-red-600 hover:bg-red-50 py-3 rounded-2xl transition flex items-center justify-center gap-2 font-medium text-sm"
           aria-label="Delete all data"
         >
           <X className="w-4 h-4" strokeWidth={1.75} />
@@ -177,7 +177,7 @@ export function PrivacyScreen({
       {/* Licensing Info */}
       <button
         onClick={() => setShowLicensing(true)}
-        className="w-full border-2 border-dusk/30 bg-dusk/5 hover:bg-dusk/10 text-duskDeep py-3 rounded-lg transition font-medium text-sm"
+        className="w-full border border-line bg-parchment hover:bg-cream text-ink py-3 rounded-xl transition font-medium text-sm"
       >
         View Open Source Licensing
       </button>
@@ -185,7 +185,7 @@ export function PrivacyScreen({
       {/* Terms */}
       <button
         onClick={() => setShowTerms(true)}
-        className="w-full border-2 border-dusk/30 bg-dusk/5 hover:bg-dusk/10 text-duskDeep py-3 rounded-lg transition font-medium text-sm"
+        className="w-full border border-line bg-parchment hover:bg-cream text-ink py-3 rounded-xl transition font-medium text-sm"
       >
         View Terms & Conditions
       </button>

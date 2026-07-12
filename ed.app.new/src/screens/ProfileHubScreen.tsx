@@ -4,7 +4,7 @@ import {
   Sparkles,
   Link as LinkIcon,
   Users,
-  Settings as SettingsIcon,
+
   Camera,
   Plus,
   Music,
@@ -16,6 +16,7 @@ import {
   Check,
   X,
   Loader2,
+  LogOut,
 } from 'lucide-react';
 import { useSkinFull } from '../contexts/SkinContext';
 import { useToast } from '../components/ui/Toast';
@@ -80,7 +81,7 @@ const friends: Friend[] = [
 export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
   const { isPearl } = useSkinFull();
   const { addToast } = useToast();
-  const { user: authUser } = useAuth();
+  const { user: authUser, signOut } = useAuth();
   const { profile, loading, saving, updateField, setAvatar, addInterest, addDreamGoal } = useProfile();
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
@@ -175,6 +176,16 @@ export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
   const openSettings = () => {
     onClose();
     navigate('settings');
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      onClose();
+      window.location.hash = '';
+    } catch (err) {
+      console.error('Logout failed', err);
+    }
   };
 
   if (loading || !profile) {
@@ -338,6 +349,18 @@ export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
         )}
       </div>
     </div>
+
+    {/* Logout button on the profile screen */}
+    <div>
+      <button
+        type="button"
+        onClick={handleLogout}
+        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium border border-line text-muted hover:text-rose-600 hover:bg-rose-50/50 transition"
+      >
+        <LogOut className="w-4 h-4" />
+        Log out
+      </button>
+    </div>
   );
 
   const renderServicesTab = () => (
@@ -461,9 +484,7 @@ export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
             <ChevronRight className="w-6 h-6 text-ink rotate-180" strokeWidth={1.75} />
           </button>
           <h1 className="text-lg font-serif font-medium text-ink">Profile</h1>
-          <button type="button" onClick={openSettings} className="p-2 rounded-full hover:bg-sage/10 transition" aria-label="Settings">
-            <SettingsIcon className="w-5 h-5 text-muted" strokeWidth={1.75} />
-          </button>
+          <div className="w-10" aria-hidden /> {/* balance for hidden cog */}
         </div>
       </div>
 

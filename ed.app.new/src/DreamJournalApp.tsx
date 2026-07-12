@@ -59,6 +59,7 @@ import DreamVisualizer from './components/dreams/DreamVisualizer';
 import DreamCapture from './components/dreams/DreamCapture';
 import ShareModal from './components/dreams/ShareModal';
 import { VideoJournalScreen } from './screens/VideoJournalScreen';
+import { PrivacyScreen } from './screens/PrivacyScreen';
 import { analyzeDream, type DreamAnalysis } from './lib/dream-analyzer';
 import OnboardingFlow from './components/onboarding/OnboardingFlow';
 import { DailyReflectionCard } from './components/reflection/DailyReflectionCard';
@@ -1886,6 +1887,37 @@ const DreamJournalApp = () => {
               <p className="text-sm text-muted mt-1">Connect your sleep devices for automatic tracking</p>
             </div>
 
+            {/* Quick test helper for wearable integrations */}
+            <button
+              type="button"
+              onClick={() => {
+                const today = new Date();
+                const sampleRecords = Array.from({ length: 5 }).map((_, i) => {
+                  const d = new Date(today.getTime() - i * 86400000);
+                  const dateStr = d.toISOString().split('T')[0];
+                  return {
+                    date: dateStr,
+                    bedtime: new Date(d.getTime() - 8 * 3600 * 1000).toISOString(),
+                    wakeTime: d.toISOString(),
+                    durationMinutes: 450 + Math.floor(Math.random() * 60),
+                    remMinutes: 80 + Math.floor(Math.random() * 30),
+                    deepMinutes: 70 + Math.floor(Math.random() * 25),
+                    lightMinutes: 200,
+                    awakeMinutes: 20,
+                    efficiency: 85 + Math.floor(Math.random() * 10),
+                    score: 75 + Math.floor(Math.random() * 20),
+                    source: ['oura', 'fitbit', 'garmin'][i % 3] as any,
+                  };
+                });
+                setWearableData(sampleRecords);
+                window.storage?.set?.('wearableData', JSON.stringify(sampleRecords)).catch(() => {});
+                addToast({ type: 'success', message: 'Loaded sample wearable data for testing integrations.' });
+              }}
+              className="text-xs px-3 py-1 rounded-full border border-line bg-parchment hover:bg-cream text-muted"
+            >
+              Load sample data (test integrations)
+            </button>
+
             {/* Wearable connection settings */}
             <WearableSettings
               configs={wearableConfigs}
@@ -1998,166 +2030,15 @@ const DreamJournalApp = () => {
         )}
 
         {route.screen === 'privacy' && (
-          <div className="space-y-4">
-            <h2 className="text-2xl font-bold mb-4">Privacy & Data Sovereignty</h2>
-            
-            {/* Quick Actions */}
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={exportAllData}
-                className="bg-blue-600 hover:bg-blue-700 py-3 rounded-lg transition flex items-center justify-center gap-2"
-              >
-                <Download className="w-4 h-4" />
-                Export All Data
-              </button>
-              <button
-                onClick={deleteAllUserData}
-                className="bg-red-600 hover:bg-red-700 py-3 rounded-lg transition flex items-center justify-center gap-2"
-              >
-                <X className="w-4 h-4" />
-                Delete Everything
-              </button>
-            </div>
-
-            {/* Privacy Settings */}
-            <div className="bg-white bg-opacity-10 backdrop-blur-sm rounded-xl p-4 border border-white border-opacity-10">
-              <h3 className="font-semibold mb-4 flex items-center gap-2">
-                <Shield className="w-5 h-5 text-cyan-300" />
-                Granular Privacy Controls
-              </h3>
-              <div className="space-y-4">
-                <PrivacyToggle
-                  label="AI Dream Analysis"
-                  description="Allow Claude AI to analyze dream content"
-                  value={privacySettings.aiAnalysis}
-                  onChange={(v) => {
-                    const newSettings = {...privacySettings, aiAnalysis: v};
-                    setPrivacySettings(newSettings);
-                    savePrivacySettings(newSettings);
-                  }}
-                  required={true}
-                  note="Required for core functionality"
-                />
-                
-                <PrivacyToggle
-                  label="Image Generation"
-                  description="Generate AI images from dreams"
-                  value={privacySettings.imageGeneration}
-                  onChange={(v) => {
-                    const newSettings = {...privacySettings, imageGeneration: v};
-                    setPrivacySettings(newSettings);
-                    savePrivacySettings(newSettings);
-                  }}
-                />
-
-                <PrivacyToggle
-                  label="Wearable Data Sync"
-                  description="Sync sleep data from wearable devices"
-                  value={privacySettings.wearableSync}
-                  onChange={(v) => {
-                    const newSettings = {...privacySettings, wearableSync: v};
-                    setPrivacySettings(newSettings);
-                    savePrivacySettings(newSettings);
-                  }}
-                />
-
-                <PrivacyToggle
-                  label="Anonymous Analytics"
-                  description="Share anonymous usage patterns (helps improve app)"
-                  value={privacySettings.anonymousAnalytics}
-                  onChange={(v) => {
-                    const newSettings = {...privacySettings, anonymousAnalytics: v};
-                    setPrivacySettings(newSettings);
-                    savePrivacySettings(newSettings);
-                  }}
-                />
-
-                <PrivacyToggle
-                  label="Third-Party Data Sharing"
-                  description="Allow dream baskets to license your content"
-                  value={privacySettings.thirdPartySharing}
-                  onChange={(v) => {
-                    const newSettings = {...privacySettings, thirdPartySharing: v};
-                    setPrivacySettings(newSettings);
-                    savePrivacySettings(newSettings);
-                  }}
-                  note="Required for monetization (Phase 3)"
-                />
-              </div>
-            </div>
-
-            {/* Data Storage Info */}
-            <div className="bg-white bg-opacity-10 backdrop-blur-sm rounded-xl p-4 border border-white border-opacity-10">
-              <h3 className="font-semibold mb-3">Where Your Data Lives</h3>
-              <div className="space-y-3 text-sm">
-                <div className="flex items-start gap-3">
-                  <Shield className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <div className="font-semibold text-green-300">Local Storage (Primary)</div>
-                    <div className="text-purple-200">Browser IndexedDB on your device</div>
-                    <div className="text-xs text-purple-300 mt-1">You control this data completely</div>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <Cpu className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <div className="font-semibold text-blue-300">Data Processors</div>
-                    <div className="text-purple-200">• Claude AI (Anthropic) - Analysis only</div>
-                    <div className="text-purple-200">• DALL-E (OpenAI) - Image generation</div>
-                    <div className="text-xs text-purple-300 mt-1">No data retention, processing only</div>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <Activity className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <div className="font-semibold text-yellow-300">Transmission</div>
-                    <div className="text-purple-200">HTTPS/TLS 1.3 encrypted</div>
-                    <div className="text-xs text-purple-300 mt-1">All API calls are encrypted in transit</div>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <Moon className="w-5 h-5 text-purple-400 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <div className="font-semibold text-purple-300">Future: Ethereum Storage</div>
-                    <div className="text-purple-200">IPFS + Ethereum for NFT minting</div>
-                    <div className="text-xs text-purple-300 mt-1">Phase 3: Decentralized storage option</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* GDPR Rights */}
-            <div className="bg-green-600 bg-opacity-20 rounded-xl p-4 border border-green-500 border-opacity-30">
-              <h3 className="font-semibold mb-2">Your GDPR Rights</h3>
-              <div className="text-sm space-y-1 text-green-100">
-                <div>✓ Right to Access (export your data anytime)</div>
-                <div>✓ Right to Rectification (edit your dreams)</div>
-                <div>✓ Right to Erasure (delete everything)</div>
-                <div>✓ Right to Data Portability (JSON export)</div>
-                <div>✓ Right to Object (opt-out controls)</div>
-                <div>✓ Right to Restrict Processing (granular controls)</div>
-              </div>
-            </div>
-
-            {/* Licensing Info */}
-            <button
-              onClick={() => setShowLicensing(true)}
-              className="w-full bg-purple-600 hover:bg-purple-700 py-3 rounded-lg transition"
-            >
-              View Open Source Licensing
-            </button>
-
-            {/* Terms */}
-            <button
-              onClick={() => setShowTerms(true)}
-              className="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg transition"
-            >
-              View Terms & Conditions
-            </button>
-          </div>
+          <PrivacyScreen
+            privacySettings={privacySettings}
+            setPrivacySettings={setPrivacySettings}
+            savePrivacySettings={savePrivacySettings}
+            exportAllData={exportAllData}
+            deleteAllUserData={deleteAllUserData}
+            setShowLicensing={setShowLicensing}
+            setShowTerms={setShowTerms}
+          />
         )}
 
       {/* Record (full page) — uses DreamCapture with pipeline progress */}
@@ -3131,30 +3012,6 @@ const Modal = ({ children, onClose }) => (
         <X className="w-5 h-5" strokeWidth={1.75} />
       </button>
       {children}
-    </div>
-  </div>
-);
-
-const PrivacyToggle = ({ label, description, value, onChange, required = false, note }) => (
-  <div className="border-b border-line pb-4 last:border-0">
-    <div className="flex items-start justify-between gap-3 mb-1">
-      <div className="flex-1 min-w-0">
-        <div className="font-semibold text-sm text-ink">{label}</div>
-        <div className="text-xs text-muted mt-0.5 leading-relaxed">{description}</div>
-        {note && (
-          <div className="text-xs text-duskDeep mt-1.5">{note}</div>
-        )}
-      </div>
-      <button
-        type="button"
-        onClick={() => !required && onChange(!value)}
-        disabled={required}
-        className={`ml-2 w-12 h-7 rounded-full transition flex-shrink-0 border border-line ${
-          value ? 'bg-sage' : 'bg-parchment'
-        } ${required ? 'opacity-45 cursor-not-allowed' : ''}`}
-      >
-        <div className={`w-5 h-5 bg-cream rounded-full shadow-sm transition transform mt-0.5 ${value ? 'translate-x-6' : 'translate-x-1'}`} />
-      </button>
     </div>
   </div>
 );

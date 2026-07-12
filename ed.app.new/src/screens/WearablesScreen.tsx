@@ -24,6 +24,35 @@ export function WearablesScreen({
         <p className="text-sm text-muted mt-1">Connect your sleep devices for automatic tracking</p>
       </div>
 
+      {/* Quick test helper */}
+      <button
+        type="button"
+        onClick={() => {
+          const today = new Date();
+          const sampleRecords = Array.from({ length: 5 }).map((_, i) => {
+            const d = new Date(today.getTime() - i * 86400000);
+            const dateStr = d.toISOString().split('T')[0];
+            return {
+              date: dateStr,
+              bedtime: new Date(d.getTime() - 8 * 3600 * 1000).toISOString(),
+              wakeTime: d.toISOString(),
+              durationMinutes: 450 + Math.floor(Math.random() * 60),
+              remMinutes: 80 + Math.floor(Math.random() * 30),
+              deepMinutes: 70 + Math.floor(Math.random() * 25),
+              lightMinutes: 200,
+              awakeMinutes: 20,
+              efficiency: 85 + Math.floor(Math.random() * 10),
+              score: 75 + Math.floor(Math.random() * 20),
+              source: ['oura', 'fitbit', 'garmin'][i % 3] as any,
+            };
+          });
+          onSleepDataReceived(sampleRecords);
+        }}
+        className="text-xs px-3 py-1 rounded-full border border-line bg-parchment hover:bg-cream text-muted"
+      >
+        Load sample data (test)
+      </button>
+
       {/* Wearable connection settings */}
       <WearableSettings
         configs={wearableConfigs}
