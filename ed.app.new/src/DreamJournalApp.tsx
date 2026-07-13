@@ -83,6 +83,7 @@ import {
 import { supabase as supabaseClient, getCurrentUser, getProfile } from './lib/supabase/client';
 import { useAuth } from './hooks/use-auth';
 import { useSubscription } from './hooks/use-subscription';
+import { FEATURE_NFT_UI_ENABLED } from './config/features';
 
 const DreamJournalApp = () => {
   const { addToast } = useToast();
@@ -2476,19 +2477,21 @@ const DreamJournalApp = () => {
               <button
                 type="button"
                 onClick={() => shareDream(detailDream)}
-                className="flex-1 bg-sage hover:bg-sageDark text-cream py-3 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm shadow-paper"
+                className="w-full bg-sage hover:bg-sageDark text-cream py-3 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm shadow-paper"
               >
                 <Upload className="w-4 h-4" strokeWidth={1.75} />
                 Share
               </button>
-              <button
-                type="button"
-                onClick={() => handleOpenMintModal(detailDream)}
-                className="flex-1 border-2 border-dusk/30 bg-dusk/5 hover:bg-dusk/10 text-duskDeep py-3 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm"
-              >
-                <Award className="w-4 h-4" strokeWidth={1.75} />
-                Mint NFT
-              </button>
+              {FEATURE_NFT_UI_ENABLED ? (
+                <button
+                  type="button"
+                  onClick={() => handleOpenMintModal(detailDream)}
+                  className="flex-1 border-2 border-dusk/30 bg-dusk/5 hover:bg-dusk/10 text-duskDeep py-3 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm"
+                >
+                  <Award className="w-4 h-4" strokeWidth={1.75} />
+                  Mint NFT
+                </button>
+              ) : null}
             </div>
           </div>
           </div>

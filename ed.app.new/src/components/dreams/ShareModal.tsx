@@ -1,27 +1,22 @@
-import React, { useState, useEffect } from 'react';
-import { Modal, Button } from '../ui';
-import {
-  Copy, Check, Download, Share2, Instagram, Twitter, Facebook, Film,
-  MessageCircle, Smartphone, Link2,
-} from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { X, Share2, Link2, Loader2 } from 'lucide-react';
 import type { Dream } from './DreamList';
 import { getEmotionEmoji } from '../../utils/dreamPresentation';
 import {
   buildSharePayload,
-  canNativeShare,
   copyToClipboard,
-  downloadDreamImage,
-  generateShareCardImage,
   getDreamImageUrl,
   toShareableDream,
   shareNative,
-  shareToPlatform,
   createPublicShareLink,
   type ShareableDream,
-  type SocialProviderId,
 } from '../../lib/social/shareService';
-import { useSocialAuth } from '../../hooks/use-social-auth';
-import { isProviderLinkedInDb } from '../../lib/social/socialAccounts';
+import {
+  dreamToShareInput,
+  generateShareCard,
+  shareImageBlob,
+  blobToPreviewUrl,
+} from '../../lib/shareCard';
 
 export interface ShareModalProps {
   dream: Dream | ShareableDream | Record<string, unknown> | null;
@@ -29,200 +24,274 @@ export interface ShareModalProps {
   onClose: () => void;
 }
 
-type PlatformAction = {
-  id: SocialProviderId;
-  name: string;
-  icon: React.ReactNode;
-  className: string;
-  hint?: string;
+type QuickAction = {
+  id: 'share' | 'link';
+  label: string;
+  icon: typeof Share2;
+  onClick: () => void;
+  disabled?: boolean;
 };
 
-const PLATFORM_ACTIONS: PlatformAction[] = [
-  { id: 'facebook', name: 'Facebook', icon: <Facebook size={16} />, className: 'bg-[#1877F2] hover:bg-[#166fe0] text-white' },
-  { id: 'instagram', name: 'Instagram', icon: <Instagram size={16} />, className: 'bg-gradient-to-r from-[#E4405F] to-[#FD5F3D] text-white', hint: 'API post if linked, else save+copy' },
-  { id: 'tiktok', name: 'TikTok', icon: <Film size={16} />, className: 'bg-ink text-cream', hint: 'API post if linked, else save+copy' },
-  { id: 'twitter', name: 'X', icon: <Twitter size={16} />, className: 'bg-ink text-cream' },
-  { id: 'whatsapp', name: 'WhatsApp', icon: <MessageCircle size={16} />, className: 'bg-[#25D366] hover:bg-[#1ebe57] text-white' },
-  { id: 'line', name: 'LINE', icon: <span className="text-xs font-bold">LINE</span>, className: 'bg-[#06C755] hover:bg-[#05b34c] text-white' },
-];
-
 export default function ShareModal({ dream, isOpen, onClose }: ShareModalProps) {
-  const { accounts } = useSocialAuth();
-  const [copied, setCopied] = useState(false);
-  const [downloading, setDownloading] = useState(false);
-  const [cardGenerating, setCardGenerating] = useState(false);
-  const [sharing, setSharing] = useState<string | null>(null);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [publicLink, setPublicLink] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [linkBusy, setLinkBusy] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  const shareable = dream
+    ? ('content' in dream && typeof dream.content === 'string'
+        ? (dream as ShareableDream)
+        : toShareableDream(dream as Record<string, unknown>))
+    : null;
+
+  const payload = shareable ? buildSharePayload(shareable) : null;
+  const imageUrl = shareable ? getDreamImageUrl(shareable) : null;
 
   useEffect(() => {
     if (!isOpen) {
-      setPublicLink(null);
-      setStatusMessage(null);
+      setPreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+      setPreviewBlob(null);
+      setStatus(null);
     }
   }, [isOpen]);
 
-  if (!dream) return null;
+  useEffect(() => {
+    if (!isOpen || !shareable) return;
 
-  const shareable = 'content' in dream && typeof dream.content === 'string'
-    ? (dream as ShareableDream)
-    : toShareableDream(dream as Record<string, unknown>);
-  const payload = buildSharePayload(shareable);
-  const imageUrl = getDreamImageUrl(shareable);
+    let cancelled = false;
+    setLoading(true);
+    setStatus(null);
 
-  const showStatus = (message: string) => {
-    setStatusMessage(message);
-    setTimeout(() => setStatusMessage(null), 5000);
-  };
+    const input = dreamToShareInput({
+      nugget: shareable.nugget,
+      content: shareable.content,
+      emotion: shareable.emotion || shareable.mood,
+      category: shareable.category,
+      date: shareable.date,
+      generatedImage: imageUrl ? { url: imageUrl } : undefined,
+    });
 
-  const handleCopy = async () => {
-    await copyToClipboard(`${payload.text}\n${payload.url}`);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
+    generateShareCard('dream', input)
+      .then((blob) => {
+        if (cancelled) return;
+        setPreviewUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return blobToPreviewUrl(blob);
+        });
+        setPreviewBlob(blob);
+      })
+      .catch(() => {
+        if (!cancelled) setStatus('Could not prepare share preview.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
 
-  const handleNativeShare = async () => {
-    const result = await shareNative(payload);
-    if (result.ok && result.method === 'native') onClose();
-    if (result.message) showStatus(result.message);
-  };
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, shareable, imageUrl]);
 
-  const handlePlatformShare = async (providerId: SocialProviderId) => {
-    setSharing(providerId);
+  const handleShareVia = useCallback(async () => {
+    if (!shareable || !payload) return;
+
+    setSharing(true);
+    setStatus(null);
+
     try {
-      const result = await shareToPlatform(providerId, shareable, payload);
-      if (result.message) showStatus(result.message);
-      if (result.ok && result.method === 'api') onClose();
+      if (previewBlob) {
+        const date = new Date(shareable.date).toISOString().split('T')[0];
+        const result = await shareImageBlob(
+          previewBlob,
+          `everdream-dream-${date}.png`,
+          shareable.title || 'My Dream',
+        );
+        setStatus(result === 'shared' ? 'Choose an app to share with.' : 'Saved — share from your gallery.');
+        if (result === 'shared') {
+          setTimeout(onClose, 500);
+        }
+        return;
+      }
+
+      const result = await shareNative(payload);
+      if (result.ok) {
+        if (result.method === 'native') {
+          setTimeout(onClose, 500);
+        } else {
+          setStatus(result.message || 'Link copied to clipboard.');
+        }
+      } else if (result.message) {
+        setStatus(result.message);
+      }
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        setStatus('Share cancelled or unavailable.');
+      }
     } finally {
-      setSharing(null);
+      setSharing(false);
     }
-  };
+  }, [shareable, payload, previewBlob, onClose]);
 
-  const handleCreateLink = async () => {
-    const result = await createPublicShareLink(shareable, payload);
-    if (!result.ok || !result.url) {
-      showStatus(result.message || 'Could not create share link');
-      return;
-    }
-    setPublicLink(result.url);
-    await copyToClipboard(result.url);
-    showStatus('Public link copied — great for Facebook OG previews.');
-  };
+  const handleCopyLink = useCallback(async () => {
+    if (!shareable || !payload) return;
 
-  const handleDownloadImage = async () => {
-    if (!imageUrl) return;
-    setDownloading(true);
+    setLinkBusy(true);
+    setStatus(null);
+
     try {
-      await downloadDreamImage(imageUrl, `everdream-${shareable.id}`);
-    } finally {
-      setDownloading(false);
-    }
-  };
+      const result = await createPublicShareLink(shareable, payload);
+      if (result.ok && result.url) {
+        await copyToClipboard(result.url);
+        setStatus('Link copied.');
+        return;
+      }
 
-  const handleDownloadCard = async () => {
-    setCardGenerating(true);
-    try {
-      await generateShareCardImage(shareable);
-      showStatus('Share card downloaded.');
+      await copyToClipboard(payload.url);
+      setStatus(result.message || 'Link copied.');
+    } catch {
+      setStatus('Could not copy link.');
     } finally {
-      setCardGenerating(false);
+      setLinkBusy(false);
     }
-  };
+  }, [shareable, payload]);
+
+  if (!isOpen || !dream || !shareable) return null;
+
+  const quickActions: QuickAction[] = [
+    {
+      id: 'share',
+      label: 'Share via',
+      icon: Share2,
+      onClick: handleShareVia,
+      disabled: sharing || loading,
+    },
+    {
+      id: 'link',
+      label: 'Copy link',
+      icon: Link2,
+      onClick: handleCopyLink,
+      disabled: linkBusy,
+    },
+  ];
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Share Dream" size="md">
-      <div className="space-y-5">
-        <div
-          className="rounded-3xl overflow-hidden border border-line shadow-paper"
-          style={{ background: imageUrl ? undefined : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}
-        >
-          {imageUrl ? (
-            <img src={imageUrl} alt={`Dream: ${shareable.title || 'Dream'}`} className="w-full h-56 object-cover" />
-          ) : (
-            <div className="p-8 min-h-[200px] flex flex-col items-center justify-center text-center">
-              <div className="text-4xl mb-3">{getEmotionEmoji(shareable.mood) || '🌙'}</div>
-              <p className="text-cream font-serif italic leading-relaxed">
-                "{shareable.nugget || shareable.content.substring(0, 120)}"
-              </p>
-            </div>
-          )}
+    <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center">
+      <button
+        type="button"
+        className="absolute inset-0 bg-ink/40 backdrop-blur-sm"
+        onClick={onClose}
+        aria-label="Close share"
+      />
+
+      <div
+        className="relative w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-t-[2rem] sm:rounded-[2rem] border border-line bg-cream shadow-2xl"
+        role="dialog"
+        aria-labelledby="dream-share-title"
+      >
+        <div className="sticky top-0 z-10 flex items-center justify-between px-5 py-4 border-b border-line bg-cream/95 backdrop-blur-sm">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.2em] text-muted">Share dream</p>
+            <h3 id="dream-share-title" className="font-serif text-xl text-ink line-clamp-1">
+              {shareable.title || shareable.nugget || 'Untitled dream'}
+            </h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2 rounded-full hover:bg-parchment text-muted shrink-0"
+            aria-label="Close"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
-        <div>
-          <h3 className="font-serif text-lg text-ink">{shareable.title || 'Untitled dream'}</h3>
-          <p className="text-xs text-muted mt-1">
-            {new Date(shareable.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+        <div className="p-5 space-y-5">
+          <div className="rounded-[1.75rem] border border-line bg-parchment p-3 shadow-paper">
+            <p className="text-[10px] uppercase tracking-[0.18em] text-muted mb-2 text-center">
+              Preview
+            </p>
+            <div className="mx-auto w-full max-w-[220px] aspect-[9/16] rounded-2xl overflow-hidden border-2 border-sage/20 bg-sage/5 relative">
+              {loading && (
+                <div className="absolute inset-0 flex items-center justify-center bg-cream/80">
+                  <Loader2 className="w-8 h-8 text-sage animate-spin" />
+                </div>
+              )}
+              {previewUrl && !loading ? (
+                <img
+                  src={previewUrl}
+                  alt="Dream share preview"
+                  className="w-full h-full object-cover"
+                />
+              ) : !loading ? (
+                <div className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center bg-gradient-to-br from-dusk/20 via-sage/10 to-moon/30">
+                  <span className="text-3xl mb-2">{getEmotionEmoji(shareable.emotion || shareable.mood || '') || '🌙'}</span>
+                  <p className="text-sm font-serif italic text-ink leading-snug line-clamp-4">
+                    &ldquo;{shareable.nugget || shareable.content.substring(0, 120)}&rdquo;
+                  </p>
+                </div>
+              ) : null}
+            </div>
+            <p className="text-center text-xs text-muted mt-3">
+              {new Date(shareable.date).toLocaleDateString('en-US', {
+                weekday: 'long',
+                month: 'long',
+                day: 'numeric',
+              })}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.18em] text-muted text-center mb-3">
+              Share via
+            </p>
+            <div className="flex items-start justify-center gap-8 px-2">
+              {quickActions.map((action) => {
+                const Icon = action.icon;
+                const busy = action.id === 'share' ? sharing : linkBusy;
+                return (
+                  <button
+                    key={action.id}
+                    type="button"
+                    onClick={action.onClick}
+                    disabled={action.disabled}
+                    className="flex flex-col items-center gap-2 min-w-[72px] disabled:opacity-50"
+                  >
+                    <span
+                      className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-paper border transition ${
+                        action.id === 'share'
+                          ? 'bg-sage text-cream border-sage hover:bg-sageDark'
+                          : 'bg-parchment text-ink border-line hover:border-sage/40 hover:bg-cream'
+                      }`}
+                    >
+                      {busy ? (
+                        <Loader2 className="w-6 h-6 animate-spin" />
+                      ) : (
+                        <Icon className="w-6 h-6" strokeWidth={1.75} />
+                      )}
+                    </span>
+                    <span className="text-[11px] font-medium text-ink text-center leading-tight">
+                      {action.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {status && (
+            <p className="text-center text-sm text-sageDark leading-relaxed">{status}</p>
+          )}
+
+          <p className="text-center text-[11px] text-muted leading-relaxed px-2">
+            Opens your device share menu — Messages, WhatsApp, Instagram, and more.
           </p>
         </div>
-
-        {canNativeShare() && (
-          <Button
-            variant="primary"
-            size="md"
-            onClick={handleNativeShare}
-            className="w-full min-h-[52px] !bg-sage hover:!bg-sageDark"
-            icon={<Smartphone size={18} />}
-          >
-            Share to apps (WhatsApp, LINE, …)
-          </Button>
-        )}
-
-        <Button
-          variant="ghost"
-          size="md"
-          onClick={handleCreateLink}
-          className="w-full min-h-[44px]"
-          icon={<Link2 size={16} />}
-        >
-          {publicLink ? 'Link copied' : 'Create public share link'}
-        </Button>
-
-        {publicLink && (
-          <p className="text-[11px] text-muted break-all text-center">{publicLink}</p>
-        )}
-
-        <div className="grid grid-cols-2 gap-2">
-          {PLATFORM_ACTIONS.map((platform) => {
-            const linked = isProviderLinkedInDb(accounts, platform.id);
-            return (
-              <button
-                key={platform.id}
-                type="button"
-                onClick={() => handlePlatformShare(platform.id)}
-                disabled={sharing === platform.id}
-                className={`flex items-center justify-center gap-2 py-3 px-3 rounded-2xl text-sm font-semibold transition disabled:opacity-60 ${platform.className}`}
-                title={platform.hint}
-              >
-                {platform.icon}
-                <span>{platform.name}</span>
-                {linked && <span className="text-[10px] opacity-80">✓</span>}
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <Button variant="ghost" size="md" onClick={handleCopy} className="w-full min-h-[44px]">
-            {copied ? <Check size={16} /> : <Copy size={16} />}
-            {copied ? 'Copied!' : 'Copy caption'}
-          </Button>
-          <Button variant="ghost" size="md" onClick={handleDownloadCard} loading={cardGenerating} className="w-full min-h-[44px]" icon={<Download size={16} />}>
-            Download card
-          </Button>
-        </div>
-
-        {imageUrl && (
-          <Button variant="ghost" size="md" onClick={handleDownloadImage} loading={downloading} className="w-full min-h-[44px]" icon={<Share2 size={16} />}>
-            Download dream image
-          </Button>
-        )}
-
-        {statusMessage && <p className="text-xs text-center text-muted leading-relaxed">{statusMessage}</p>}
-
-        <p className="text-[11px] text-center text-muted leading-relaxed">
-          Link Meta in Profile for API posting to your Facebook Page and Instagram Business account.
-        </p>
       </div>
-    </Modal>
+    </div>
   );
 }
