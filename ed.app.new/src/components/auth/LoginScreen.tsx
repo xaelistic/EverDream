@@ -1,18 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { Moon, Mail, Lock, Eye, EyeOff, AlertCircle, Sparkles, Loader2, Phone, CheckCircle2 } from 'lucide-react';
+import { Moon, Mail, Lock, Eye, EyeOff, AlertCircle, Sparkles, Loader2, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../../hooks/use-auth';
-import { Button, Input } from '../ui';
+import { Button } from '../ui';
 import { Card } from '../ui/Card';
-import { supabase } from '../../lib/supabase/client';
 import { signInWithSocialProvider } from '../../lib/auth/socialAuth';
 import { clearAuthHashError, formatAuthErrorMessage, parseAuthHashError } from '../../lib/auth/parseAuthHashError';
 
 /**
  * LoginScreen — Updated to spec
- * Primary options: Google / Meta / Phone / Email
+ * Primary options: Google / Meta / Email
  * Localized extras: Line / Naver / Zalo based on browser locale (country)
- * Socials + Phone create account on first use (sign up)
- * Email/password for traditional
+ * Socials create account on first use (sign up)
+ * Email/password for traditional sign-in and sign-up
  * Auto-login via Supabase persisted session + onAuthStateChange
  * Matches dream aesthetic
  */
@@ -23,13 +22,10 @@ export default function LoginScreen() {
   const [pendingEmailAction, setPendingEmailAction] = useState<'signup' | 'reset' | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [phone, setPhone] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState<string | null>(null);
-  const [phoneStep, setPhoneStep] = useState<'input' | 'verify'>('input');
-  const [phoneCode, setPhoneCode] = useState('');
   const [showRegional, setShowRegional] = useState(false);
   const [showCreateAccountHint, setShowCreateAccountHint] = useState(false);
 
@@ -139,7 +135,7 @@ export default function LoginScreen() {
 
     try {
       if (['line', 'naver', 'zalo'].includes(provider)) {
-        setError(`${provider.toUpperCase()} login is region-specific. We recommend Phone or Google/Meta for broadest support. (Full OAuth configurable in Supabase or via backend.)`);
+        setError(`${provider.toUpperCase()} login is region-specific. We recommend Google, Meta, or email for broadest support.`);
         setOauthLoading(null);
         return;
       }
@@ -150,51 +146,6 @@ export default function LoginScreen() {
     } catch (e: any) {
       setError(e.message || 'OAuth sign-in failed');
       setOauthLoading(null);
-    }
-  };
-
-  // Real Supabase Phone OTP
-  const handlePhone = async () => {
-    if (!phone.trim()) {
-      setError('Enter your phone number in international format, e.g. +1 555 123 4567');
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const { error } = await supabase.auth.signInWithOtp({
-        phone: phone.trim(),
-      });
-      if (error) throw error;
-      setPhoneStep('verify');
-      setError(null);
-    } catch (e: any) {
-      setError(e.message || 'Failed to send SMS code. Ensure phone provider is enabled in Supabase.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerifyPhone = async () => {
-    if (!phoneCode.trim()) {
-      setError('Enter the 6-digit code from the SMS.');
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const { error } = await supabase.auth.verifyOtp({
-        phone: phone.trim(),
-        token: phoneCode.trim(),
-        type: 'sms',
-      });
-      if (error) throw error;
-      // Success — Supabase persistSession + autoRefresh will handle "always auto login"
-      setPhoneStep('input');
-    } catch (e: any) {
-      setError(e.message || 'Invalid or expired code.');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -329,7 +280,7 @@ export default function LoginScreen() {
           )}
 
           {mode === 'login' && (<>
-          {/* Primary buttons: Google / Meta / Phone / Email */}
+          {/* Primary buttons: Google / Meta / Email */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginBottom: '1rem' }}>
             <button onClick={() => handleOAuth('google')} disabled={!!oauthLoading} style={primaryBtnStyle(!!oauthLoading)}>
               {oauthLoading === 'google' ? <Loader2 size={18} className="animate-spin" /> : <GoogleIcon />}
@@ -341,11 +292,6 @@ export default function LoginScreen() {
               <span>Continue with Meta (Facebook)</span>
             </button>
 
-            <button onClick={() => { setPhoneStep('input'); setError(null); }} disabled={loading} style={primaryBtnStyle(false)}>
-              <Phone size={18} />
-              <span>Continue with Phone</span>
-            </button>
-
             <button onClick={handleEmailQuick} style={primaryBtnStyle(false, true)}>
               <Mail size={18} />
               <span>Continue with Email</span>
@@ -354,20 +300,6 @@ export default function LoginScreen() {
 
           {/* Regional / localized (Line, Naver, Zalo) */}
           {regional.length > 0 && regionalButtons}
-
-          {/* Phone inline OTP flow */}
-          {phoneStep !== 'input' && (
-            <div style={{ margin: '0.75rem 0', padding: '0.75rem', border: '1px solid oklch(0.9 0.02 280)', borderRadius: '0.75rem', background: 'oklch(0.985 0.005 80)' }}>
-              <div style={{ marginBottom: '0.5rem', fontSize: '0.8rem', color: 'oklch(0.3 0.03 270)' }}>
-                Enter the code sent to {phone || 'your phone'}
-              </div>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <input value={phoneCode} onChange={e => setPhoneCode(e.target.value)} placeholder="123456" maxLength={6} style={{ flex: 1, padding: '0.5rem', borderRadius: '0.5rem', border: '1px solid oklch(0.88 0.02 280)' }} />
-                <Button onClick={handleVerifyPhone} disabled={loading || !phoneCode} size="sm">Verify</Button>
-              </div>
-              <button onClick={() => setPhoneStep('input')} style={{ fontSize: '0.7rem', marginTop: '0.4rem', color: 'oklch(0.45 0.02 270 / 0.7)', background: 'none', border: 'none' }}>Use different number</button>
-            </div>
-          )}
 
           {/* Divider */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', margin: '0.9rem 0 0.6rem' }}>
@@ -451,7 +383,7 @@ export default function LoginScreen() {
           </div>
 
           <div style={{ fontSize: '0.6rem', textAlign: 'center', marginTop: '0.8rem', color: 'oklch(0.5 0.01 270 / 0.5)' }}>
-            Google &amp; Meta create your account on first use. Phone &amp; email supported for sign up too. Your session is saved for automatic login next time.
+            Google &amp; Meta create your account on first use. Email sign-up is also available below. Your session is saved for automatic login next time.
           </div>
           </>)}
         </Card>
