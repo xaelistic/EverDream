@@ -1717,7 +1717,7 @@ const DreamJournalApp = () => {
             }}
             onJournalAboutQuote={() => {
               setShowDailyReflection(false);
-              navigate('record');
+              navigate('more');
             }}
             onGoHome={() => {
               dismissReflectionForToday();
@@ -2259,14 +2259,14 @@ const DreamJournalApp = () => {
               setIsProcessing(false);
             }
           }}
-          onCancel={() => navigate('record')}
+          onCancel={() => navigate('more')}
         />
       )}
 
       {/* Photo import flow */}
       {route.screen === 'import-photos' && (
         <PhotoUploadFlow
-          onClose={() => navigate('record')}
+          onClose={() => navigate('more')}
           onDreamsExtracted={handleDreamsExtracted}
           analyzeDream={analyzeDream}
         />

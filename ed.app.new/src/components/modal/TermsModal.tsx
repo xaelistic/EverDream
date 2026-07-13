@@ -147,44 +147,9 @@ export function TermsModal({ isOpen, onClose, onAccept, hasAccepted = false }: T
             </div>
           </ExpandableSection>
 
-          <ExpandableSection
-            title="NFT Ownership & Smart Contracts"
-            icon={<Key className="w-4 h-4 text-duskDeep" />}
-            colorClass="bg-duskDeep/10"
-          >
-            <p className="mb-2">When you mint a dream as an NFT:</p>
-            <ul className="list-disc list-inside space-y-1 ml-1">
-              <li>You own the NFT on-chain</li>
-              <li>Content stored on IPFS remains under your license</li>
-              <li>Smart contract is GPL-3.0 (open source)</li>
-              <li>You can sell, transfer, or burn the NFT</li>
-              <li>Original watermark proves provenance</li>
-            </ul>
-            <div className="mt-3 bg-amber-100/70 border border-amber-200 rounded-xl p-3">
-              <p className="text-amber-900">
-                <strong>⚠️ Important:</strong> Once minted to Ethereum, the NFT is permanent on-chain. 
-                The content link can be updated, but the token exists forever.
-              </p>
-            </div>
-          </ExpandableSection>
+          {/* NFT Ownership & Smart Contracts section hidden for now */}
 
-          <ExpandableSection
-            title="Dream Economy Participation"
-            icon={<AlertTriangle className="w-4 h-4 text-blush" />}
-            colorClass="bg-blush/10"
-          >
-            <p className="mb-2">If you choose to participate in Dream Economy baskets (Phase 3):</p>
-            <ul className="list-disc list-inside space-y-1 ml-1">
-              <li>Your dreams may be licensed to third parties (with your consent)</li>
-              <li>You earn yield from licensing fees</li>
-              <li>You can opt-out anytime</li>
-              <li>License terms are transparent in smart contracts</li>
-              <li>Rarity scoring is algorithmic and auditable</li>
-            </ul>
-            <p className="mt-2">
-              <strong className="text-ink">You control:</strong> Which dreams to include, licensing terms, opt-out timing
-            </p>
-          </ExpandableSection>
+          {/* Dream Economy Participation section hidden for now */}
 
           <ExpandableSection
             title="Privacy & GDPR Compliance"

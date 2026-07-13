@@ -350,6 +350,7 @@ export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
       </div>
     </div>
 
+    <>
     {/* Logout button on the profile screen */}
     <div>
       <button
@@ -361,6 +362,7 @@ export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
         Log out
       </button>
     </div>
+    </>
   );
 
   const renderServicesTab = () => (
