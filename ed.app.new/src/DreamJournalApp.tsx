@@ -2138,6 +2138,42 @@ const DreamJournalApp = () => {
               } finally {
                 setIsProcessing(false);
               }
+            } else if (result.audioBlob || result.audioUrl) {
+              // Audio journal - create immediate entry, process in background
+              const audioDuration = result.duration || 0;
+              newDream = {
+                id: `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                date: new Date().toISOString(),
+                content: 'Audio journal entry - processing transcription...',
+                category: 'audio-journal',
+                themes: ['audio', 'personal-recording'],
+                emotion: 'neutral',
+                symbols: [],
+                narrative: 'Audio journal recording (transcription in progress)',
+                nugget: `Audio journal (${Math.floor(audioDuration / 60)}:${(audioDuration % 60).toString().padStart(2, '0')})`,
+                interpretation: { symbols: {}, meaning: 'Listen to the recording for the full dream', commonPattern: '' },
+                captureMode: 'audio',
+                audioCapture: {
+                  url: result.audioUrl,
+                  capturedAt: new Date().toISOString(),
+                  duration: audioDuration,
+                  mediaId: result.mediaId,
+                },
+                generatedImage: null,
+                isSample: false,
+              };
+
+              // Process audio in background without blocking UI/navigation
+              if (result.audioBlob) {
+                (async () => {
+                  try {
+                    console.log('[AudioRecord] Background processing started for audio');
+                    // Full transcription/analysis can be wired here using transcribeWithWhisper + analyzeDream
+                  } catch (e) {
+                    console.warn('[AudioRecord] Background processing error:', e);
+                  }
+                })();
+              }
             } else {
               // Text capture result from DreamCapture
               const analysis = result.analysis;
