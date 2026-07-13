@@ -38,6 +38,17 @@ export interface AuthState {
 
 const AuthContext = createContext<AuthState | null>(null);
 
+const AUTH_CHECK_TIMEOUT_MS = 8_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+    }),
+  ]);
+}
+
 /**
  * AuthProvider — wraps the app and provides auth state via context.
  * Must be used at the top of the component tree.
@@ -79,7 +90,7 @@ function useAuthInternal(): AuthState {
 
     async function checkAuth() {
       try {
-        const currentUser = await getCurrentUser();
+        const currentUser = await withTimeout(getCurrentUser(), AUTH_CHECK_TIMEOUT_MS, 'Auth check');
         if (!mounted) return;
 
         if (currentUser) {
@@ -92,7 +103,11 @@ function useAuthInternal(): AuthState {
           setUser(null);
         } else {
           // No session — sign in anonymously (skipped when login is required)
-          const { data, error: signInError } = await supabase.auth.signInAnonymously();
+          const { data, error: signInError } = await withTimeout(
+            supabase.auth.signInAnonymously(),
+            AUTH_CHECK_TIMEOUT_MS,
+            'Anonymous sign-in',
+          );
           if (!mounted) return;
 
           if (signInError) {
