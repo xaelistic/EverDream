@@ -121,6 +121,13 @@ const DEVICE_SEED_KEY = 'ed_device_seed';
  * NOTE: Device-based key derivation is still vulnerable to spoofing.
  * For maximum security, implement user authentication with password-based key derivation.
  */
+/**
+ * WARNING: This encryption is WEAK and provides NO real confidentiality.
+ * It derives the key from public browser fingerprint data.
+ * DO NOT use for sensitive data. Only for obfuscation.
+ * 
+ * For real encryption, use a user-supplied passphrase + Web Crypto.
+ */
 async function simpleEncrypt(text: string): Promise<string> {
   // Generate a device-specific key using stable device characteristics
   // In production, derive this from user password instead

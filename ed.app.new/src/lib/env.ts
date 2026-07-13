@@ -54,9 +54,6 @@ export function validateEnvVariables(): ValidationResult {
   }
 
   // Optional API keys
-  config.openRouterApiKey = import.meta.env.VITE_OPENROUTER_API_KEY;
-  config.hfInferenceApiKey = import.meta.env.VITE_HF_INFERENCE_API_KEY;
-  config.falAiKey = import.meta.env.VITE_FAL_AI_KEY;
   config.localGenUrl = import.meta.env.VITE_LOCAL_GEN_URL;
 
   // Warn if no image generation method is configured
@@ -69,7 +66,6 @@ export function validateEnvVariables(): ValidationResult {
   if (!hasImageGenConfig) {
     warnings.push(
       'No image generation configured. Dreams will be saved without generated images. ' +
-      'Consider adding VITE_FAL_AI_KEY for affordable image generation (~$0.001/image).'
     );
   }
 

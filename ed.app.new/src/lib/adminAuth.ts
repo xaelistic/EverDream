@@ -29,7 +29,7 @@ export async function isAdminUser(): Promise<boolean> {
       return true;
     }
 
-    return localStorage.getItem('everdream_admin') === 'true';
+    return false; // Never trust client-writable values for authorization
   } catch {
     return false;
   }

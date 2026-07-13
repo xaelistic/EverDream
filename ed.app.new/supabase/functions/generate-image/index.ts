@@ -44,7 +44,7 @@ const HF_API_URL = 'https://api-inference.huggingface.co/models/stabilityai/stab
 const FAL_API_URL = 'https://fal.ai/api/fal-ai/fast-sdxl';
 
 const CORS_HEADERS: Record<string, string> = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': 'https://everdream.n1g3.com',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
