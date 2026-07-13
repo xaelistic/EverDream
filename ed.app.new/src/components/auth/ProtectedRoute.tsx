@@ -3,6 +3,7 @@ import { useAuth } from '../../hooks/use-auth';
 import { Spinner } from '../ui';
 import LoginScreen from './LoginScreen';
 import ResetPasswordScreen from './ResetPasswordScreen';
+import { FEATURE_REQUIRE_AUTH } from '../../config/features';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -19,7 +20,8 @@ interface ProtectedRouteProps {
  */
 export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { user, loading, isRecoveryMode } = useAuth();
-  const requireAuth = import.meta.env.VITE_REQUIRE_AUTH === 'true';
+  const requireAuth =
+    FEATURE_REQUIRE_AUTH || import.meta.env.VITE_REQUIRE_AUTH === 'true';
 
   if (loading) {
     return (

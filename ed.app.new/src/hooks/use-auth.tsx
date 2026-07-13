@@ -228,12 +228,16 @@ function useAuthInternal(): AuthState {
 
   const signOut = useCallback(async () => {
     setError(null);
-    const { error: signOutError } = await supabase.auth.signOut();
-    if (signOutError) {
-      setError(signOutError);
-      throw signOutError;
+    try {
+      const { error: signOutError } = await supabase.auth.signOut({ scope: 'global' });
+      if (signOutError) {
+        console.warn('[useAuth] signOut:', signOutError.message);
+      }
+    } catch (err) {
+      console.warn('[useAuth] signOut failed:', err);
     }
     setUser(null);
+    setIsRecoveryMode(false);
   }, []);
 
   return {

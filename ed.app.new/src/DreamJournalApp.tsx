@@ -84,6 +84,12 @@ import { supabase as supabaseClient, getCurrentUser, getProfile } from './lib/su
 import { useAuth } from './hooks/use-auth';
 import { useSubscription } from './hooks/use-subscription';
 import { FEATURE_NFT_UI_ENABLED } from './config/features';
+import {
+  loadDailyCheckin,
+  saveDailyCheckin,
+  energyLevelFromValue,
+  type EnergyLevel,
+} from './lib/dailyCheckin';
 
 const DreamJournalApp = () => {
   const { addToast } = useToast();
@@ -194,6 +200,8 @@ const DreamJournalApp = () => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [reflectionMood, setReflectionMood] = useState('');
   const [reflectionEnergy, setReflectionEnergy] = useState(50);
+  const [reflectionEnergyLevel, setReflectionEnergyLevel] = useState<EnergyLevel | ''>('');
+  const [checkInSaved, setCheckInSaved] = useState(false);
   const reflectionQuote = useMemo(() => getDailyQuote(), []);
   const dailyEducation = useMemo(() => getDailyEducation(), []);
   const [showDailyReflection, setShowDailyReflection] = useState(false);
@@ -344,6 +352,34 @@ const DreamJournalApp = () => {
     },
     isSample: true
   };
+
+  const handleReflectionMood = (mood: string) => {
+    setReflectionMood(mood);
+    const level = reflectionEnergyLevel || energyLevelFromValue(reflectionEnergy);
+    saveDailyCheckin({ mood, energy: reflectionEnergy, energyLevel: level });
+    setCheckInSaved(true);
+  };
+
+  const handleReflectionEnergyLevel = (level: EnergyLevel, value: number) => {
+    setReflectionEnergy(value);
+    setReflectionEnergyLevel(level);
+    saveDailyCheckin({
+      mood: reflectionMood,
+      energy: value,
+      energyLevel: level,
+    });
+    setCheckInSaved(true);
+  };
+
+  useEffect(() => {
+    const saved = loadDailyCheckin();
+    if (saved) {
+      setReflectionMood(saved.mood);
+      setReflectionEnergy(saved.energy);
+      setReflectionEnergyLevel(saved.energyLevel);
+      setCheckInSaved(Boolean(saved.mood || saved.energyLevel));
+    }
+  }, []);
 
   // Load data
   useEffect(() => {
@@ -1691,9 +1727,10 @@ const DreamJournalApp = () => {
             lastDream={lastDream}
             reflectionQuote={reflectionQuote}
             reflectionMood={reflectionMood}
-            setReflectionMood={setReflectionMood}
-            reflectionEnergy={reflectionEnergy}
-            setReflectionEnergy={setReflectionEnergy}
+            setReflectionMood={handleReflectionMood}
+            reflectionEnergyLevel={reflectionEnergyLevel}
+            onReflectionEnergyLevel={handleReflectionEnergyLevel}
+            checkInSaved={checkInSaved}
             reflectionSleepData={reflectionSleepData}
             dailyEducation={dailyEducation}
             getCategoryBadgeClass={getCategoryBadgeClass}

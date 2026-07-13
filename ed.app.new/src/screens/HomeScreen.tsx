@@ -1,5 +1,6 @@
-import { Moon, Sparkles, BookOpen, ChevronRight, BedDouble, PenLine } from 'lucide-react';
+import { Moon, Sparkles, BookOpen, ChevronRight, BedDouble, PenLine, Check } from 'lucide-react';
 import { coerceNarrativeText } from '../lib/normalizeDreamAnalysis';
+import { ENERGY_LEVELS, type EnergyLevel } from '../lib/dailyCheckin';
 import type { WearableSleepRecord } from '../lib/wearables';
 import type { DailyQuote } from '../lib/dailyContent';
 import type { EducationModule } from '../lib/sleepEducation';
@@ -30,8 +31,9 @@ interface HomeScreenProps {
   reflectionQuote: DailyQuote;
   reflectionMood: string;
   setReflectionMood: (mood: string) => void;
-  reflectionEnergy: number;
-  setReflectionEnergy: (energy: number) => void;
+  reflectionEnergyLevel: EnergyLevel | '';
+  onReflectionEnergyLevel: (level: EnergyLevel, value: number) => void;
+  checkInSaved: boolean;
   reflectionSleepData: WearableSleepRecord | null;
   dailyEducation: EducationModule;
   getCategoryBadgeClass: (category: string) => string;
@@ -46,8 +48,9 @@ export function HomeScreen({
   reflectionQuote,
   reflectionMood,
   setReflectionMood,
-  reflectionEnergy,
-  setReflectionEnergy,
+  reflectionEnergyLevel,
+  onReflectionEnergyLevel,
+  checkInSaved,
   reflectionSleepData,
   dailyEducation,
   getEmotionEmoji,
@@ -166,10 +169,18 @@ export function HomeScreen({
         </div>
       </section>
 
-      {/* ── Mood check-in ── */}
+      {/* ── Mood & energy check-in ── */}
       <section className="rounded-2xl border border-line bg-parchment p-4">
-        <p className="text-xs uppercase tracking-[0.2em] text-muted mb-3">How are you feeling?</p>
-        <div className="flex items-center justify-center gap-2 flex-wrap mb-4">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <p className="text-xs uppercase tracking-[0.2em] text-muted">How are you feeling?</p>
+          {checkInSaved && (reflectionMood || reflectionEnergyLevel) && (
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-sageDark">
+              <Check className="w-3.5 h-3.5" />
+              Saved today
+            </span>
+          )}
+        </div>
+        <div className="flex items-center justify-center gap-2 flex-wrap mb-5">
           {['peaceful', 'anxious', 'excited', 'tired', 'curious', 'reflective'].map((mood) => {
             const emojis: Record<string, string> = {
               peaceful: '😌', anxious: '😰', excited: '🤩',
@@ -185,25 +196,38 @@ export function HomeScreen({
                   isSelected ? 'bg-sage shadow-md scale-110 ring-2 ring-sage/30' : 'bg-white hover:bg-cream'
                 }`}
                 title={mood}
+                aria-pressed={isSelected}
               >
                 <span className="text-xl">{emojis[mood]}</span>
               </button>
             );
           })}
         </div>
-        <div>
-          <div className="flex items-center justify-between text-xs uppercase tracking-[0.18em] text-muted mb-2">
-            <span>Energy</span>
-            <span>{reflectionEnergy}%</span>
-          </div>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={reflectionEnergy}
-            onChange={(e) => setReflectionEnergy(Number(e.target.value))}
-            className="w-full accent-sage"
-          />
+
+        <p className="text-xs uppercase tracking-[0.2em] text-muted mb-3">Energy today</p>
+        <div className="grid grid-cols-3 gap-2">
+          {ENERGY_LEVELS.map((level) => {
+            const isSelected = reflectionEnergyLevel === level.id;
+            return (
+              <button
+                key={level.id}
+                type="button"
+                onClick={() => onReflectionEnergyLevel(level.id, level.value)}
+                className={`rounded-2xl border p-3 text-center transition-all ${
+                  isSelected
+                    ? 'border-sage bg-sage/10 ring-2 ring-sage/25 shadow-paper scale-[1.02]'
+                    : 'border-line bg-cream hover:border-sage/30 hover:bg-parchment/80'
+                }`}
+                aria-pressed={isSelected}
+              >
+                <span className="text-4xl leading-none block mb-2" aria-hidden>
+                  {level.emoji}
+                </span>
+                <span className="block text-sm font-semibold text-ink">{level.label}</span>
+                <span className="block text-[11px] text-muted mt-0.5 leading-snug">{level.hint}</span>
+              </button>
+            );
+          })}
         </div>
       </section>
 

@@ -23,10 +23,11 @@ import { useToast } from '../components/ui/Toast';
 import { useProfile } from '../hooks/useProfile';
 import { useAuth } from '../hooks/use-auth';
 import { slugifyHandle } from '../lib/profileService';
+import type { RouteScreen } from '../hooks/useHashRoute';
 
 interface ProfileHubProps {
   onClose: () => void;
-  navigate: (screen: string) => void;
+  navigate: (screen: RouteScreen) => void;
 }
 
 interface ServiceCard {
@@ -173,18 +174,19 @@ export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
     }
   };
 
-  const openSettings = () => {
-    onClose();
-    navigate('settings');
-  };
-
   const handleLogout = async () => {
     try {
       await signOut();
       onClose();
       window.location.hash = '';
+      window.location.replace(`${window.location.pathname}${window.location.search}`);
+      addToast({ type: 'success', message: 'Signed out. See you next time.' });
     } catch (err) {
       console.error('Logout failed', err);
+      addToast({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Could not sign out. Try again.',
+      });
     }
   };
 
@@ -349,16 +351,6 @@ export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
         )}
       </div>
 
-      <div>
-        <button
-          type="button"
-          onClick={handleLogout}
-          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium border border-line text-muted hover:text-rose-600 hover:bg-rose-50/50 transition"
-        >
-          <LogOut className="w-4 h-4" />
-          Log out
-        </button>
-      </div>
     </div>
   );
 
@@ -513,10 +505,30 @@ export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
         </div>
       </div>
 
-      <div className="max-w-lg mx-auto px-4 py-5 pb-8 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 140px)' }}>
-        {activeTab === 'profile' && renderProfileTab()}
-        {activeTab === 'services' && renderServicesTab()}
-        {activeTab === 'network' && renderNetworkTab()}
+      <div className="max-w-lg mx-auto flex flex-col" style={{ height: 'calc(100vh - 140px)' }}>
+        <div className="flex-1 overflow-y-auto px-4 py-5">
+          {activeTab === 'profile' && renderProfileTab()}
+          {activeTab === 'services' && renderServicesTab()}
+          {activeTab === 'network' && renderNetworkTab()}
+        </div>
+
+        <div className={`shrink-0 px-4 py-4 border-t ${isPearl ? 'border-[var(--glass-border)] bg-[rgba(247,245,255,0.98)]' : 'border-line bg-cream/98'}`}>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className={`w-full flex items-center justify-center gap-2.5 py-3.5 rounded-2xl text-sm font-semibold transition shadow-paper ${
+              isPearl
+                ? 'border-2 border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100'
+                : 'border-2 border-rose-200/80 bg-rose-50/90 text-rose-700 hover:bg-rose-100 hover:border-rose-300'
+            }`}
+          >
+            <LogOut className="w-4 h-4" strokeWidth={2} />
+            Log out
+          </button>
+          <p className="text-center text-[11px] text-muted mt-2">
+            Returns you to the sign-in screen
+          </p>
+        </div>
       </div>
     </div>
   );
