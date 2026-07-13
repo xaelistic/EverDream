@@ -236,6 +236,8 @@ BEGIN
     display_name,
     avatar_url,
     email,
+    tradition,
+    circadian_goal,
     is_admin,
     subscription_tier
   )
@@ -244,6 +246,8 @@ BEGIN
     COALESCE(NEW.raw_user_meta_data->>'display_name', NEW.raw_user_meta_data->>'full_name', split_part(NEW.email, '@', 1), 'dreamer'),
     NEW.raw_user_meta_data->>'avatar_url',
     COALESCE(NEW.email, ''),
+    COALESCE(NEW.raw_user_meta_data->>'tradition', 'general'),
+    COALESCE(NEW.raw_user_meta_data->>'circadian_goal', 'better_dreams'),
     meta_admin,
     meta_tier
   )

@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Moon, Mail, Lock, Eye, EyeOff, AlertCircle, Sparkles, Loader2, Phone, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../../hooks/use-auth';
 import { Button, Input } from '../ui';
 import { Card } from '../ui/Card';
 import { supabase } from '../../lib/supabase/client';
 import { signInWithSocialProvider } from '../../lib/auth/socialAuth';
+import { clearAuthHashError, formatAuthErrorMessage, parseAuthHashError } from '../../lib/auth/parseAuthHashError';
 
 /**
  * LoginScreen — Updated to spec
@@ -30,6 +31,21 @@ export default function LoginScreen() {
   const [phoneStep, setPhoneStep] = useState<'input' | 'verify'>('input');
   const [phoneCode, setPhoneCode] = useState('');
   const [showRegional, setShowRegional] = useState(false);
+  const [showCreateAccountHint, setShowCreateAccountHint] = useState(false);
+
+  useEffect(() => {
+    const hashError = parseAuthHashError(window.location.hash);
+    if (!hashError) return;
+
+    setError(formatAuthErrorMessage(hashError.description));
+    setOauthLoading(null);
+    clearAuthHashError();
+  }, []);
+
+  const openLegalPage = (page: 'terms' | 'privacy') => {
+    const path = page === 'terms' ? '/terms.html' : '/privacy.html';
+    window.open(path, '_blank', 'noopener,noreferrer');
+  };
 
   // Locale-based regional providers (expand mappings as needed)
   const getRegionalProviders = (): string[] => {
@@ -71,11 +87,16 @@ export default function LoginScreen() {
     }
 
     setLoading(true);
+    setShowCreateAccountHint(false);
     try {
       const fn = isSignUp ? signUp : signIn;
       const { error: authError } = await fn(email.trim(), password);
       if (authError) {
-        setError(authError.message || 'Authentication failed. Please try again.');
+        const message = formatAuthErrorMessage(authError.message || 'Authentication failed. Please try again.', isSignUp ? 'signup' : 'signin');
+        setError(message);
+        if (!isSignUp && message.toLowerCase().includes('no account found')) {
+          setShowCreateAccountHint(true);
+        }
         return;
       }
       if (isSignUp) {
@@ -380,9 +401,26 @@ export default function LoginScreen() {
             </div>
 
             {error && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 0.6rem', background: 'oklch(0.97 0.03 30)', border: '1px solid oklch(0.85 0.05 30)', borderRadius: '0.5rem', fontSize: '0.7rem' }}>
-                <AlertCircle size={14} color="oklch(0.55 0.15 30)" />
-                <span style={{ color: 'oklch(0.45 0.1 30)' }}>{error}</span>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.4rem', padding: '0.5rem 0.6rem', background: 'oklch(0.97 0.03 30)', border: '1px solid oklch(0.85 0.05 30)', borderRadius: '0.5rem', fontSize: '0.7rem' }}>
+                <AlertCircle size={14} color="oklch(0.55 0.15 30)" style={{ flexShrink: 0, marginTop: '0.1rem' }} />
+                <span style={{ color: 'oklch(0.45 0.1 30)', lineHeight: 1.45 }}>{error}</span>
+              </div>
+            )}
+
+            {showCreateAccountHint && !isSignUp && (
+              <div style={{
+                padding: '0.65rem 0.75rem',
+                borderRadius: '0.65rem',
+                border: '1px solid oklch(0.82 0.06 275)',
+                background: 'oklch(0.97 0.02 285)',
+                fontSize: '0.72rem',
+                color: 'oklch(0.35 0.05 270)',
+                lineHeight: 1.45,
+              }}>
+                <strong style={{ display: 'block', marginBottom: '0.25rem', color: 'oklch(0.3 0.06 275)' }}>
+                  Not registered yet?
+                </strong>
+                Tap <strong>Create an account</strong> below, or use Google or Meta — they create your account automatically on first sign-in.
               </div>
             )}
 
@@ -393,7 +431,21 @@ export default function LoginScreen() {
 
           <div style={{ textAlign: 'center', marginTop: '1rem', fontSize: '0.8rem', color: 'oklch(0.45 0.02 270 / 0.7)' }}>
             {isSignUp ? 'Already have an account?' : "New here?"}
-            <button type="button" onClick={() => { setIsSignUp(!isSignUp); setError(null); }} style={{ marginLeft: '0.3rem', fontWeight: 600, color: 'oklch(0.45 0.09 275)', background: 'none', border: 'none', textDecoration: 'underline', cursor: 'pointer' }}>
+            <button
+              type="button"
+              onClick={() => { setIsSignUp(!isSignUp); setError(null); setShowCreateAccountHint(false); }}
+              style={{
+                marginLeft: '0.3rem',
+                fontWeight: 600,
+                color: 'oklch(0.45 0.09 275)',
+                background: showCreateAccountHint && !isSignUp ? 'oklch(0.95 0.03 285)' : 'none',
+                border: showCreateAccountHint && !isSignUp ? '1px solid oklch(0.82 0.06 275)' : 'none',
+                borderRadius: showCreateAccountHint && !isSignUp ? '0.4rem' : undefined,
+                padding: showCreateAccountHint && !isSignUp ? '0.1rem 0.35rem' : undefined,
+                textDecoration: 'underline',
+                cursor: 'pointer',
+              }}
+            >
               {isSignUp ? 'Sign In' : 'Create an account'}
             </button>
           </div>
@@ -406,9 +458,9 @@ export default function LoginScreen() {
 
         {/* Footer legal */}
         <div style={{ textAlign: 'center', marginTop: '1rem', display: 'flex', justifyContent: 'center', gap: '0.75rem', fontSize: '0.65rem', color: 'oklch(0.45 0.02 270 / 0.5)' }}>
-          <button onClick={() => setError('Terms coming soon')} style={{ background: 'none', border: 'none', color: 'inherit', textDecoration: 'underline', cursor: 'pointer' }}>Terms</button>
+          <button type="button" onClick={() => openLegalPage('terms')} style={{ background: 'none', border: 'none', color: 'inherit', textDecoration: 'underline', cursor: 'pointer' }}>Terms</button>
           <span>•</span>
-          <button onClick={() => setError('Privacy coming soon')} style={{ background: 'none', border: 'none', color: 'inherit', textDecoration: 'underline', cursor: 'pointer' }}>Privacy</button>
+          <button type="button" onClick={() => openLegalPage('privacy')} style={{ background: 'none', border: 'none', color: 'inherit', textDecoration: 'underline', cursor: 'pointer' }}>Privacy</button>
         </div>
       </div>
     </div>
