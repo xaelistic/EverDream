@@ -421,7 +421,10 @@ export async function transcribeWithWebSpeech(
       return;
     }
 
-    const audio = new Audio(URL.createObjectURL(file));
+    const objectUrl = URL.createObjectURL(file);
+    const audio = new Audio(objectUrl);
+    audio.muted = true;
+    audio.volume = 0;
     const recognition = new SpeechRecognition();
     recognition.continuous = true;
     recognition.interimResults = true;
@@ -442,6 +445,8 @@ export async function transcribeWithWebSpeech(
     };
 
     recognition.onerror = (event: any) => {
+      audio.pause();
+      URL.revokeObjectURL(objectUrl);
       if (event.error === 'no-speech' || event.error === 'aborted') {
         resolve({
           text: transcript.trim() || 'No speech detected',
@@ -454,8 +459,16 @@ export async function transcribeWithWebSpeech(
       }
     };
 
+    const finish = (result: TranscriptionResult) => {
+      audio.pause();
+      audio.removeAttribute('src');
+      audio.load();
+      URL.revokeObjectURL(objectUrl);
+      resolve(result);
+    };
+
     recognition.onend = () => {
-      resolve({
+      finish({
         text: transcript.trim() || 'No speech detected',
         confidence: confidence || 0.5,
         duration: (Date.now() - startTime) / 1000,

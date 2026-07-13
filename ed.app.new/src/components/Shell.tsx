@@ -45,10 +45,60 @@ function isNavActive(active: RouteScreen, screen: RouteScreen): boolean {
   return active === screen;
 }
 
+function isRecordActive(active: RouteScreen): boolean {
+  return active === 'record' || active === 'capture';
+}
+
+function navItemClasses(on: boolean, isThemed: boolean): string {
+  if (on) {
+    return isThemed
+      ? 'text-[var(--aqua-deep)]'
+      : 'text-sageDark';
+  }
+  return isThemed
+    ? 'text-[var(--text-label)] hover:text-[var(--text-primary)]'
+    : 'text-muted hover:text-ink';
+}
+
+function navIconClasses(on: boolean, isThemed: boolean): string {
+  const base = 'flex items-center justify-center rounded-full transition-all w-9 h-9';
+  if (!on) return base;
+  return isThemed
+    ? `${base} bg-[var(--aqua-deep)]/12 ring-2 ring-[var(--aqua-deep)]/35`
+    : `${base} bg-sage/15 ring-2 ring-sage/40`;
+}
+
 export default function Shell({ active, onNavigate, onOpenProfile, processingDreamCount = 0, children }: ShellProps) {
   const { isThemed } = useSkinFull();
   const { profile } = useProfile();
   const recordTarget = getRecordButtonTarget(active);
+  const recordActive = isRecordActive(active);
+
+  const renderNavButton = ({ screen, label, icon: Icon }: (typeof navItems)[number]) => {
+    const on = isNavActive(active, screen);
+    return (
+      <button
+        key={screen}
+        type="button"
+        onClick={() => onNavigate(screen)}
+        aria-current={on ? 'page' : undefined}
+        className={`flex flex-col items-center gap-0.5 px-1.5 py-1 rounded-xl transition-colors min-w-[44px] ${navItemClasses(on, isThemed)}`}
+      >
+        <span className={navIconClasses(on, isThemed)}>
+          <Icon className="w-[18px] h-[18px]" strokeWidth={on ? 2.25 : 1.75} />
+        </span>
+        <span className={`text-[10px] uppercase tracking-wide ${on ? 'font-bold' : 'font-medium'}`}>
+          {label}
+        </span>
+        {on && (
+          <span
+            className={`w-1 h-1 rounded-full ${isThemed ? 'bg-[var(--aqua-deep)]' : 'bg-sageDark'}`}
+            aria-hidden
+          />
+        )}
+      </button>
+    );
+  };
 
   return (
     <div className={`min-h-screen flex flex-col font-sans ${isThemed ? 'text-[var(--text-primary)]' : 'text-ink'}`}>
@@ -116,78 +166,45 @@ export default function Shell({ active, onNavigate, onOpenProfile, processingDre
       <nav className={`fixed bottom-0 inset-x-0 z-40 border-t backdrop-blur-md pb-[env(safe-area-inset-bottom,0px)] ${isThemed ? 'border-[var(--glass-border)] bg-[var(--nav-bg)]' : 'border-line bg-cream/98'}`}>
         <div className="max-w-lg mx-auto px-2 pt-2 pb-3 flex justify-around items-end">
           {/* Left nav items: Home, Journal */}
-          {navItems.slice(0, 2).map(({ screen, label, icon: Icon }) => {
-            const on = isNavActive(active, screen);
-            return (
-              <button
-                key={screen}
-                type="button"
-                onClick={() => onNavigate(screen)}
-                className={`flex flex-col items-center gap-0.5 px-1.5 py-1 rounded-xl transition-colors min-w-[44px] ${
-                  on
-                    ? isThemed ? 'text-[var(--aqua-deep)]' : 'text-sageDark'
-                    : isThemed ? 'text-[var(--text-label)] hover:text-[var(--text-primary)]' : 'text-muted hover:text-ink'
-                }`}
-              >
-                <span
-                  className={`flex items-center justify-center rounded-full transition-all w-9 h-9`}
-                >
-                  <Icon className="w-[18px] h-[18px]" strokeWidth={1.75} />
-                </span>
-                <span className="text-[10px] font-medium uppercase tracking-wide">{label}</span>
-              </button>
-            );
-          })}
+          {navItems.slice(0, 2).map(renderNavButton)}
 
           {/* Center Record button - larger, elevated, the prominent CTA for video/text dream capture (video-first) */}
           <button
             type="button"
             onClick={() => onNavigate(recordTarget)}
+            aria-current={recordActive ? 'page' : undefined}
             className={`flex flex-col items-center gap-0.5 px-1.5 py-1 rounded-xl transition-colors min-w-[64px] ${
-              active === 'home' || active === 'record' || active === 'capture'
+              recordActive
                 ? isThemed ? 'text-[var(--aqua-deep)]' : 'text-sageDark'
                 : isThemed ? 'text-[var(--text-label)] hover:text-[var(--text-primary)]' : 'text-muted hover:text-ink'
             }`}
           >
             <span
               className={`flex items-center justify-center rounded-full transition-all shadow-lift ${
-                (active === 'home' || active === 'record' || active === 'capture')
+                recordActive
                   ? isThemed
-                    ? 'w-14 h-14 -mt-5 bg-gradient-to-br from-[var(--aqua-deep)] to-[var(--aqua)] text-white border border-[var(--aqua-deep)]/20'
-                    : 'w-14 h-14 -mt-5 bg-gradient-to-br from-sage to-sageDark text-cream border border-sageDark/20'
+                    ? 'w-14 h-14 -mt-5 bg-gradient-to-br from-[var(--aqua-deep)] to-[var(--aqua)] text-white border-2 border-[var(--aqua-deep)]/40 ring-4 ring-[var(--aqua-deep)]/20'
+                    : 'w-14 h-14 -mt-5 bg-gradient-to-br from-sage to-sageDark text-cream border-2 border-sageDark/40 ring-4 ring-sage/25'
                   : isThemed
                     ? 'w-13 h-13 -mt-4 bg-gradient-to-br from-[var(--glass-bg)] to-white border border-[var(--glass-border)] text-[var(--text-primary)] shadow-paper'
                     : 'w-13 h-13 -mt-4 bg-gradient-to-br from-parchment to-cream border border-line text-ink shadow-paper'
               }`}
             >
-              <Moon className="w-6 h-6" strokeWidth={1.75} />
+              <Moon className="w-6 h-6" strokeWidth={recordActive ? 2.25 : 1.75} />
             </span>
-            <span className="text-[10px] font-medium uppercase tracking-wide">Record</span>
+            <span className={`text-[10px] uppercase tracking-wide ${recordActive ? 'font-bold' : 'font-medium'}`}>
+              Record
+            </span>
+            {recordActive && (
+              <span
+                className={`w-1 h-1 rounded-full ${isThemed ? 'bg-[var(--aqua-deep)]' : 'bg-sageDark'}`}
+                aria-hidden
+              />
+            )}
           </button>
 
           {/* Right nav items: Tracker, More */}
-          {navItems.slice(2).map(({ screen, label, icon: Icon }) => {
-            const on = isNavActive(active, screen);
-            return (
-              <button
-                key={screen}
-                type="button"
-                onClick={() => onNavigate(screen)}
-                className={`flex flex-col items-center gap-0.5 px-1.5 py-1 rounded-xl transition-colors min-w-[44px] ${
-                  on
-                    ? isThemed ? 'text-[var(--aqua-deep)]' : 'text-sageDark'
-                    : isThemed ? 'text-[var(--text-label)] hover:text-[var(--text-primary)]' : 'text-muted hover:text-ink'
-                }`}
-              >
-                <span
-                  className={`flex items-center justify-center rounded-full transition-all w-9 h-9`}
-                >
-                  <Icon className="w-[18px] h-[18px]" strokeWidth={1.75} />
-                </span>
-                <span className="text-[10px] font-medium uppercase tracking-wide">{label}</span>
-              </button>
-            );
-          })}
+          {navItems.slice(2).map(renderNavButton)}
         </div>
       </nav>
     </div>

@@ -27,6 +27,7 @@ import {
   Moon
 } from 'lucide-react';
 import { mediaStorageManager } from '../../lib/mediaStorage';
+import { stopCaptureMedia } from '../../lib/stopCaptureMedia';
 
 export interface VideoCaptureData {
   /** Blob of recorded video */
@@ -74,6 +75,8 @@ async function getVideoThumbnail(videoBlob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const video = document.createElement('video');
     video.preload = 'metadata';
+    video.muted = true;
+    video.playsInline = true;
     
     video.onloadedmetadata = () => {
       video.currentTime = Math.min(1, video.duration / 2);
@@ -193,16 +196,28 @@ export function VideoCaptureFlow({
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
-    
+
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch {
+        /* ignore */
+      }
+    }
+    mediaRecorderRef.current = null;
+
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
-    
-    if (mediaRecorderRef.current) {
-      mediaRecorderRef.current.stop();
-      mediaRecorderRef.current = null;
+
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.srcObject = null;
     }
+
+    setIsRecording(false);
+    stopCaptureMedia();
   }, []);
 
   const startRecording = useCallback(() => {
@@ -299,13 +314,13 @@ export function VideoCaptureFlow({
       stopAll();
 
       try {
-        onComplete(data);
+        await onComplete(data);
         console.log('[VideoCapture] onComplete executed successfully');
       } catch (error) {
         console.error('[VideoCapture] Error in onComplete callback:', error);
+      } finally {
+        setIsSaving(false);
       }
-
-      setIsSaving(false);
     };
     
     recorder.start(1000); // Collect data every second

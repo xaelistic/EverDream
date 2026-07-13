@@ -7,6 +7,7 @@ import { CaptureModeBar, type CaptureMode } from '../components/capture/CaptureM
 import { AudioWaveform } from '../components/capture/AudioWaveform';
 import { Mic, Square, Loader2, X, Upload, FileText, ArrowLeft } from 'lucide-react';
 import { mediaStorageManager } from '../lib/mediaStorage';
+import { stopCaptureMedia } from '../lib/stopCaptureMedia';
 
 
 interface RecordScreenProps {
@@ -33,6 +34,7 @@ function AudioJournalCapture({
   onCancel: () => void;
   onModeChange: (mode: CaptureMode) => void;
 }) {
+  const { addToast } = useToast();
   const [isRecording, setIsRecording] = useState(false);
   const [duration, setDuration] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
@@ -45,7 +47,7 @@ function AudioJournalCapture({
   const timerRef = useRef<number | null>(null);
   const durationRef = useRef(0);
 
-  const cleanup = useCallback(() => {
+  const stopLiveCapture = useCallback(() => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
@@ -60,13 +62,18 @@ function AudioJournalCapture({
     }
     setAnalyser(null);
     mediaRecorderRef.current = null;
-    chunksRef.current = [];
     setIsRecording(false);
-    setDuration(0);
-    durationRef.current = 0;
+    stopCaptureMedia();
   }, []);
 
-  useEffect(() => () => cleanup(), [cleanup]);
+  const resetCaptureState = useCallback(() => {
+    stopLiveCapture();
+    chunksRef.current = [];
+    setDuration(0);
+    durationRef.current = 0;
+  }, [stopLiveCapture]);
+
+  useEffect(() => () => resetCaptureState(), [resetCaptureState]);
 
   const startAudioRecording = async () => {
     try {
@@ -99,10 +106,11 @@ function AudioJournalCapture({
 
       recorder.onstop = async () => {
         setIsSaving(true);
-        cleanup();
-
-        const audioBlob = new Blob(chunksRef.current, { type: mimeType });
+        const savedChunks = [...chunksRef.current];
         const recordingDuration = durationRef.current;
+        stopLiveCapture();
+
+        const audioBlob = new Blob(savedChunks, { type: mimeType });
 
         let mediaId: string | null = null;
         try {
@@ -131,6 +139,9 @@ function AudioJournalCapture({
             hasAudio: true,
           }, '');
         } finally {
+          chunksRef.current = [];
+          setDuration(0);
+          durationRef.current = 0;
           setIsSaving(false);
         }
       };
@@ -154,12 +165,12 @@ function AudioJournalCapture({
     } catch (error) {
       console.error('[AudioJournal] Failed to start:', error);
       addToast({ type: 'error', message: 'Unable to access microphone. Please check permissions.' });
-      cleanup();
+      resetCaptureState();
     }
   };
 
   const stopAudioRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
       if (timerRef.current) {
@@ -171,7 +182,7 @@ function AudioJournalCapture({
 
   const handleCancel = () => {
     if (isRecording) stopAudioRecording();
-    cleanup();
+    resetCaptureState();
     onCancel();
   };
 
@@ -376,9 +387,9 @@ export function RecordScreen({ onComplete, onCancel }: RecordScreenProps) {
           </div>
         </div>
         <VideoCaptureFlow
-          onComplete={(data: VideoCaptureData) => {
+          onComplete={async (data: VideoCaptureData) => {
             const videoUrl = URL.createObjectURL(data.videoBlob);
-            onComplete({
+            await onComplete({
               videoBlob: data.videoBlob,
               videoUrl,
               thumbnail: data.thumbnail,

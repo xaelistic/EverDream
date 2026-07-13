@@ -209,6 +209,8 @@ async function tryCaptureStreamExtraction(
 
     recorder.start(250);
 
+    video.muted = true;
+    video.volume = 0;
     video.currentTime = 0;
     video
       .play()
