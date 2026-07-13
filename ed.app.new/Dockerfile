@@ -4,6 +4,10 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
+# Bump to force Coolify rebuild when code is unchanged but image was bad/cached
+ARG CACHE_BUST=20260713-01
+RUN echo "Cache bust: $CACHE_BUST"
+
 COPY package*.json ./
 RUN npm ci --legacy-peer-deps
 
@@ -55,7 +59,7 @@ RUN echo 'server { \
     # Security + CSP headers (media-src blob: data: is REQUIRED for local recorded video/audio + thumbnails to play) \
     add_header X-Content-Type-Options "nosniff" always; \
     add_header Referrer-Policy "strict-origin-when-cross-origin" always; \
-    add_header Content-Security-Policy "default-src '\''self'\''; script-src '\''self'\'' '\''unsafe-inline'\'' '\''unsafe-eval'\'' https://*.supabase.co; style-src '\''self'\'' '\''unsafe-inline'\''; img-src '\''self'\'' data: blob: https:; media-src '\''self'\'' blob: data: https:; connect-src '\''self'\'' https://*.supabase.co wss://*.supabase.co https://image.pollinations.ai http: https: wss:; worker-src '\''self'\'' blob:; manifest-src '\''self'\''; frame-ancestors '\''none'\'';" always; \
+    add_header Content-Security-Policy "default-src '\''self'\''; script-src '\''self'\'' '\''unsafe-inline'\'' '\''unsafe-eval'\'' https://*.supabase.co; style-src '\''self'\'' '\''unsafe-inline'\'' https://fonts.googleapis.com; font-src '\''self'\'' https://fonts.gstatic.com; img-src '\''self'\'' data: blob: https:; media-src '\''self'\'' blob: data: https:; connect-src '\''self'\'' https://*.supabase.co wss://*.supabase.co https://*.n1g3.com wss://*.n1g3.com https://image.pollinations.ai http: https: wss:; worker-src '\''self'\'' blob:; manifest-src '\''self'\''; frame-ancestors '\''none'\'';" always; \
 }' > /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
