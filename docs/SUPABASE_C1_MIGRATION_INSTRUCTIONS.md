@@ -3,8 +3,11 @@
 **Purpose**  
 Apply the critical privilege-escalation fix (`is_admin` / `role` self-update prevention) to the production Supabase instance running on Coolify.
 
-**Migration File**  
-`ed.app.new/supabase/migrations/20250713000001_prevent_is_admin_escalation.sql`
+**Migration Files**  
+1. `ed.app.new/supabase/migrations/20250713000002_align_production_schema.sql` — **run first** if production still uses legacy `profiles.id = auth.uid()` layout  
+2. `ed.app.new/supabase/migrations/20250713000001_prevent_is_admin_escalation.sql` — C-1 privilege-escalation fix (included in align migration)
+
+**Canonical local repo:** `C:\Users\xaeli\work\EverDream` (not a fresh clone)
 
 ---
 
