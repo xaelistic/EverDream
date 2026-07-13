@@ -4,20 +4,19 @@ import {
   RefreshCw,
   Check,
   X,
-  ExternalLink,
   Moon,
   Activity,
   Heart,
   Thermometer,
   Wind,
   Smartphone,
-  Watch as WatchIcon,
   Zap,
   Bluetooth,
   Radio,
 } from 'lucide-react';
 import type { WearableConfig, WearableProvider, WearableSleepRecord } from '../../lib/wearables';
-import { fetchAllWearableSleep, getOAuthUrl } from '../../lib/wearables';
+import { fetchAllWearableSleep } from '../../lib/wearables';
+import { WearableConnectModal } from './WearableConnectModal';
 
 interface WearableSettingsProps {
   configs: WearableConfig[];
@@ -25,6 +24,9 @@ interface WearableSettingsProps {
   onSleepDataReceived: (records: WearableSleepRecord[]) => void;
   clientIdMap: Record<WearableProvider, string>;
   redirectUri: string;
+  initialConnectProvider?: WearableProvider | null;
+  onInitialConnectHandled?: () => void;
+  oauthError?: string | null;
 }
 
 const PROVIDER_INFO: Record<WearableProvider, {
@@ -33,7 +35,6 @@ const PROVIDER_INFO: Record<WearableProvider, {
   color: string;
   description: string;
   features: string[];
-  authType: 'oauth' | 'native' | 'server_side' | 'placeholder';
   marketNote?: string;
 }> = {
   oura: {
@@ -42,7 +43,6 @@ const PROVIDER_INFO: Record<WearableProvider, {
     color: 'bg-violet-500',
     description: 'Best-in-class sleep tracking with HRV, temperature, and respiratory rate',
     features: ['Sleep stages', 'HRV', 'Temperature', 'Respiratory rate', 'Readiness score'],
-    authType: 'oauth',
   },
   apple_health: {
     name: 'Apple Watch / Health',
@@ -50,7 +50,6 @@ const PROVIDER_INFO: Record<WearableProvider, {
     color: 'bg-red-500',
     description: 'Native iOS sleep tracking with heart rate and blood oxygen',
     features: ['Sleep stages', 'Heart rate', 'Blood oxygen', 'Respiratory rate'],
-    authType: 'native',
   },
   samsung_health: {
     name: 'Samsung Galaxy Watch',
@@ -58,16 +57,14 @@ const PROVIDER_INFO: Record<WearableProvider, {
     color: 'bg-blue-600',
     description: 'Samsung Health sleep tracking with Galaxy Watch integration',
     features: ['Sleep stages', 'Heart rate', 'Blood oxygen', 'Snoring detection', 'Sleep score'],
-    authType: 'oauth',
     marketNote: 'Popular in Japan & globally',
   },
   huawei_health: {
     name: 'Huawei Watch / Health',
-    icon: WatchIcon,
+    icon: Watch,
     color: 'bg-rose-600',
     description: 'Huawei Health Kit with TruSleep™ technology for detailed sleep analysis',
     features: ['TruSleep™ stages', 'Heart rate', 'SpO2', 'Respiratory rate', 'Sleep score'],
-    authType: 'oauth',
     marketNote: 'Dominant in China, growing in Japan',
   },
   xiaomi_mi_fitness: {
@@ -76,7 +73,6 @@ const PROVIDER_INFO: Record<WearableProvider, {
     color: 'bg-orange-500',
     description: 'Mi Fitness and Amazfit wearables with comprehensive sleep tracking',
     features: ['Sleep stages', 'Heart rate', 'SpO2', 'Nap tracking', 'Sleep score'],
-    authType: 'oauth',
     marketNote: 'Extremely popular in Japan & Asia',
   },
   garmin_connect: {
@@ -85,7 +81,6 @@ const PROVIDER_INFO: Record<WearableProvider, {
     color: 'bg-sky-600',
     description: 'Garmin watches with advanced sleep and Body Battery™ tracking',
     features: ['Sleep stages', 'Body Battery™', 'HRV', 'Respiration', 'Pulse Ox', 'Sleep score'],
-    authType: 'server_side',
     marketNote: 'Popular with athletes globally',
   },
   withings: {
@@ -94,7 +89,6 @@ const PROVIDER_INFO: Record<WearableProvider, {
     color: 'bg-emerald-600',
     description: 'Withings sleep analyzers and smart watches with medical-grade sensors',
     features: ['Sleep stages', 'Heart rate', 'Respiratory rate', 'Sleep apnea detection', 'Sleep score'],
-    authType: 'oauth',
     marketNote: 'Popular in Europe & Japan',
   },
   fitbit: {
@@ -103,7 +97,6 @@ const PROVIDER_INFO: Record<WearableProvider, {
     color: 'bg-cyan-500',
     description: 'Comprehensive fitness and sleep tracking',
     features: ['Sleep stages', 'Heart rate', 'SpO2', 'Restlessness'],
-    authType: 'oauth',
   },
   google_fit: {
     name: 'Google Fit',
@@ -111,7 +104,6 @@ const PROVIDER_INFO: Record<WearableProvider, {
     color: 'bg-green-500',
     description: "Google's health platform with sleep segment data",
     features: ['Sleep stages', 'Sleep duration', 'Bedtime/wake time'],
-    authType: 'oauth',
   },
   amazfit: {
     name: 'Amazfit (Zepp)',
@@ -119,7 +111,6 @@ const PROVIDER_INFO: Record<WearableProvider, {
     color: 'bg-teal-500',
     description: 'Amazfit smartwatches via Zepp app with long battery life',
     features: ['Sleep stages', 'Heart rate', 'SpO2', 'Stress monitoring', 'PAI score'],
-    authType: 'oauth',
     marketNote: 'Very popular in Japan',
   },
   polar: {
@@ -128,7 +119,6 @@ const PROVIDER_INFO: Record<WearableProvider, {
     color: 'bg-red-700',
     description: 'Polar sports watches with precision sleep and recovery tracking',
     features: ['Sleep stages', 'Nightly Recharge™', 'HRV', 'Heart rate', 'Sleep score'],
-    authType: 'oauth',
     marketNote: 'Popular in Japan & Europe',
   },
   sony: {
@@ -137,7 +127,6 @@ const PROVIDER_INFO: Record<WearableProvider, {
     color: 'bg-gray-700',
     description: 'Sony Wena Wrist smartwatch — API not yet publicly available',
     features: ['Sleep tracking', 'Heart rate', 'Notifications'],
-    authType: 'placeholder',
     marketNote: 'Japan-only, no public API yet',
   },
 };
@@ -148,90 +137,33 @@ export function WearableSettings({
   onSleepDataReceived,
   clientIdMap,
   redirectUri,
+  initialConnectProvider = null,
+  onInitialConnectHandled,
+  oauthError = null,
 }: WearableSettingsProps) {
   const [syncing, setSyncing] = useState<WearableProvider | null>(null);
   const [lastSync, setLastSync] = useState<Record<WearableProvider, string>>({
-    oura: '',
-    fitbit: '',
-    google_fit: '',
-    apple_health: '',
-    samsung_health: '',
-    huawei_health: '',
-    xiaomi_mi_fitness: '',
-    garmin_connect: '',
-    withings: '',
-    amazfit: '',
-    polar: '',
-    sony: '',
+    oura: '', fitbit: '', google_fit: '', apple_health: '', samsung_health: '',
+    huawei_health: '', xiaomi_mi_fitness: '', garmin_connect: '', withings: '',
+    amazfit: '', polar: '', sony: '',
   });
-  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [connectProvider, setConnectProvider] = useState<WearableProvider | null>(
+    initialConnectProvider,
+  );
 
-  // Load test tokens from localStorage on mount (for SPEC-13 test flow until full DB connections)
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('wearable_test_tokens');
-      if (saved) {
-        const tokens = JSON.parse(saved);
-        const updated = configs.map(c => {
-          if (tokens[c.provider]) {
-            return { ...c, auth: { ...c.auth, accessToken: tokens[c.provider] }, enabled: true };
-          }
-          return c;
-        });
-        onConfigsChange(updated);
-      }
-    } catch (e) { /* ignore */ }
-  }, []); // run once
-
-  const handleConnect = (provider: WearableProvider) => {
-    const clientId = clientIdMap[provider];
-    if (!clientId && PROVIDER_INFO[provider].authType !== 'placeholder') {
-      setError(`Please configure ${PROVIDER_INFO[provider].name} client ID in settings`);
-      return;
+    if (initialConnectProvider) {
+      setConnectProvider(initialConnectProvider);
     }
+  }, [initialConnectProvider]);
 
-    if (PROVIDER_INFO[provider].authType === 'native') {
-      setError('Apple Health requires the mobile app. Please use the iOS/Android app to connect.');
-      return;
-    }
+  const isConnected = (provider: WearableProvider) =>
+    configs.some((c) => c.provider === provider && c.enabled && c.auth.accessToken);
 
-    if (PROVIDER_INFO[provider].authType === 'server_side') {
-      setError(`${PROVIDER_INFO[provider].name} uses a server-side OAuth flow. Please configure in backend settings.`);
-      return;
-    }
-
-    if (PROVIDER_INFO[provider].authType === 'placeholder') {
-      setError(`${PROVIDER_INFO[provider].name} does not have a public API yet. Integration coming soon.`);
-      return;
-    }
-
-    // For quick testing / SPEC-13 MVP: allow pasting a personal access token
-    const testToken = window.prompt(
-      `For testing: Paste ${PROVIDER_INFO[provider].name} access token (Oura personal tokens work great).\nLeave empty to start OAuth flow.`,
-      ''
-    );
-
-    if (testToken && testToken.trim()) {
-      const newConfig: WearableConfig = {
-        provider,
-        auth: { provider, accessToken: testToken.trim() },
-        enabled: true,
-      };
-      const updated = [...configs.filter((c) => c.provider !== provider), newConfig];
-      onConfigsChange(updated);
-      setError(null);
-      return;
-    }
-
-    // Fallback to OAuth
-    const state = `${provider}-${Date.now()}`;
-    sessionStorage.setItem('wearable_oauth_state', state);
-    sessionStorage.setItem('wearable_oauth_provider', provider);
-
-    const url = getOAuthUrl(provider, clientId, redirectUri, state);
-    if (url) {
-      window.location.href = url;
-    }
+  const upsertConfig = (config: WearableConfig) => {
+    const updated = [...configs.filter((c) => c.provider !== config.provider), config];
+    onConfigsChange(updated);
   };
 
   const handleDisconnect = (provider: WearableProvider) => {
@@ -239,9 +171,10 @@ export function WearableSettings({
       configs.map((c) =>
         c.provider === provider
           ? { ...c, enabled: false, auth: { provider, accessToken: '' } }
-          : c
-      )
+          : c,
+      ),
     );
+    setStatus(`${PROVIDER_INFO[provider].name} disconnected.`);
   };
 
   const handleSync = async (provider: WearableProvider) => {
@@ -249,19 +182,22 @@ export function WearableSettings({
     if (!config?.auth.accessToken) return;
 
     setSyncing(provider);
-    setError(null);
+    setStatus(null);
 
     try {
       const endDate = new Date().toISOString().split('T')[0];
       const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
       const records = await fetchAllWearableSleep([config], startDate, endDate);
       onSleepDataReceived(records);
-
       setLastSync((prev) => ({ ...prev, [provider]: new Date().toLocaleString() }));
+      setStatus(
+        records.length > 0
+          ? `Synced ${records.length} night(s) from ${PROVIDER_INFO[provider].name}.`
+          : `Connected to ${PROVIDER_INFO[provider].name}, but no sleep data was returned yet.`,
+      );
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Sync failed';
-      setError(`${PROVIDER_INFO[provider].name}: ${message}`);
+      setStatus(`${PROVIDER_INFO[provider].name}: ${message}`);
     } finally {
       setSyncing(null);
     }
@@ -270,39 +206,44 @@ export function WearableSettings({
   const handleSyncAll = async () => {
     const enabledConfigs = configs.filter((c) => c.enabled && c.auth.accessToken);
     if (enabledConfigs.length === 0) {
-      setError('No wearable devices connected');
+      setStatus('Connect a device first, then tap Sync.');
       return;
     }
 
-    setSyncing('oura' as WearableProvider);
-    setError(null);
+    setSyncing('oura');
+    setStatus(null);
 
     try {
       const endDate = new Date().toISOString().split('T')[0];
       const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
       const records = await fetchAllWearableSleep(enabledConfigs, startDate, endDate);
       onSleepDataReceived(records);
-
       const now = new Date().toLocaleString();
       const newLastSync = { ...lastSync };
       for (const config of enabledConfigs) {
         newLastSync[config.provider] = now;
       }
       setLastSync(newLastSync);
+      setStatus(`Synced ${records.length} night(s) from ${enabledConfigs.length} device(s).`);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Sync failed';
-      setError(message);
+      setStatus(message);
     } finally {
       setSyncing(null);
     }
   };
 
-  const isConnected = (provider: WearableProvider) => {
-    return configs.some((c) => c.provider === provider && c.enabled && c.auth.accessToken);
+  const handleConnected = async (config: WearableConfig) => {
+    upsertConfig(config);
+    setStatus(`${PROVIDER_INFO[config.provider].name} connected. Syncing sleep data…`);
+    await handleSync(config.provider);
   };
 
-  // Group providers by category
+  const openConnect = (provider: WearableProvider) => {
+    setConnectProvider(provider);
+    onInitialConnectHandled?.();
+  };
+
   const premiumProviders: WearableProvider[] = ['oura', 'apple_health', 'garmin_connect'];
   const mainstreamProviders: WearableProvider[] = ['samsung_health', 'fitbit', 'withings', 'polar'];
   const asianMarketProviders: WearableProvider[] = ['huawei_health', 'xiaomi_mi_fitness', 'amazfit', 'sony'];
@@ -318,18 +259,14 @@ export function WearableSettings({
       <div
         key={provider}
         className={`rounded-2xl border p-4 transition ${
-          connected
-            ? 'border-sage/30 bg-sage/5'
-            : 'border-line bg-cream'
+          connected ? 'border-sage/30 bg-sage/5' : 'border-line bg-cream'
         }`}
       >
         <div className="flex items-start gap-3">
-          {/* Provider icon */}
           <div className={`w-10 h-10 rounded-xl ${info.color} flex items-center justify-center shrink-0`}>
             <Icon className="w-5 h-5 text-white" strokeWidth={1.5} />
           </div>
 
-          {/* Provider info */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h4 className="text-sm font-semibold text-ink">{info.name}</h4>
@@ -339,22 +276,11 @@ export function WearableSettings({
                   Connected
                 </span>
               )}
-              {info.authType === 'placeholder' && (
-                <span className="text-[10px] font-medium text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full">
-                  Coming Soon
-                </span>
-              )}
-              {info.authType === 'server_side' && (
-                <span className="text-[10px] font-medium text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full">
-                  Server-side OAuth
-                </span>
-              )}
             </div>
             <p className="text-xs text-muted mt-0.5">{info.description}</p>
 
-            {/* Features */}
             <div className="flex flex-wrap gap-1 mt-2">
-              {info.features.map((feature) => (
+              {info.features.slice(0, 4).map((feature) => (
                 <span
                   key={feature}
                   className="text-[10px] bg-parchment border border-line px-1.5 py-0.5 rounded text-muted"
@@ -364,22 +290,15 @@ export function WearableSettings({
               ))}
             </div>
 
-            {/* Market note */}
             {info.marketNote && (
-              <p className="text-[10px] text-dusk mt-1.5 italic">
-                📍 {info.marketNote}
-              </p>
+              <p className="text-[10px] text-dusk mt-1.5 italic">📍 {info.marketNote}</p>
             )}
 
-            {/* Last sync */}
             {lastSync[provider] && (
-              <p className="text-[10px] text-muted mt-1.5">
-                Last synced: {lastSync[provider]}
-              </p>
+              <p className="text-[10px] text-muted mt-1.5">Last synced: {lastSync[provider]}</p>
             )}
           </div>
 
-          {/* Action button */}
           <div className="shrink-0">
             {connected ? (
               <div className="flex gap-1.5">
@@ -396,6 +315,7 @@ export function WearableSettings({
                   type="button"
                   onClick={() => handleDisconnect(provider)}
                   className="rounded-lg border border-line bg-white hover:bg-rose-50 px-2 py-1.5 text-xs text-muted hover:text-rose-600 transition"
+                  aria-label={`Disconnect ${info.name}`}
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -403,10 +323,9 @@ export function WearableSettings({
             ) : (
               <button
                 type="button"
-                onClick={() => handleConnect(provider)}
-                className="rounded-lg bg-sage hover:bg-sageDark text-white px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 transition"
+                onClick={() => openConnect(provider)}
+                className="rounded-lg bg-sage hover:bg-sageDark text-white px-3 py-1.5 text-xs font-medium transition"
               >
-                <ExternalLink className="w-3 h-3" strokeWidth={2} />
                 Connect
               </button>
             )}
@@ -418,85 +337,77 @@ export function WearableSettings({
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div>
           <h3 className="font-semibold text-ink flex items-center gap-2">
             <Watch className="w-5 h-5 text-duskDeep" strokeWidth={1.75} />
             Wearable Devices
           </h3>
           <p className="text-xs text-muted mt-1">
-            Connect your sleep tracker for automatic sleep data
+            {configs.filter((c) => c.enabled && c.auth.accessToken).length > 0
+              ? `${configs.filter((c) => c.enabled && c.auth.accessToken).length} device(s) connected`
+              : 'Tap Connect to add a sleep tracker'}
           </p>
         </div>
         <button
           type="button"
           onClick={handleSyncAll}
           disabled={syncing !== null}
-          className="rounded-xl border border-sage/30 bg-sage/5 hover:bg-sage/10 px-3 py-1.5 text-xs font-medium text-sageDark flex items-center gap-1.5 transition disabled:opacity-50"
+          className="rounded-xl border border-sage/30 bg-sage/5 hover:bg-sage/10 px-3 py-1.5 text-xs font-medium text-sageDark flex items-center gap-1.5 transition disabled:opacity-50 shrink-0"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} strokeWidth={2} />
           Sync All
         </button>
       </div>
 
-      {/* Error display */}
-      {error && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 flex items-center gap-2">
-          <X className="w-3.5 h-3.5 shrink-0" />
-          {error}
+      {status && (
+        <div className="rounded-xl border border-sage/25 bg-sage/5 px-3 py-2 text-xs text-sageDark leading-relaxed">
+          {status}
         </div>
       )}
 
-      {/* Premium / Best-in-class */}
       <div>
         <h4 className="text-xs font-semibold text-muted uppercase tracking-wider mb-2 px-1">
           ★ Premium Sleep Tracking
         </h4>
-        <div className="space-y-3">
-          {premiumProviders.map(renderProviderCard)}
-        </div>
+        <div className="space-y-3">{premiumProviders.map(renderProviderCard)}</div>
       </div>
 
-      {/* Mainstream Global */}
       <div>
         <h4 className="text-xs font-semibold text-muted uppercase tracking-wider mb-2 px-1">
           🌍 Mainstream Global
         </h4>
-        <div className="space-y-3">
-          {mainstreamProviders.map(renderProviderCard)}
-        </div>
+        <div className="space-y-3">{mainstreamProviders.map(renderProviderCard)}</div>
       </div>
 
-      {/* Asia / Japan Market */}
       <div>
         <h4 className="text-xs font-semibold text-muted uppercase tracking-wider mb-2 px-1">
           🇯🇵 Asia & Japan Market
         </h4>
-        <div className="space-y-3">
-          {asianMarketProviders.map(renderProviderCard)}
-        </div>
+        <div className="space-y-3">{asianMarketProviders.map(renderProviderCard)}</div>
       </div>
 
-      {/* Platform */}
       <div>
         <h4 className="text-xs font-semibold text-muted uppercase tracking-wider mb-2 px-1">
           🔗 Platform
         </h4>
-        <div className="space-y-3">
-          {platformProviders.map(renderProviderCard)}
-        </div>
+        <div className="space-y-3">{platformProviders.map(renderProviderCard)}</div>
       </div>
 
-      {/* Info note */}
-      <div className="rounded-xl border border-line bg-parchment p-3 text-xs text-muted leading-relaxed">
-        <p>
-          <strong className="text-ink">Note:</strong> Wearable data is used locally to enhance your sleep insights.
-          OAuth tokens are stored on this device and never sent to our servers.
-          Apple Health requires the native iOS app for HealthKit access.
-          Some providers (Garmin, Sony) require additional server-side configuration.
-        </p>
-      </div>
+      <WearableConnectModal
+        provider={connectProvider}
+        isOpen={connectProvider !== null}
+        onClose={() => {
+          setConnectProvider(null);
+          onInitialConnectHandled?.();
+        }}
+        clientId={connectProvider ? clientIdMap[connectProvider] : ''}
+        redirectUri={redirectUri}
+        onConnected={handleConnected}
+        onSync={handleSync}
+        isConnected={connectProvider ? isConnected(connectProvider) : false}
+        oauthError={oauthError}
+      />
     </div>
   );
 }

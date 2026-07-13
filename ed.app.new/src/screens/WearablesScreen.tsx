@@ -1,6 +1,7 @@
 import { ArrowLeft } from 'lucide-react';
 import { WearableSettings } from '../components/wearables/WearableSettings';
 import type { WearableConfig, WearableSleepRecord } from '../lib/wearables';
+import { getWearableClientIdMap, getWearableRedirectUri } from '../lib/wearableClientIds';
 
 interface WearablesScreenProps {
   wearableConfigs: WearableConfig[];
@@ -58,21 +59,8 @@ export function WearablesScreen({
         configs={wearableConfigs}
         onConfigsChange={setWearableConfigs}
         onSleepDataReceived={onSleepDataReceived}
-        clientIdMap={{
-          oura: '',
-          apple_health: '',
-          samsung_health: '',
-          huawei_health: '',
-          xiaomi_mi_fitness: '',
-          garmin_connect: '',
-          withings: '',
-          fitbit: '',
-          google_fit: '',
-          amazfit: '',
-          polar: '',
-          sony: '',
-        }}
-        redirectUri={window.location.origin + '/oauth/callback'}
+        clientIdMap={getWearableClientIdMap()}
+        redirectUri={getWearableRedirectUri()}
       />
 
       {/* Recent Sleep Sessions from wearables */}

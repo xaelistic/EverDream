@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   Moon,
   Calendar,
@@ -45,7 +45,11 @@ import {
 } from './lib/transcriptionWhisper';
 import { processVideoJournal, processTextJournal } from './lib/videoJournalProcessor';
 import { WearableSettings } from './components/wearables/WearableSettings';
-import type { WearableConfig, WearableSleepRecord } from './lib/wearables';
+import type { WearableConfig, WearableProvider, WearableSleepRecord } from './lib/wearables';
+import { DEFAULT_WEARABLE_CONFIGS } from './lib/defaultWearableConfigs';
+import { getWearableClientIdMap, getWearableRedirectUri } from './lib/wearableClientIds';
+import { loadWearableConfigs, parseWearableOAuthFromUrl, saveWearableConfigs } from './lib/wearableConnectionStore';
+import { exchangeWearableOAuthCode } from './lib/wearableOAuth';
 import AdminDashboard from './components/admin/AdminDashboard';
 import { useSkinFull } from './contexts/SkinContext';
 import { trackScreenView, startSession, endSession } from './lib/analytics';
@@ -235,20 +239,18 @@ const DreamJournalApp = () => {
   const [capturedEmotions, setCapturedEmotions] = useState<EmotionCapture | null>(null);
   const [wearableData, setWearableData] = useState<WearableSleepRecord[]>([]);
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [wearableConfigs, setWearableConfigs] = useState<WearableConfig[]>([
-    { provider: 'oura', auth: { provider: 'oura', accessToken: '' }, enabled: false },
-    { provider: 'apple_health', auth: { provider: 'apple_health', accessToken: '' }, enabled: false },
-    { provider: 'samsung_health', auth: { provider: 'samsung_health', accessToken: '' }, enabled: false },
-    { provider: 'huawei_health', auth: { provider: 'huawei_health', accessToken: '' }, enabled: false },
-    { provider: 'xiaomi_mi_fitness', auth: { provider: 'xiaomi_mi_fitness', accessToken: '' }, enabled: false },
-    { provider: 'garmin_connect', auth: { provider: 'garmin_connect', accessToken: '' }, enabled: false },
-    { provider: 'withings', auth: { provider: 'withings', accessToken: '' }, enabled: false },
-    { provider: 'fitbit', auth: { provider: 'fitbit', accessToken: '' }, enabled: false },
-    { provider: 'google_fit', auth: { provider: 'google_fit', accessToken: '' }, enabled: false },
-    { provider: 'amazfit', auth: { provider: 'amazfit', accessToken: '' }, enabled: false },
-    { provider: 'polar', auth: { provider: 'polar', accessToken: '' }, enabled: false },
-    { provider: 'sony', auth: { provider: 'sony', accessToken: '' }, enabled: false },
-  ]);
+  const [wearableConfigs, setWearableConfigsState] = useState<WearableConfig[]>(() =>
+    loadWearableConfigs(DEFAULT_WEARABLE_CONFIGS),
+  );
+  const [wearableConnectProvider, setWearableConnectProvider] = useState<WearableProvider | null>(null);
+  const [wearableOAuthError, setWearableOAuthError] = useState<string | null>(null);
+  const wearableClientIdMap = useMemo(() => getWearableClientIdMap(), []);
+  const wearableRedirectUri = useMemo(() => getWearableRedirectUri(), []);
+
+  const setWearableConfigs = useCallback((configs: WearableConfig[]) => {
+    setWearableConfigsState(configs);
+    saveWearableConfigs(configs);
+  }, []);
   const [showLicensing, setShowLicensing] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
   const [privacySettings, setPrivacySettings] = useState({
@@ -488,6 +490,35 @@ const DreamJournalApp = () => {
       endSession();
     };
   }, []);
+
+  // Complete wearable OAuth when returning from provider sign-in
+  useEffect(() => {
+    const pending = parseWearableOAuthFromUrl();
+    if (!pending) return;
+
+    navigate('wearables');
+    setWearableConnectProvider(pending.provider);
+    setWearableOAuthError(null);
+
+    exchangeWearableOAuthCode(pending.provider, pending.code, wearableRedirectUri)
+      .then((auth) => {
+        setWearableConfigsState((prev) => {
+          const updated = [
+            ...prev.filter((c) => c.provider !== pending.provider),
+            { provider: pending.provider, enabled: true, auth },
+          ];
+          saveWearableConfigs(updated);
+          return updated;
+        });
+        setWearableOAuthError(null);
+        addToast({ type: 'success', message: `${pending.provider.replace(/_/g, ' ')} connected. Tap Sync to import sleep data.` });
+      })
+      .catch((err) => {
+        const message = err instanceof Error ? err.message : 'OAuth sign-in could not be completed';
+        setWearableOAuthError(message);
+        addToast({ type: 'warning', message });
+      });
+  }, [navigate, wearableRedirectUri, addToast]);
 
   // Track screen views on route change
   useEffect(() => {
@@ -1970,24 +2001,16 @@ const DreamJournalApp = () => {
               onConfigsChange={setWearableConfigs}
               onSleepDataReceived={(records) => {
                 setWearableData(records);
-                // Also save to storage
                 window.storage.set('wearableData', JSON.stringify(records)).catch(console.error);
               }}
-              clientIdMap={{
-                oura: '',
-                apple_health: '',
-                samsung_health: '',
-                huawei_health: '',
-                xiaomi_mi_fitness: '',
-                garmin_connect: '',
-                withings: '',
-                fitbit: '',
-                google_fit: '',
-                amazfit: '',
-                polar: '',
-                sony: '',
+              clientIdMap={wearableClientIdMap}
+              redirectUri={wearableRedirectUri}
+              initialConnectProvider={wearableConnectProvider}
+              onInitialConnectHandled={() => {
+                setWearableConnectProvider(null);
+                setWearableOAuthError(null);
               }}
-              redirectUri={window.location.origin + '/oauth/callback'}
+              oauthError={wearableOAuthError}
             />
 
             {/* Recent Sleep Sessions from wearables */}
