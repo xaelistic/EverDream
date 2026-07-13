@@ -61,6 +61,7 @@ import ShareModal from './components/dreams/ShareModal';
 import { VideoJournalScreen } from './screens/VideoJournalScreen';
 import { PrivacyScreen } from './screens/PrivacyScreen';
 import { analyzeDream, type DreamAnalysis } from './lib/dream-analyzer';
+import { coerceNarrativeText, sanitizeDreamForUI } from './lib/normalizeDreamAnalysis';
 import OnboardingFlow from './components/onboarding/OnboardingFlow';
 import { DailyReflectionCard } from './components/reflection/DailyReflectionCard';
 import { getDailyQuote, getDailyEducation } from './lib/dailyContent';
@@ -349,7 +350,9 @@ const DreamJournalApp = () => {
       try {
         const stored = await window.storage?.get('dreams');
         if (stored?.value) {
-          const loadedDreams = JSON.parse(stored.value) as Dream[];
+          const loadedDreams = (JSON.parse(stored.value) as Dream[]).map((dream) =>
+            sanitizeDreamForUI(dream) as Dream,
+          );
           setDreams(loadedDreams);
         } else {
           setDreams([SAMPLE_DREAM]);
@@ -418,7 +421,12 @@ const DreamJournalApp = () => {
             // Reload from local storage (now updated by syncFromSupabase)
             try {
               const raw = localStorage.getItem('everdream_dreams');
-              if (raw) setDreams(JSON.parse(raw));
+              if (raw) {
+                const mergedDreams = (JSON.parse(raw) as Dream[]).map((dream) =>
+                  sanitizeDreamForUI(dream) as Dream,
+                );
+                setDreams(mergedDreams);
+              }
             } catch { /* ignore */ }
           }
         });
@@ -621,7 +629,7 @@ const DreamJournalApp = () => {
     const rarityScore = Math.min(themeFrequency, 1);
     
     // Uniqueness based on narrative complexity
-    const uniquenessScore = Math.min(dreamData.narrative.length / 1000, 1);
+    const uniquenessScore = Math.min(coerceNarrativeText(dreamData.narrative).length / 1000, 1);
     
     return {
       rarityScore: Number(rarityScore.toFixed(2)),
@@ -2345,7 +2353,9 @@ const DreamJournalApp = () => {
               <p className="text-lg font-serif font-medium text-ink italic mb-3 leading-snug">
                 "{detailDream.nugget}"
               </p>
-              <p className="text-sm leading-relaxed text-muted">{detailDream.narrative}</p>
+              <p className="text-sm leading-relaxed text-muted">
+                {coerceNarrativeText(detailDream.narrative, detailDream.content)}
+              </p>
             </div>
 
             {/* Source indicator */}

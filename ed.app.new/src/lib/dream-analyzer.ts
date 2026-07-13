@@ -22,6 +22,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { addToBacklog } from './taskBacklog';
 import { ServiceOverloadedError, isOverloadError } from './api/errorHandling';
+import { coerceNarrativeText, normalizeDreamAnalysis } from './normalizeDreamAnalysis';
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -139,7 +140,7 @@ async function analyzeViaEdgeFunction(text: string): Promise<DreamAnalysis> {
 
     if (responseData.error && responseData.fallback) {
       console.warn('[DreamAnalyzer] Step 5: Edge function returned fallback due to error:', responseData.error);
-      return validateAndNormalizeAnalysis(responseData.fallback);
+      return validateAndNormalizeAnalysis(responseData.fallback, text);
     }
     if (responseData.error) {
       console.error('[DreamAnalyzer] Step 5: Edge function returned error:', responseData.error);
@@ -147,7 +148,7 @@ async function analyzeViaEdgeFunction(text: string): Promise<DreamAnalysis> {
     }
     if (responseData.analysis) {
       console.log('[DreamAnalyzer] Step 6: Analysis successful, category:', responseData.analysis.category);
-      return validateAndNormalizeAnalysis(responseData.analysis);
+      return validateAndNormalizeAnalysis(responseData.analysis, text);
     }
 
     console.error('[DreamAnalyzer] Step 5: Unexpected response format');
@@ -167,25 +168,39 @@ async function analyzeViaEdgeFunction(text: string): Promise<DreamAnalysis> {
 /**
  * Validate and normalize analysis result to ensure all required fields exist.
  */
-function validateAndNormalizeAnalysis(analysis: Partial<DreamAnalysis>): DreamAnalysis {
+function validateAndNormalizeAnalysis(
+  analysis: Partial<DreamAnalysis>,
+  sourceText = '',
+): DreamAnalysis {
   console.log('[DreamAnalyzer] Validating and normalizing analysis result...');
-  
+
+  const converted = normalizeDreamAnalysis(analysis, sourceText);
+  const narrative = coerceNarrativeText(converted.narrative, sourceText);
+  const nugget =
+    typeof converted.nugget === 'string' && converted.nugget.length > 0
+      ? converted.nugget
+      : narrative.substring(0, 100);
+  const meaning = coerceNarrativeText(
+    converted.interpretation?.meaning,
+    FALLBACK_ANALYSIS.interpretation.meaning,
+  );
+
   const normalized: DreamAnalysis = {
-    category: analysis.category || FALLBACK_ANALYSIS.category,
-    themes: Array.isArray(analysis.themes) && analysis.themes.length > 0 
-      ? analysis.themes 
+    category: converted.category || FALLBACK_ANALYSIS.category,
+    themes: Array.isArray(converted.themes) && converted.themes.length > 0
+      ? converted.themes
       : FALLBACK_ANALYSIS.themes,
-    emotion: analysis.emotion || FALLBACK_ANALYSIS.emotion,
-    symbols: Array.isArray(analysis.symbols) && analysis.symbols.length > 0 
-      ? analysis.symbols 
+    emotion: converted.emotion || FALLBACK_ANALYSIS.emotion,
+    symbols: Array.isArray(converted.symbols) && converted.symbols.length > 0
+      ? converted.symbols
       : [],
-    narrative: analysis.narrative || '',
-    nugget: analysis.nugget || '',
-    valence: typeof analysis.valence === 'number' ? analysis.valence : 0,
+    narrative,
+    nugget,
+    valence: typeof converted.valence === 'number' ? converted.valence : 0,
     interpretation: {
-      symbols: analysis.interpretation?.symbols || {},
-      meaning: analysis.interpretation?.meaning || FALLBACK_ANALYSIS.interpretation.meaning,
-      commonPattern: analysis.interpretation?.commonPattern || '',
+      symbols: converted.interpretation?.symbols || {},
+      meaning,
+      commonPattern: converted.interpretation?.commonPattern || '',
     },
   };
   

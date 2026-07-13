@@ -87,8 +87,23 @@ interface AnalyzeRequestBody {
   text?: string;
 }
 
+interface DreamAnalysis {
+  category: string;
+  themes: string[];
+  emotion: string;
+  symbols: string[];
+  narrative: string;
+  nugget: string;
+  valence?: number;
+  interpretation: {
+    symbols: Record<string, string>;
+    meaning: string;
+    commonPattern: string;
+  };
+}
+
 interface ProviderResult {
-  analysis: NVCNTMatrix;
+  analysis: DreamAnalysis;
   provider: string;
   model: string;
 }
@@ -103,7 +118,7 @@ const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const FALLBACK_ANALYSIS: NVCNTMatrix = {
+const NVCNT_FALLBACK: NVCNTMatrix = {
   narrative: {
     score: 0.0,
     summary: '',
@@ -182,8 +197,50 @@ function jsonResponse(data: unknown, status = 200): Response {
   });
 }
 
+const CLIENT_FALLBACK_ANALYSIS: DreamAnalysis = {
+  category: 'uncategorized',
+  themes: ['dream', 'experience'],
+  emotion: 'neutral',
+  symbols: [],
+  narrative: '',
+  nugget: '',
+  valence: 0,
+  interpretation: {
+    symbols: {},
+    meaning: 'Analysis unavailable',
+    commonPattern: '',
+  },
+};
+
+function nvcntToDreamAnalysis(matrix: NVCNTMatrix, sourceText: string): DreamAnalysis {
+  const summary = matrix.narrative?.summary || sourceText;
+  const polarity = matrix.valence?.polarity ?? 0;
+  const symbols = matrix.complexity?.conceptual_payload
+    ?.map((item) => item.concept)
+    .filter((concept): concept is string => typeof concept === 'string' && concept.length > 0) ?? [];
+
+  let category = 'uncategorized';
+  if (polarity <= -0.3) category = 'anxiety';
+  else if (polarity >= 0.3) category = 'peaceful';
+
+  return {
+    category,
+    themes: matrix.novelty?.unique_identifiers?.slice(0, 5) ?? ['dream'],
+    emotion: polarity >= 0 ? 'positive' : polarity <= -0.2 ? 'anxious' : 'neutral',
+    symbols,
+    narrative: summary,
+    nugget: summary.substring(0, 100),
+    valence: polarity,
+    interpretation: {
+      symbols: {},
+      meaning: summary || 'Analysis unavailable',
+      commonPattern: '',
+    },
+  };
+}
+
 function errorResponse(message: string, status: number): Response {
-  return jsonResponse({ error: message, analysis: FALLBACK_ANALYSIS, provider: 'none' }, status);
+  return jsonResponse({ error: message, analysis: CLIENT_FALLBACK_ANALYSIS, provider: 'none' }, status);
 }
 
 async function delay(ms: number): Promise<void> {
@@ -231,9 +288,9 @@ async function analyzeWithOpenRouter(text: string): Promise<ProviderResult> {
     
     const content = data.choices?.[0]?.message?.content || '{}';
     const clean = content.replace(/```json|```/g, '').trim();
-    const analysis = JSON.parse(clean) as NVCNTMatrix;
+    const matrix = JSON.parse(clean) as NVCNTMatrix;
 
-    return { analysis, provider: 'openrouter', model };
+    return { analysis: nvcntToDreamAnalysis(matrix, text), provider: 'openrouter', model };
   } catch (err) {
     throw new Error(`OpenRouter failed: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -265,9 +322,9 @@ async function analyzeWithGemini(text: string): Promise<ProviderResult> {
   const data = await response.json();
   const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
   const clean = content.replace(/```json|```/g, '').trim();
-  const analysis = JSON.parse(clean) as NVCNTMatrix;
+  const matrix = JSON.parse(clean) as NVCNTMatrix;
 
-  return { analysis, provider: 'gemini', model: 'gemini-1.5-flash' };
+  return { analysis: nvcntToDreamAnalysis(matrix, text), provider: 'gemini', model: 'gemini-1.5-flash' };
 }
 
 // ── Provider: OpenAI GPT-4o-mini (Cheap) ─────────────────────
@@ -299,9 +356,9 @@ async function analyzeWithOpenAI(text: string): Promise<ProviderResult> {
   const data = await response.json();
   const content = data.choices?.[0]?.message?.content || '{}';
   const clean = content.replace(/```json|```/g, '').trim();
-  const analysis = JSON.parse(clean) as NVCNTMatrix;
+  const matrix = JSON.parse(clean) as NVCNTMatrix;
 
-  return { analysis, provider: 'openai', model: 'gpt-4o-mini' };
+  return { analysis: nvcntToDreamAnalysis(matrix, text), provider: 'openai', model: 'gpt-4o-mini' };
 }
 
 // ── Provider: NVIDIA Nemotron (Open Source, Cost-Effective) ──────
@@ -333,9 +390,9 @@ async function analyzeWithNemotron(text: string): Promise<ProviderResult> {
   const data = await response.json();
   const content = data.choices?.[0]?.message?.content || '{}';
   const clean = content.replace(/```json|```/g, '').trim();
-  const analysis = JSON.parse(clean) as NVCNTMatrix;
+  const matrix = JSON.parse(clean) as NVCNTMatrix;
 
-  return { analysis, provider: 'nemotron', model: 'nemotron-4-340b' };
+  return { analysis: nvcntToDreamAnalysis(matrix, text), provider: 'nemotron', model: 'nemotron-4-340b' };
 }
 
 // ── Main Handler ──────────────────────────────────────────────
@@ -365,7 +422,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const trimmed = text.trim();
     if (trimmed.length < 10) {
       return jsonResponse({
-        analysis: FALLBACK_ANALYSIS,
+        analysis: {
+          ...CLIENT_FALLBACK_ANALYSIS,
+          narrative: trimmed,
+          nugget: trimmed.substring(0, 100),
+        },
         provider: 'none',
         note: 'Text too short for meaningful analysis',
       });
@@ -402,7 +463,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
     // All providers failed
     console.error('[analyze-dream] All providers failed:', errors);
     return jsonResponse({
-      analysis: FALLBACK_ANALYSIS,
+      analysis: {
+        ...CLIENT_FALLBACK_ANALYSIS,
+        narrative: safeText,
+        nugget: safeText.substring(0, 100),
+      },
       provider: 'none',
       errors,
     });

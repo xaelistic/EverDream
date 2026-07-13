@@ -1,4 +1,5 @@
 import { Moon, Sparkles, BookOpen, ChevronRight, BedDouble, PenLine } from 'lucide-react';
+import { coerceNarrativeText } from '../lib/normalizeDreamAnalysis';
 import type { WearableSleepRecord } from '../lib/wearables';
 import type { DailyQuote } from '../lib/dailyContent';
 import type { EducationModule } from '../lib/sleepEducation';
@@ -143,7 +144,7 @@ export function HomeScreen({
                 />
               )}
               <p className="text-sm text-ink line-clamp-2 leading-relaxed group-hover:text-sageDark transition">
-                {lastDream.nugget || lastDream.narrative || lastDream.content}
+                {lastDream.nugget || coerceNarrativeText(lastDream.narrative, lastDream.content) || lastDream.content}
               </p>
               <p className="text-xs text-muted mt-1 flex items-center gap-1">
                 <span>{getEmotionEmoji(lastDream.emotion)}</span>

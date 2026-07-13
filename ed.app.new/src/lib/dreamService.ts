@@ -12,6 +12,7 @@
  */
 
 import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
+import { coerceNarrativeText, sanitizeDreamForUI } from './normalizeDreamAnalysis';
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -154,16 +155,23 @@ function dreamToRecord(dream: DreamData, userId: string) {
 }
 
 function recordToDream(record: Record<string, unknown>): DreamData {
+  const content = (record.content as string) || '';
+  const narrative = coerceNarrativeText(record.narrative, content) || undefined;
+  const nugget =
+    typeof record.nugget === 'string' && record.nugget.length > 0
+      ? record.nugget
+      : narrative?.substring(0, 100);
+
   return {
     id: record.id as string,
-    content: record.content as string,
-    title: (record.nugget as string) || undefined,
+    content,
+    title: nugget || undefined,
     category: (record.category as string) || 'normal',
     themes: (record.themes as string[]) || [],
     emotion: (record.emotion as string) || 'neutral',
     symbols: (record.symbols as string[]) || [],
-    narrative: (record.narrative as string) || undefined,
-    nugget: (record.nugget as string) || undefined,
+    narrative,
+    nugget,
     interpretation: (record.interpretation as DreamData['interpretation']) || undefined,
     imageUrl: (record.generated_image_url as string) || undefined,
     imagePrompt: (record.generated_image_prompt as string) || undefined,
@@ -358,7 +366,7 @@ export async function syncFromSupabase(): Promise<number> {
     let merged = 0;
 
     for (const record of data) {
-      const remote = recordToDream(record);
+      const remote = sanitizeDreamForUI(recordToDream(record)) as DreamData;
       const existing = localMap.get(remote.id);
       if (!existing) {
         local.push(remote);

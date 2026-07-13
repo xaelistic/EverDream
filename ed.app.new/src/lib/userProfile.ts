@@ -7,6 +7,7 @@
  */
 
 import { supabase } from './supabase/client';
+import { coerceNarrativeText } from './normalizeDreamAnalysis';
 
 export interface UserProfile {
   recurring_themes: string[];
@@ -168,6 +169,7 @@ export function enrichAnalysisWithProfile(analysis: any, profile: UserProfile | 
   if (!profile) return analysis;
 
   const enriched = { ...analysis };
+  enriched.narrative = coerceNarrativeText(enriched.narrative);
 
   // Add known recurring themes if not already present
   if (profile.recurring_themes?.length) {

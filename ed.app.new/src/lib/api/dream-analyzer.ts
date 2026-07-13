@@ -12,6 +12,7 @@
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { normalizeDreamAnalysis } from '../normalizeDreamAnalysis';
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -114,8 +115,16 @@ export async function analyzeDream(text: string): Promise<AnalysisResult> {
     }
 
     const result = data as AnalysisResult;
+    const normalized = normalizeDreamAnalysis(result.analysis || FALLBACK_ANALYSIS, trimmed);
     return {
-      analysis: result.analysis || FALLBACK_ANALYSIS,
+      analysis: {
+        ...FALLBACK_ANALYSIS,
+        ...normalized,
+        interpretation: {
+          ...FALLBACK_ANALYSIS.interpretation,
+          ...normalized.interpretation,
+        },
+      },
       provider: result.provider || 'unknown',
       model: result.model,
       note: result.note,
