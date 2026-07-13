@@ -28,14 +28,33 @@ export default function LoginScreen() {
   const [oauthLoading, setOauthLoading] = useState<string | null>(null);
   const [showRegional, setShowRegional] = useState(false);
   const [showCreateAccountHint, setShowCreateAccountHint] = useState(false);
+  const [backendUnreachable, setBackendUnreachable] = useState(false);
 
   useEffect(() => {
     const hashError = parseAuthHashError(window.location.hash);
-    if (!hashError) return;
+    if (hashError) {
+      setError(formatAuthErrorMessage(hashError.description));
+      setOauthLoading(null);
+      clearAuthHashError();
+    }
 
-    setError(formatAuthErrorMessage(hashError.description));
-    setOauthLoading(null);
-    clearAuthHashError();
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    if (!supabaseUrl || supabaseUrl.includes('placeholder')) return;
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6_000);
+
+    fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/health`, { signal: controller.signal })
+      .then((res) => {
+        if (!res.ok) setBackendUnreachable(true);
+      })
+      .catch(() => setBackendUnreachable(true))
+      .finally(() => clearTimeout(timer));
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
   }, []);
 
   const openLegalPage = (page: 'terms' | 'privacy') => {
@@ -280,6 +299,28 @@ export default function LoginScreen() {
           )}
 
           {mode === 'login' && (<>
+          {backendUnreachable && (
+            <div style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '0.4rem',
+              padding: '0.6rem 0.75rem',
+              marginBottom: '0.75rem',
+              background: 'oklch(0.97 0.03 30)',
+              border: '1px solid oklch(0.85 0.05 30)',
+              borderRadius: '0.65rem',
+              fontSize: '0.72rem',
+              color: 'oklch(0.45 0.1 30)',
+              lineHeight: 1.45,
+            }}>
+              <AlertCircle size={14} color="oklch(0.55 0.15 30)" style={{ flexShrink: 0, marginTop: '0.1rem' }} />
+              <span>
+                Sign-in service is temporarily unreachable ({import.meta.env.VITE_SUPABASE_URL || 'Supabase'}).
+                The app loaded, but login cannot complete until the auth server is back online.
+              </span>
+            </div>
+          )}
+
           {/* Primary buttons: Google / Meta / Email */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginBottom: '1rem' }}>
             <button onClick={() => handleOAuth('google')} disabled={!!oauthLoading} style={primaryBtnStyle(!!oauthLoading)}>

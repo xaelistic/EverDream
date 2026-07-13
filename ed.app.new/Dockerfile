@@ -5,7 +5,7 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Bump to force Coolify rebuild when code is unchanged but image was bad/cached
-ARG CACHE_BUST=20260713-01
+ARG CACHE_BUST=20260713-02
 RUN echo "Cache bust: $CACHE_BUST"
 
 COPY package*.json ./

@@ -16,6 +16,7 @@
 import { useState, useEffect, useCallback, createContext, useContext, type ReactNode } from 'react';
 import { supabase, getCurrentUser } from '../lib/supabase/client';
 import { getEmailConfirmRedirectUrl, getPasswordResetRedirectUrl, isRecoveryHash } from '../lib/auth/redirects';
+import { FEATURE_REQUIRE_AUTH } from '../config/features';
 
 export interface AuthUser {
   id: string;
@@ -39,6 +40,10 @@ export interface AuthState {
 const AuthContext = createContext<AuthState | null>(null);
 
 const AUTH_CHECK_TIMEOUT_MS = 8_000;
+
+function isAuthRequired(): boolean {
+  return FEATURE_REQUIRE_AUTH || import.meta.env.VITE_REQUIRE_AUTH === 'true';
+}
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
@@ -99,7 +104,7 @@ function useAuthInternal(): AuthState {
             email: currentUser.email,
             isAnonymous: currentUser.is_anonymous ?? true,
           });
-        } else if (import.meta.env.VITE_REQUIRE_AUTH === 'true') {
+        } else if (isAuthRequired()) {
           setUser(null);
         } else {
           // No session — sign in anonymously (skipped when login is required)
