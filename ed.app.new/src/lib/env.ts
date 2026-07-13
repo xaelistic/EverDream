@@ -65,7 +65,7 @@ export function validateEnvVariables(): ValidationResult {
   
   if (!hasImageGenConfig) {
     warnings.push(
-      'No image generation configured. Dreams will be saved without generated images. ' +
+      'No image generation configured. Dreams will be saved without generated images.'
     );
   }
 

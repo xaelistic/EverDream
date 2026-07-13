@@ -348,21 +348,18 @@ export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
           </div>
         )}
       </div>
-    </div>
 
-    <>
-    {/* Logout button on the profile screen */}
-    <div>
-      <button
-        type="button"
-        onClick={handleLogout}
-        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium border border-line text-muted hover:text-rose-600 hover:bg-rose-50/50 transition"
-      >
-        <LogOut className="w-4 h-4" />
-        Log out
-      </button>
+      <div>
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium border border-line text-muted hover:text-rose-600 hover:bg-rose-50/50 transition"
+        >
+          <LogOut className="w-4 h-4" />
+          Log out
+        </button>
+      </div>
     </div>
-    </>
   );
 
   const renderServicesTab = () => (

@@ -103,14 +103,14 @@ export function JournalScreen({
       {isLoadingDreams ? (
         <LoadingOverlay message="Loading your dreams..." />
       ) : filteredDreams.length === 0 ? (
-        {dreams.length === 0 ? (
+        dreams.length === 0 ? (
           <div className="text-center py-16 px-6 border border-dashed border-line rounded-3xl bg-parchment/30">
             <p className="text-ink font-medium mb-2">No dreams yet</p>
             <p className="text-sm text-muted">When you record a dream you can see a summary here.<br />Click the record button to add your first entry.</p>
           </div>
         ) : (
           <EmptyState icon={Calendar} message="No dreams match your search" />
-        )}
+        )
       ) : (
         <div className="space-y-3">
           {filteredDreams.map(dream => (
