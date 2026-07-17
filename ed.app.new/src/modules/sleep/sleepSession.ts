@@ -154,14 +154,46 @@ class SleepSessionManager {
 
   private loadSessionsFromStorage(): void {
     try {
+      if (typeof localStorage === 'undefined') {
+        console.info('[SleepSession] localStorage unavailable — starting with 0 sessions');
+        return;
+      }
+
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (key?.startsWith(this.storagePrefix)) {
-          const data = JSON.parse(localStorage.getItem(key) || '{}');
+        if (!key?.startsWith(this.storagePrefix)) continue;
+
+        const raw = localStorage.getItem(key);
+        if (!raw) continue;
+
+        try {
+          const data = JSON.parse(raw) as SleepSession;
+          if (!data?.id) continue;
           this.sessions.set(data.id, data);
+          // Restore in-progress tracking after refresh
+          if (data.isActive) {
+            this.currentSessionId = data.id;
+          }
+        } catch {
+          // Skip corrupt entries without failing the whole load
+          console.warn('[SleepSession] Skipping corrupt session key:', key);
         }
       }
-      console.log('[SleepSession] Loaded', this.sessions.size, 'sessions from storage');
+
+      // 0 is normal on a fresh browser / private mode / never tracked overnight.
+      // Tracker UI also reads `sleep_completed_sessions` separately — not a server outage.
+      if (this.sessions.size === 0) {
+        console.info(
+          '[SleepSession] No local raw sessions yet (expected until first overnight track on this device)'
+        );
+      } else {
+        console.info(
+          '[SleepSession] Loaded',
+          this.sessions.size,
+          'sessions from storage',
+          this.currentSessionId ? `(active: ${this.currentSessionId})` : ''
+        );
+      }
     } catch (err) {
       console.error('[SleepSession] Load error:', err);
     }
