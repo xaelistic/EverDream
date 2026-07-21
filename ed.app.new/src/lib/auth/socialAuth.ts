@@ -1,5 +1,11 @@
 import type { Provider } from '@supabase/supabase-js';
 import { supabase } from '../supabase/client';
+import { getOAuthRedirectUrl } from './redirects';
+import {
+  stripAuthParamsFromUrl,
+  urlHasAuthArtifacts,
+  urlIndicatesPasswordRecovery,
+} from './urlCleanup';
 
 export type SocialAuthProvider = 'google' | 'facebook' | 'apple' | 'meta' | 'tiktok';
 
@@ -25,9 +31,8 @@ const META_SCOPES = [
 const GOOGLE_SCOPES = 'openid profile email';
 
 function getRedirectUrl(intent: SocialAuthIntent = 'login'): string {
-  const base = `${window.location.origin}${window.location.pathname}`;
-  const hash = intent === 'link' ? '#/?social=link' : '#/';
-  return `${base}${hash}`;
+  // No hash fragment — prevents #/#access_token=… leaks
+  return getOAuthRedirectUrl(intent);
 }
 
 export function getOAuthScopes(provider: SocialAuthProvider): string | undefined {
@@ -122,18 +127,18 @@ export async function syncSocialTokensFromSession(): Promise<{ ok: boolean; sync
 
 export function isSocialOAuthCallback(): boolean {
   if (typeof window === 'undefined') return false;
-  const hash = window.location.hash || '';
+  if (urlHasAuthArtifacts()) return true;
   const search = window.location.search || '';
-  return hash.includes('access_token=')
-    || search.includes('code=')
-    || search.includes('social=');
+  return search.includes('social=') || search.includes('auth=callback');
 }
 
+/**
+ * Remove tokens / OAuth codes from the address bar immediately.
+ * Always prefer this over leaving implicit-flow fragments around.
+ */
 export function clearSocialOAuthParams(): void {
-  if (typeof window === 'undefined') return;
-  const url = new URL(window.location.href);
-  url.searchParams.delete('social');
-  url.searchParams.delete('code');
-  url.searchParams.delete('state');
-  window.history.replaceState({}, document.title, `${url.pathname}${url.hash || '#/'}`);
+  stripAuthParamsFromUrl({
+    preserveRecovery: urlIndicatesPasswordRecovery(),
+    fallbackHash: '#/',
+  });
 }

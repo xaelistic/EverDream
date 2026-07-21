@@ -13,6 +13,10 @@ interface ProtectedRouteProps {
  * ProtectedRoute — redirects to login if not authenticated.
  * Shows a loading spinner while checking auth state.
  *
+ * Auth is required when either:
+ * - VITE_REQUIRE_AUTH=true (runtime/build env), or
+ * - FEATURE_REQUIRE_AUTH=true (compile-time feature flag)
+ *
  * @example
  * <ProtectedRoute>
  *   <DreamJournalApp />
@@ -41,6 +45,7 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
     return <ResetPasswordScreen />;
   }
 
+  // Require a real (non-anonymous) session when auth gate is on.
   if (requireAuth && (!user || user.isAnonymous)) {
     return <LoginScreen />;
   }

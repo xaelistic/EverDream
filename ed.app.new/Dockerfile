@@ -4,15 +4,26 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# Bump to force Coolify rebuild when code is unchanged but image was bad/cached
-ARG CACHE_BUST=20260713-02
-RUN echo "Cache bust: $CACHE_BUST"
+# Vite bakes VITE_* at build time — must be passed as build args in Coolify
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_ANON_KEY
+ARG VITE_REQUIRE_AUTH=true
+ARG VITE_APP_BASE_URL
+ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL \
+    VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY \
+    VITE_REQUIRE_AUTH=$VITE_REQUIRE_AUTH \
+    VITE_APP_BASE_URL=$VITE_APP_BASE_URL
 
 COPY package*.json ./
 RUN npm ci --legacy-peer-deps
 
 COPY . .
-RUN npm run build
+# Fail the image build early if auth gate is on but Supabase is missing
+RUN if [ -z "$VITE_SUPABASE_URL" ] || [ -z "$VITE_SUPABASE_ANON_KEY" ]; then \
+      echo "ERROR: VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY must be set as Docker build args"; \
+      exit 1; \
+    fi \
+ && npm run build
 
 FROM nginx:alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
@@ -59,7 +70,7 @@ RUN echo 'server { \
     # Security + CSP headers (media-src blob: data: is REQUIRED for local recorded video/audio + thumbnails to play) \
     add_header X-Content-Type-Options "nosniff" always; \
     add_header Referrer-Policy "strict-origin-when-cross-origin" always; \
-    add_header Content-Security-Policy "default-src '\''self'\''; script-src '\''self'\'' '\''unsafe-inline'\'' '\''unsafe-eval'\'' https://*.supabase.co; style-src '\''self'\'' '\''unsafe-inline'\'' https://fonts.googleapis.com; font-src '\''self'\'' https://fonts.gstatic.com; img-src '\''self'\'' data: blob: https:; media-src '\''self'\'' blob: data: https:; connect-src '\''self'\'' https://*.supabase.co wss://*.supabase.co https://*.n1g3.com wss://*.n1g3.com https://image.pollinations.ai http: https: wss:; worker-src '\''self'\'' blob:; manifest-src '\''self'\''; frame-ancestors '\''none'\'';" always; \
+    add_header Content-Security-Policy "default-src '\''self'\''; script-src '\''self'\'' '\''unsafe-inline'\'' '\''unsafe-eval'\'' https://*.supabase.co https://supabase.n1g3.com; style-src '\''self'\'' '\''unsafe-inline'\''; img-src '\''self'\'' data: blob: https:; media-src '\''self'\'' blob: data: https:; connect-src '\''self'\'' https://*.supabase.co wss://*.supabase.co https://supabase.n1g3.com wss://supabase.n1g3.com https://image.pollinations.ai http: https: wss:; worker-src '\''self'\'' blob:; manifest-src '\''self'\''; frame-ancestors '\''none'\'';" always; \
 }' > /etc/nginx/conf.d/default.conf
 
 EXPOSE 80

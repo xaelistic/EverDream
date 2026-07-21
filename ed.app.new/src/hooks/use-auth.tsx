@@ -14,9 +14,14 @@
  */
 
 import { useState, useEffect, useCallback, createContext, useContext, type ReactNode } from 'react';
-import { supabase, getCurrentUser } from '../lib/supabase/client';
+import { supabase, getCurrentUser, authRedirectReady } from '../lib/supabase/client';
 import { getEmailConfirmRedirectUrl, getPasswordResetRedirectUrl, isRecoveryHash } from '../lib/auth/redirects';
 import { FEATURE_REQUIRE_AUTH } from '../config/features';
+import {
+  stripAuthParamsFromUrl,
+  urlHasAuthArtifacts,
+  urlIndicatesPasswordRecovery,
+} from '../lib/auth/urlCleanup';
 
 export interface AuthUser {
   id: string;
@@ -38,21 +43,6 @@ export interface AuthState {
 }
 
 const AuthContext = createContext<AuthState | null>(null);
-
-const AUTH_CHECK_TIMEOUT_MS = 8_000;
-
-function isAuthRequired(): boolean {
-  return FEATURE_REQUIRE_AUTH || import.meta.env.VITE_REQUIRE_AUTH === 'true';
-}
-
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) => {
-      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
-    }),
-  ]);
-}
 
 /**
  * AuthProvider — wraps the app and provides auth state via context.
@@ -79,6 +69,16 @@ export function useAuth(): AuthState {
   return ctx;
 }
 
+function mapUser(user: { id: string; email?: string | null; is_anonymous?: boolean }): AuthUser {
+  return {
+    id: user.id,
+    email: user.email ?? undefined,
+    // Only treat as anonymous when GoTrue explicitly marks it.
+    // `?? true` wrongly kept email/OAuth users on the login screen.
+    isAnonymous: user.is_anonymous === true,
+  };
+}
+
 /**
  * Internal hook implementation.
  * Automatically signs in anonymously on first visit if no session exists.
@@ -87,50 +87,52 @@ function useAuthInternal(): AuthState {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const [isRecoveryMode, setIsRecoveryMode] = useState(() => isRecoveryHash());
+  const [isRecoveryMode, setIsRecoveryMode] = useState(
+    () => isRecoveryHash() || urlIndicatesPasswordRecovery(),
+  );
 
-  // Check current auth state on mount
   useEffect(() => {
     let mounted = true;
 
     async function checkAuth() {
       try {
-        const currentUser = await withTimeout(getCurrentUser(), AUTH_CHECK_TIMEOUT_MS, 'Auth check');
+        // Ensure OAuth/magic-link tokens were consumed and stripped from the URL
+        const redirect = await authRedirectReady;
+        if (!mounted) return;
+        if (redirect.wasRecovery) {
+          setIsRecoveryMode(true);
+        }
+
+        // Belt-and-suspenders: never leave tokens in the bar
+        if (urlHasAuthArtifacts()) {
+          stripAuthParamsFromUrl({ preserveRecovery: redirect.wasRecovery || isRecoveryHash() });
+        }
+
+        const currentUser = await getCurrentUser();
         if (!mounted) return;
 
         if (currentUser) {
-          setUser({
-            id: currentUser.id,
-            email: currentUser.email,
-            isAnonymous: currentUser.is_anonymous ?? true,
-          });
-        } else if (isAuthRequired()) {
+          setUser(mapUser(currentUser));
+        } else if (FEATURE_REQUIRE_AUTH || import.meta.env.VITE_REQUIRE_AUTH === 'true') {
           setUser(null);
         } else {
-          // No session — sign in anonymously (skipped when login is required)
-          const { data, error: signInError } = await withTimeout(
-            supabase.auth.signInAnonymously(),
-            AUTH_CHECK_TIMEOUT_MS,
-            'Anonymous sign-in',
-          );
+          const { data, error: signInError } = await supabase.auth.signInAnonymously();
           if (!mounted) return;
 
           if (signInError) {
-            // If anonymous auth fails, allow offline mode (user = null but not loading)
             console.warn('[useAuth] Anonymous sign-in failed, running in offline mode:', signInError.message);
             setUser(null);
           } else if (data.user) {
-            setUser({
-              id: data.user.id,
-              email: data.user.email,
-              isAnonymous: true,
-            });
+            setUser(mapUser(data.user));
           }
         }
       } catch (err) {
         if (!mounted) return;
         console.warn('[useAuth] Auth check failed, running in offline mode:', err);
         setUser(null);
+        if (urlHasAuthArtifacts()) {
+          stripAuthParamsFromUrl();
+        }
       } finally {
         if (mounted) setLoading(false);
       }
@@ -138,22 +140,23 @@ function useAuthInternal(): AuthState {
 
     checkAuth();
 
-    // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
 
       if (event === 'PASSWORD_RECOVERY') {
         setIsRecoveryMode(true);
+        stripAuthParamsFromUrl({ preserveRecovery: true });
       }
 
       if (event === 'SIGNED_IN' && session?.user) {
-        setUser({
-          id: session.user.id,
-          email: session.user.email,
-          isAnonymous: session.user.is_anonymous ?? true,
-        });
-        if (isRecoveryHash()) {
+        setUser(mapUser(session.user));
+        if (isRecoveryHash() || urlIndicatesPasswordRecovery()) {
           setIsRecoveryMode(true);
+        }
+        if (urlHasAuthArtifacts()) {
+          stripAuthParamsFromUrl({
+            preserveRecovery: isRecoveryHash() || urlIndicatesPasswordRecovery(),
+          });
         }
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
@@ -181,7 +184,7 @@ function useAuthInternal(): AuthState {
     const { error: signInError } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: window.location.origin,
+        emailRedirectTo: getEmailConfirmRedirectUrl(),
       },
     });
     if (signInError) {
@@ -238,26 +241,18 @@ function useAuthInternal(): AuthState {
       throw signInError;
     }
     if (data.user) {
-      setUser({
-        id: data.user.id,
-        email: data.user.email,
-        isAnonymous: true,
-      });
+      setUser(mapUser(data.user));
     }
   }, []);
 
   const signOut = useCallback(async () => {
     setError(null);
-    try {
-      const { error: signOutError } = await supabase.auth.signOut({ scope: 'global' });
-      if (signOutError) {
-        console.warn('[useAuth] signOut:', signOutError.message);
-      }
-    } catch (err) {
-      console.warn('[useAuth] signOut failed:', err);
+    const { error: signOutError } = await supabase.auth.signOut();
+    if (signOutError) {
+      setError(signOutError);
+      throw signOutError;
     }
     setUser(null);
-    setIsRecoveryMode(false);
   }, []);
 
   return {

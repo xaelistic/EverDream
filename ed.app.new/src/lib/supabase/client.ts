@@ -10,6 +10,7 @@
  */
 
 import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
+import { consumeAuthRedirectAndCleanUrl } from '../auth/urlCleanup';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder';
@@ -23,11 +24,25 @@ export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKe
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true,
+    // PKCE keeps tokens out of the URL fragment (uses ?code= then strips it).
+    // Magic-link / some email flows may still use hash tokens — cleaned by urlCleanup.
+    flowType: 'pkce',
   },
   db: {
     schema: 'public',
   },
 });
+
+/**
+ * Consume OAuth / magic-link tokens from the URL and strip them from history.
+ * Resolves before React mounts so the address bar never keeps secrets.
+ */
+export const authRedirectReady: Promise<{ wasRecovery: boolean; hadArtifacts: boolean }> =
+  typeof window !== 'undefined'
+    ? consumeAuthRedirectAndCleanUrl(async () => {
+        await supabase.auth.getSession();
+      })
+    : Promise.resolve({ wasRecovery: false, hadArtifacts: false });
 
 // ============================================================
 // AUTH HELPERS
