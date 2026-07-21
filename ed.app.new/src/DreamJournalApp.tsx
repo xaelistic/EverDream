@@ -69,7 +69,9 @@ import { analyzeDream, type DreamAnalysis } from './lib/dream-analyzer';
 import { coerceNarrativeText, sanitizeDreamForUI } from './lib/normalizeDreamAnalysis';
 import OnboardingFlow from './components/onboarding/OnboardingFlow';
 import { DailyReflectionCard } from './components/reflection/DailyReflectionCard';
-import { getDailyQuote, getDailyEducation } from './lib/dailyContent';
+import { getDailyQuote, getPersonalizedDailyEducation } from './lib/dailyContent';
+import { educationInputsFromProfile } from './lib/onboarding/saveOnboarding';
+import { loadUserProfile } from './lib/profileService';
 import {
   shouldShowDailyReflection,
   shouldRouteToJournalOnOpen,
@@ -208,7 +210,6 @@ const DreamJournalApp = () => {
   const [reflectionEnergyLevel, setReflectionEnergyLevel] = useState<EnergyLevel | ''>('');
   const [checkInSaved, setCheckInSaved] = useState(false);
   const reflectionQuote = useMemo(() => getDailyQuote(), []);
-  const dailyEducation = useMemo(() => getDailyEducation(), []);
   const [showDailyReflection, setShowDailyReflection] = useState(false);
   const [hasRoutedToday, setHasRoutedToday] = useState(false);
 
@@ -240,6 +241,57 @@ const DreamJournalApp = () => {
   const [capturedEmotions, setCapturedEmotions] = useState<EmotionCapture | null>(null);
   const [wearableData, setWearableData] = useState<WearableSleepRecord[]>([]);
   const [showOnboarding, setShowOnboarding] = useState(false);
+
+  const [educationProfile, setEducationProfile] = useState<{
+    goalIds: import('./lib/onboarding/model').OnboardingGoalId[];
+    interestIds: import('./lib/onboarding/model').InterestId[];
+    interestLabels: string[];
+  }>({ goalIds: [], interestIds: [], interestLabels: [] });
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const local = await loadUserProfile();
+        const fromLocal = educationInputsFromProfile({
+          interests: local.interests,
+          dream_goals: local.dreamGoals,
+        });
+        // Prefer Supabase subscription profile when present
+        const fromSub = userProfile
+          ? educationInputsFromProfile({
+              onboarding_goals: (userProfile as { onboarding_goals?: string[] }).onboarding_goals,
+              interests: (userProfile as { interests?: string[] }).interests,
+              dream_goals: (userProfile as { dream_goals?: string[] }).dream_goals,
+            })
+          : null;
+        if (cancelled) return;
+        setEducationProfile({
+          goalIds: fromSub?.goalIds?.length ? fromSub.goalIds : fromLocal.goalIds,
+          interestIds: (fromSub?.interestIds?.length ? fromSub.interestIds : fromLocal.interestIds),
+          interestLabels:
+            (fromSub?.interestLabels?.length ? fromSub.interestLabels : fromLocal.interestLabels) ||
+            local.interests ||
+            [],
+        });
+      } catch {
+        /* keep defaults */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userProfile]);
+
+  const dailyEducation = useMemo(
+    () =>
+      getPersonalizedDailyEducation({
+        goalIds: educationProfile.goalIds,
+        interestIds: educationProfile.interestIds,
+        interestLabels: educationProfile.interestLabels,
+      }),
+    [educationProfile],
+  );
   const [wearableConfigs, setWearableConfigsState] = useState<WearableConfig[]>(() =>
     loadWearableConfigs(DEFAULT_WEARABLE_CONFIGS),
   );
@@ -284,7 +336,7 @@ const DreamJournalApp = () => {
 
     if (!hasAcceptedTerms || showOnboarding || subscriptionLoading) return;
     if (!user || user.isAnonymous) return;
-    if (userProfile && !userProfile.onboarded_at) {
+    if (userProfile && !userProfile.onboarded_at && (route.screen === "home" || route.screen === "reflection")) {
       setShowOnboarding(true);
     }
   }, [hasAcceptedTerms, showOnboarding, subscriptionLoading, user, userProfile]);
@@ -3027,9 +3079,28 @@ const DreamJournalApp = () => {
         <OnboardingFlow
           onComplete={() => {
             setShowOnboarding(false);
-            // Persisted in Supabase profile via the flow itself + local flag cleared
+            // Refresh education preferences + send user to first capture
+            void loadUserProfile().then((p) => {
+              setEducationProfile(
+                educationInputsFromProfile({
+                  interests: p.interests,
+                  dream_goals: p.dreamGoals,
+                }),
+              );
+            });
+            navigate('record');
           }}
-          onSkip={() => setShowOnboarding(false)}
+          onSkip={() => {
+            setShowOnboarding(false);
+            void loadUserProfile().then((p) => {
+              setEducationProfile(
+                educationInputsFromProfile({
+                  interests: p.interests,
+                  dream_goals: p.dreamGoals,
+                }),
+              );
+            });
+          }}
         />
       )}
     </Shell>

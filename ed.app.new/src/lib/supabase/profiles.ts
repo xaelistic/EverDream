@@ -29,6 +29,10 @@ export interface ProfileRecord {
   birth_date?: string;
   gender?: 'female' | 'male' | 'non-binary' | 'prefer-not';
   onboarding_goals?: string[];
+  interests?: string[];
+  dream_goals?: string[];
+  experience_level?: string;
+  dream_recall?: string;
   average_sleep_hours?: number;
   // Account access
   is_admin?: boolean;

@@ -73,11 +73,7 @@ const services: ServiceCard[] = [
   },
 ];
 
-const friends: Friend[] = [
-  { id: '1', name: 'Luna', sharedDreams: 12 },
-  { id: '2', name: 'Orpheus', sharedDreams: 8 },
-  { id: '3', name: 'Somnus', sharedDreams: 5 },
-];
+const friends: Friend[] = []; // real friends only — never placeholders
 
 export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
   const { isPearl } = useSkinFull();
@@ -86,7 +82,7 @@ export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
   const { profile, loading, saving, updateField, setAvatar, addInterest, addDreamGoal } = useProfile();
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
-  const [activeTab, setActiveTab] = useState<'profile' | 'services' | 'network'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'friends' | 'more'>('profile');
   const [showAddFriend, setShowAddFriend] = useState(false);
   const [showShareProfile, setShowShareProfile] = useState(false);
   const [friendCode, setFriendCode] = useState('');
@@ -270,6 +266,9 @@ export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
       <div className={`rounded-2xl border p-4 ${card}`}>
         <label className="text-xs uppercase tracking-wider text-muted font-medium">Interests</label>
         <div className="mt-3 flex flex-wrap gap-2">
+          {profile.interests.length === 0 && (
+            <p className="w-full text-xs text-muted mb-1">No interests yet — add from onboarding or here. Nothing is pre-filled.</p>
+          )}
           {profile.interests.map((interest) => (
             <span key={interest} className={`px-3 py-1.5 rounded-full text-xs font-medium ${isPearl ? 'bg-[var(--aqua-light)]/30 text-[var(--aqua-deep)]' : 'bg-sage/20 text-sageDark'}`}>
               {interest}
@@ -313,6 +312,9 @@ export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
           Dream Goals
         </label>
         <div className="mt-3 space-y-2">
+          {profile.dreamGoals.length === 0 && (
+            <p className="text-xs text-muted">Goals come from onboarding or what you add — no sample goals.</p>
+          )}
           {profile.dreamGoals.map((goal) => (
             <div key={goal} className="flex items-center gap-3">
               <div className={`w-2 h-2 rounded-full ${isPearl ? 'bg-[var(--aqua-deep)]' : 'bg-sage'}`} />
@@ -423,17 +425,23 @@ export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
           </div>
         )}
         <div className="mt-4 space-y-3">
-          {friends.map((friend) => (
-            <div key={friend.id} className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isPearl ? 'bg-[var(--aqua-light)]/30' : 'bg-sage/20'}`}>
-                <User className="w-5 h-5 text-muted" strokeWidth={1.5} />
+          {friends.length === 0 ? (
+            <p className="text-sm text-muted py-4 text-center">
+              No friends connected yet. Share your friend code when you&apos;re ready — we never show fake people here.
+            </p>
+          ) : (
+            friends.map((friend) => (
+              <div key={friend.id} className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isPearl ? 'bg-[var(--aqua-light)]/30' : 'bg-sage/20'}`}>
+                  <User className="w-5 h-5 text-muted" strokeWidth={1.5} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h5 className="text-sm font-medium text-ink truncate">{friend.name}</h5>
+                  <p className="text-xs text-muted">{friend.sharedDreams} shared dreams</p>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <h5 className="text-sm font-medium text-ink truncate">{friend.name}</h5>
-                <p className="text-xs text-muted">{friend.sharedDreams} shared dreams</p>
-              </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
     </div>
@@ -483,14 +491,21 @@ export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
         <div className="max-w-lg mx-auto px-4">
           <div className="flex gap-1 py-2">
             {[
-              { id: 'profile', label: 'Profile', icon: User },
-              { id: 'services', label: 'Services', icon: LinkIcon },
-              { id: 'network', label: 'Network', icon: Users },
+              { id: 'profile' as const, label: 'Profile', icon: User },
+              { id: 'friends' as const, label: 'Friends', icon: Users },
+              { id: 'more' as const, label: 'More', icon: LinkIcon },
             ].map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 type="button"
-                onClick={() => setActiveTab(id as typeof activeTab)}
+                onClick={() => {
+                  if (id === 'more') {
+                    onClose();
+                    navigate('more');
+                    return;
+                  }
+                  setActiveTab(id);
+                }}
                 className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl text-xs font-medium transition ${
                   activeTab === id
                     ? isPearl ? 'bg-[var(--aqua-deep)] text-white' : 'bg-sage text-cream'
@@ -508,8 +523,7 @@ export function ProfileHub({ onClose, navigate }: ProfileHubProps) {
       <div className="max-w-lg mx-auto flex flex-col" style={{ height: 'calc(100vh - 140px)' }}>
         <div className="flex-1 overflow-y-auto px-4 py-5">
           {activeTab === 'profile' && renderProfileTab()}
-          {activeTab === 'services' && renderServicesTab()}
-          {activeTab === 'network' && renderNetworkTab()}
+          {activeTab === 'friends' && renderNetworkTab()}
         </div>
 
         <div className={`shrink-0 px-4 py-4 border-t ${isPearl ? 'border-[var(--glass-border)] bg-[rgba(247,245,255,0.98)]' : 'border-line bg-cream/98'}`}>
