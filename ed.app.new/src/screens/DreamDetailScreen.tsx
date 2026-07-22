@@ -4,6 +4,7 @@ import { FEATURE_NFT_UI_ENABLED } from '../config/features';
 import DreamVisualizer from '../components/dreams/DreamVisualizer';
 import type { EmotionCapture } from './face/FacialEmotionDetector';
 import { mediaStorageManager } from '../lib/mediaStorage';
+import { useSubscription } from '../hooks/use-subscription';
 
 interface DreamInterpretation {
   symbols: Record<string, string>;
@@ -80,6 +81,7 @@ export function DreamDetailScreen({
   getEmotionEmoji,
   onImageGenerated,
 }: DreamDetailScreenProps) {
+  const { isAdmin } = useSubscription();
   const [resolvedVideoUrl, setResolvedVideoUrl] = useState<string | null>(
     detailDream.videoCapture?.url ?? null,
   );
@@ -252,7 +254,8 @@ export function DreamDetailScreen({
             </div>
           )}
           
-          {detailDream.assetMetadata && (
+          {/* MVP: hide reflection metadata (depth/uniqueness/value) for non-admin users */}
+          {isAdmin && detailDream.assetMetadata && (
             <div className="rounded-2xl border border-line bg-parchment/80 p-4">
               <h3 className="font-semibold mb-3 flex items-center gap-2 text-sm text-ink">
                 <Shield className="w-4 h-4 text-sage" strokeWidth={1.75} />

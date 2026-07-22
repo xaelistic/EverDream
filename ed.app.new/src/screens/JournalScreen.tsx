@@ -1,5 +1,6 @@
 import { Search, Calendar, Shield } from 'lucide-react';
 import type { ErrorBannerProps, LoadingOverlayProps } from '../components/ui';
+import { useSubscription } from '../hooks/use-subscription';
 
 interface Dream {
   id: string;
@@ -139,6 +140,9 @@ interface DreamCardProps {
 }
 
 function DreamCard({ dream, getCategoryBadgeClass, getEmotionEmoji, onShare, onClick }: DreamCardProps) {
+  // MVP: depth / worth metrics only for admin
+  const { isAdmin } = useSubscription();
+
   return (
     <div 
       role="button"
@@ -179,7 +183,7 @@ function DreamCard({ dream, getCategoryBadgeClass, getEmotionEmoji, onShare, onC
           ))}
         </div>
 
-        {dream.assetMetadata && (
+        {isAdmin && dream.assetMetadata && (
           <div className="flex items-center justify-between text-xs text-muted border-t border-line pt-3 mt-1">
             <span className="flex items-center gap-1">
               <Shield className="w-3 h-3 text-sage" strokeWidth={1.75} />

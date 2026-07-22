@@ -2547,7 +2547,8 @@ const DreamJournalApp = () => {
                 <span>Facial emotion: {(detailDream as any).capturedEmotions.dominantEmotion}</span>
               </div>
             )}
-            {detailDream.assetMetadata && (
+            {/* MVP: hide reflection metadata (depth/uniqueness/value) for non-admin users */}
+            {isAdmin && detailDream.assetMetadata && (
               <div className="rounded-2xl border border-line bg-parchment/80 p-4">
                 <h3 className="font-semibold mb-3 flex items-center gap-2 text-sm text-ink">
                   <Shield className="w-4 h-4 text-sage" strokeWidth={1.75} />
@@ -3117,7 +3118,7 @@ const StatCard = ({ icon: Icon, value, label }) => (
   </div>
 );
 
-const DreamNuggetCard = ({ dream, getCategoryBadgeClass, getEmotionEmoji, onClick }) => (
+const DreamNuggetCard = ({ dream, getCategoryBadgeClass, getEmotionEmoji, onClick, isAdmin = false }) => (
   <div 
     onClick={onClick}
     role="button"
@@ -3139,7 +3140,7 @@ const DreamNuggetCard = ({ dream, getCategoryBadgeClass, getEmotionEmoji, onClic
     <p className="text-ink italic text-sm leading-relaxed font-serif">
       "{dream.nugget}"
     </p>
-    {dream.assetMetadata && (
+    {isAdmin && dream.assetMetadata && (
       <div className="mt-2 flex items-center gap-2 text-xs text-muted">
         <Shield className="w-3 h-3 text-sage" strokeWidth={1.75} />
         <span>Depth {dream.assetMetadata.rarityScore}</span>
@@ -3153,7 +3154,7 @@ const DreamNuggetCard = ({ dream, getCategoryBadgeClass, getEmotionEmoji, onClic
   </div>
 );
 
-const DreamCard = ({ dream, getCategoryBadgeClass, getEmotionEmoji, onShare: _onShare, onClick }) => (
+const DreamCard = ({ dream, getCategoryBadgeClass, getEmotionEmoji, onShare: _onShare, onClick, isAdmin = false }) => (
   <div 
     role="button"
     tabIndex={0}
@@ -3193,7 +3194,7 @@ const DreamCard = ({ dream, getCategoryBadgeClass, getEmotionEmoji, onShare: _on
         ))}
       </div>
 
-      {dream.assetMetadata && (
+      {isAdmin && dream.assetMetadata && (
         <div className="flex items-center justify-between text-xs text-muted border-t border-line pt-3 mt-1">
           <span className="flex items-center gap-1">
             <Shield className="w-3 h-3 text-sage" strokeWidth={1.75} />
