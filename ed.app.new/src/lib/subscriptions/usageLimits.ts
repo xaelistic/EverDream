@@ -1,9 +1,11 @@
 /**
  * Monthly usage counters for free-tier limits.
+ * Referral bonus tokens (lib/referral) extend free-tier generation capacity.
  */
 
 import { getLimitsForTier } from './entitlements';
 import type { SubscriptionTier } from './types';
+import { consumeGenerationToken, getGenerationTokenBalance } from '../referral';
 
 const USAGE_KEY = 'everdream_image_usage';
 
@@ -44,12 +46,19 @@ export function canGenerateImage(tier: SubscriptionTier): { allowed: boolean; re
     return { allowed: true, remaining: Infinity, limit };
   }
   const used = getImageUsageThisMonth();
-  const remaining = Math.max(0, limit - used);
-  return { allowed: remaining > 0, remaining, limit };
+  const planRemaining = Math.max(0, limit - used);
+  const bonusTokens = getGenerationTokenBalance();
+  const remaining = planRemaining + bonusTokens;
+  return { allowed: remaining > 0, remaining, limit: limit + bonusTokens };
 }
 
 export function recordImageGeneration(): void {
   const usage = loadUsage();
+  const limit = getLimitsForTier('free').aiImagesPerMonth;
+  // Prefer plan quota first; only spend referral tokens once plan is exhausted
+  if (Number.isFinite(limit) && usage.imageCount >= limit) {
+    consumeGenerationToken();
+  }
   usage.imageCount += 1;
   saveUsage(usage);
 }

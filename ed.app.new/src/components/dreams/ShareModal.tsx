@@ -22,6 +22,8 @@ export interface ShareModalProps {
   dream: Dream | ShareableDream | Record<string, unknown> | null;
   isOpen: boolean;
   onClose: () => void;
+  /** Fired when user successfully shares or copies a public link (for achievements / virality) */
+  onShared?: () => void;
 }
 
 type QuickAction = {
@@ -32,7 +34,7 @@ type QuickAction = {
   disabled?: boolean;
 };
 
-export default function ShareModal({ dream, isOpen, onClose }: ShareModalProps) {
+export default function ShareModal({ dream, isOpen, onClose, onShared }: ShareModalProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
   const [loading, setLoading] = useState(false);
@@ -112,6 +114,8 @@ export default function ShareModal({ dream, isOpen, onClose }: ShareModalProps) 
           shareable.title || 'My Dream',
         );
         setStatus(result === 'shared' ? 'Choose an app to share with.' : 'Saved — share from your gallery.');
+        // Count native share or download-to-share as first asset share (virality)
+        onShared?.();
         if (result === 'shared') {
           setTimeout(onClose, 500);
         }
@@ -120,6 +124,7 @@ export default function ShareModal({ dream, isOpen, onClose }: ShareModalProps) 
 
       const result = await shareNative(payload);
       if (result.ok) {
+        onShared?.();
         if (result.method === 'native') {
           setTimeout(onClose, 500);
         } else {
@@ -135,7 +140,7 @@ export default function ShareModal({ dream, isOpen, onClose }: ShareModalProps) 
     } finally {
       setSharing(false);
     }
-  }, [shareable, payload, previewBlob, onClose]);
+  }, [shareable, payload, previewBlob, onClose, onShared]);
 
   const handleCopyLink = useCallback(async () => {
     if (!shareable || !payload) return;
@@ -148,17 +153,19 @@ export default function ShareModal({ dream, isOpen, onClose }: ShareModalProps) 
       if (result.ok && result.url) {
         await copyToClipboard(result.url);
         setStatus('Link copied.');
+        onShared?.();
         return;
       }
 
       await copyToClipboard(payload.url);
       setStatus(result.message || 'Link copied.');
+      onShared?.();
     } catch {
       setStatus('Could not copy link.');
     } finally {
       setLinkBusy(false);
     }
-  }, [shareable, payload]);
+  }, [shareable, payload, onShared]);
 
   if (!isOpen || !dream || !shareable) return null;
 

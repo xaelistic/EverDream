@@ -3,8 +3,17 @@ import {
   loadUserProfile,
   saveUserProfile,
   uploadAvatar,
+  addInterestToProfile,
   type UserProfile,
+  type InterestSource,
 } from '../lib/profileService';
+import {
+  hydrateSignalsFromLinkedAccounts,
+  linkSocialProviderForProfile,
+  unlinkSocialProviderSignals,
+  type SocialInterestSource,
+} from '../lib/social/profileSignals';
+import { goalIdsFromLabels } from '../lib/onboarding/model';
 
 export function useProfile() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -15,6 +24,8 @@ export function useProfile() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
+      // Hydrate signal cache from linked accounts (does not force-write interests)
+      await hydrateSignalsFromLinkedAccounts();
       const data = await loadUserProfile();
       setProfile(data);
     } finally {
@@ -66,11 +77,21 @@ export function useProfile() {
   );
 
   const addInterest = useCallback(
-    async (interest: string) => {
+    async (interest: string, source: InterestSource = 'manual') => {
       if (!profile || !interest.trim()) return;
-      const trimmed = interest.trim();
-      if (profile.interests.includes(trimmed)) return;
-      await persist({ ...profile, interests: [...profile.interests, trimmed] });
+      const next = addInterestToProfile(profile, interest.trim(), source);
+      await persist(next);
+    },
+    [profile, persist],
+  );
+
+  const removeInterest = useCallback(
+    async (interest: string) => {
+      if (!profile) return;
+      const interests = profile.interests.filter((i) => i !== interest);
+      const interestSources = { ...profile.interestSources };
+      delete interestSources[interest];
+      await persist({ ...profile, interests, interestSources });
     },
     [profile, persist],
   );
@@ -80,7 +101,50 @@ export function useProfile() {
       if (!profile || !goal.trim()) return;
       const trimmed = goal.trim();
       if (profile.dreamGoals.includes(trimmed)) return;
-      await persist({ ...profile, dreamGoals: [...profile.dreamGoals, trimmed] });
+      const dreamGoals = [...profile.dreamGoals, trimmed];
+      const onboardingGoalIds = goalIdsFromLabels(dreamGoals);
+      await persist({ ...profile, dreamGoals, onboardingGoalIds });
+    },
+    [profile, persist],
+  );
+
+  const removeDreamGoal = useCallback(
+    async (goal: string) => {
+      if (!profile) return;
+      const dreamGoals = profile.dreamGoals.filter((g) => g !== goal);
+      const onboardingGoalIds = goalIdsFromLabels(dreamGoals);
+      await persist({ ...profile, dreamGoals, onboardingGoalIds });
+    },
+    [profile, persist],
+  );
+
+  /** Link Spotify/Meta and pull tastes onto the profile (Tinder-style). */
+  const connectSocialAndImport = useCallback(
+    async (provider: SocialInterestSource) => {
+      if (!profile) return [];
+      const signals = linkSocialProviderForProfile(provider);
+      let next = profile;
+      for (const s of signals) {
+        next = addInterestToProfile(next, s.label, s.source);
+      }
+      await persist(next);
+      return signals;
+    },
+    [profile, persist],
+  );
+
+  const disconnectSocial = useCallback(
+    async (provider: SocialInterestSource) => {
+      if (!profile) return;
+      unlinkSocialProviderSignals(provider);
+      const interests = profile.interests.filter(
+        (i) => profile.interestSources[i] !== provider,
+      );
+      const interestSources = { ...profile.interestSources };
+      for (const key of Object.keys(interestSources)) {
+        if (interestSources[key] === provider) delete interestSources[key];
+      }
+      await persist({ ...profile, interests, interestSources });
     },
     [profile, persist],
   );
@@ -94,6 +158,10 @@ export function useProfile() {
     saveNow,
     setAvatar,
     addInterest,
+    removeInterest,
     addDreamGoal,
+    removeDreamGoal,
+    connectSocialAndImport,
+    disconnectSocial,
   };
 }

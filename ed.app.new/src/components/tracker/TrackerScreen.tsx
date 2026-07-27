@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   Moon, ChevronRight, TrendingUp, BookOpen, Calendar,
-  Lightbulb, Heart,
+  Lightbulb, Heart, Watch,
 } from 'lucide-react';
 import { useSleepTracker } from '../../hooks/useSleepTracker';
 import type { DreamLike, TrackerSettings, WearableSleepLike } from '../../modules/sleep';
@@ -16,6 +16,10 @@ type TrackerScreenProps = {
   wearableData?: WearableSleepLike[];
   onOpenDream: (dreamId: string) => void;
   onLogDream?: (dateKey: string) => void;
+  /** Navigate to wearables / connect flow */
+  onConnectTracker?: () => void;
+  /** Open full-screen education piece (not inline dump) */
+  onOpenEducation?: () => void;
 };
 
 function formatMinutes(total: number): string {
@@ -39,6 +43,8 @@ export function TrackerScreen({
   wearableData,
   onOpenDream,
   onLogDream,
+  onConnectTracker,
+  onOpenEducation,
 }: TrackerScreenProps) {
   const [showMonth, setShowMonth] = useState(false);
   const tracker = useSleepTracker({ dreams, settings, wearableData });
@@ -237,27 +243,53 @@ export function TrackerScreen({
         </button>
       </section>
 
-      {/* ── 6. Education (content layer) ── */}
+      {/* ── 6. Education teaser (full piece opens fullscreen) ── */}
       <section className="rounded-2xl border border-line bg-cream p-4 shadow-paper">
         <div className="flex items-start gap-3">
           <div className="w-10 h-10 rounded-xl bg-dusk/10 flex items-center justify-center shrink-0">
             <Lightbulb className="w-5 h-5 text-duskDeep" />
           </div>
-          <div>
+          <div className="min-w-0 flex-1">
             <p className="text-[10px] uppercase tracking-[0.18em] text-muted mb-1">
               {education.icon} Learn · {education.readTimeMinutes} min
             </p>
             <h3 className="font-semibold text-ink">{education.title}</h3>
-            <p className="text-sm text-muted mt-2 leading-relaxed">{education.content}</p>
+            <p className="text-sm text-muted mt-2 leading-relaxed line-clamp-2">{education.content}</p>
             {education.tips[0] && (
               <p className="text-xs text-sageDark mt-2 flex items-start gap-1.5">
                 <Heart className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                <span>{education.tips[0]}</span>
+                <span className="line-clamp-1">{education.tips[0]}</span>
               </p>
+            )}
+            {onOpenEducation && (
+              <button
+                type="button"
+                onClick={onOpenEducation}
+                className="mt-3 text-xs font-semibold text-sageDark inline-flex items-center gap-1"
+              >
+                Learn more <ChevronRight className="w-3 h-3" />
+              </button>
             )}
           </div>
         </div>
       </section>
+
+      {/* ── 7. Connect a tracker ── */}
+      {onConnectTracker && (
+        <section className="pb-2">
+          <button
+            type="button"
+            onClick={onConnectTracker}
+            className="w-full rounded-2xl border border-sage/30 bg-sage/10 hover:bg-sage/15 text-sageDark font-semibold py-3.5 px-4 transition flex items-center justify-center gap-2 shadow-paper"
+          >
+            <Watch className="w-5 h-5" strokeWidth={1.75} />
+            Connect a tracker
+          </button>
+          <p className="text-center text-[11px] text-muted mt-2">
+            Link Apple Health, Oura, Whoop, Fitbit, and more
+          </p>
+        </section>
+      )}
     </div>
   );
 }

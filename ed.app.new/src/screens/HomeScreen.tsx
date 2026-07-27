@@ -217,10 +217,10 @@ export function HomeScreen({
             <p className="text-sm text-muted mt-1 leading-relaxed line-clamp-2">{dailyEducation.content}</p>
             <button
               type="button"
-              onClick={() => navigate('tracker')}
+              onClick={() => navigate('education')}
               className="mt-2 text-xs font-semibold text-sageDark inline-flex items-center gap-1"
             >
-              Learn more in Tracker <ChevronRight className="w-3 h-3" />
+              Learn more <ChevronRight className="w-3 h-3" />
             </button>
           </div>
         </div>
