@@ -150,6 +150,8 @@ function useAuthInternal(): AuthState {
       }
 
       if (event === 'SIGNED_IN' && session?.user) {
+        // Wipe every cached profile so we never paint the previous account's avatar
+        clearProfileCache();
         setUser(mapUser(session.user));
         if (isRecoveryHash() || urlIndicatesPasswordRecovery()) {
           setIsRecoveryMode(true);
@@ -160,7 +162,6 @@ function useAuthInternal(): AuthState {
           });
         }
       } else if (event === 'SIGNED_OUT') {
-        // Drop any in-memory/global profile cache so the next account cannot show this user's avatar
         clearProfileCache();
         setUser(null);
         setIsRecoveryMode(false);

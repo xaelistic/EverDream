@@ -29,16 +29,19 @@ export function useProfile() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      await hydrateSignalsFromLinkedAccounts();
+      // Do not paint until load finishes for this userId
       const data = await loadUserProfile();
       // Guard: never surface a profile tagged for a different auth user
-      if (userId && data.authUserId && data.authUserId !== userId) {
-        clearProfileCache(data.authUserId);
-        const clean = await loadUserProfile();
-        setProfile(clean);
+      if (userId && data.authUserId !== userId) {
+        clearProfileCache();
+        setProfile(null);
         loadedForUser.current = userId;
+        const clean = await loadUserProfile();
+        if (clean.authUserId === userId) setProfile(clean);
         return;
       }
+      // Soft social hydrate after identity is correct (never blocks avatar correctness)
+      void hydrateSignalsFromLinkedAccounts().catch(() => undefined);
       setProfile(data);
       loadedForUser.current = userId;
     } finally {
@@ -52,10 +55,9 @@ export function useProfile() {
       clearTimeout(saveTimer.current);
       saveTimer.current = null;
     }
-    // Immediately drop previous account UI so we don't flash old avatar
-    if (loadedForUser.current && loadedForUser.current !== userId) {
-      setProfile(null);
-    }
+    // Always clear in-memory profile on user change so header never shows previous avatar
+    setProfile(null);
+    setLoading(true);
     void refresh();
   }, [userId, refresh]);
 

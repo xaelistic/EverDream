@@ -22,7 +22,7 @@ import { useSkinFull } from '../contexts/SkinContext';
 import { useToast } from '../components/ui/Toast';
 import { useProfile } from '../hooks/useProfile';
 import { useAuth } from '../hooks/use-auth';
-import { slugifyHandle, type InterestSource } from '../lib/profileService';
+import { slugifyHandle, avatarBelongsToUser, type InterestSource } from '../lib/profileService';
 import {
   isSocialLinked,
   PROFILE_SOCIAL_PROVIDERS,
@@ -206,9 +206,11 @@ export function ProfileHub({ onClose, navigate, onFriendAdded }: ProfileHubProps
       <div className={`rounded-3xl border p-6 text-center ${card}`}>
         <div className="relative inline-block">
           {profile.avatarUrl &&
-          (!profile.authUserId || !authUser?.id || profile.authUserId === authUser.id) ? (
+          authUser?.id &&
+          profile.authUserId === authUser.id &&
+          avatarBelongsToUser(profile.avatarUrl, authUser.id) ? (
             <img
-              key={`${authUser?.id || 'anon'}-${profile.avatarUrl}`}
+              key={`${authUser.id}-${profile.avatarUrl}`}
               src={profile.avatarUrl}
               alt=""
               className={`w-24 h-24 rounded-full border-4 object-cover ${isPearl ? 'border-[var(--aqua-deep)]/30' : 'border-sage/30'}`}

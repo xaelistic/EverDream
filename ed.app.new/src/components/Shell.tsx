@@ -11,6 +11,7 @@ import type { RouteScreen } from '../hooks/useHashRoute';
 import { useSkinFull } from '../contexts/SkinContext';
 import { useProfile } from '../hooks/useProfile';
 import { useAuth } from '../hooks/use-auth';
+import { avatarBelongsToUser } from '../lib/profileService';
 
 type ShellProps = {
   active: RouteScreen;
@@ -75,13 +76,15 @@ export default function Shell({ active, onNavigate, onOpenProfile, processingDre
   const { profile, loading: profileLoading } = useProfile();
   const recordTarget = getRecordButtonTarget(active);
   const recordActive = isRecordActive(active);
-  // Only show avatar when it belongs to the current auth user (prevents cross-account flash)
-  const avatarMatchesUser =
-    Boolean(profile?.avatarUrl) &&
+  // Strict: must be this session's user, tagged cache, and path-safe avatar URL
+  const safeAvatarUrl =
     !profileLoading &&
-    Boolean(user?.id) &&
-    (!profile?.authUserId || profile.authUserId === user?.id);
-  const safeAvatarUrl = avatarMatchesUser ? profile!.avatarUrl : null;
+    user?.id &&
+    profile?.authUserId === user.id &&
+    profile.avatarUrl &&
+    avatarBelongsToUser(profile.avatarUrl, user.id)
+      ? profile.avatarUrl
+      : null;
 
   const renderNavButton = ({ screen, label, icon: Icon }: (typeof navItems)[number]) => {
     const on = isNavActive(active, screen);

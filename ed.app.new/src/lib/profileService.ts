@@ -138,39 +138,64 @@ function parseStoredProfile(raw: string): UserProfile | null {
   }
 }
 
+/**
+ * Avatars uploaded to our bucket are always `.../avatars/{authUserId}.{ext}`.
+ * Reject any storage avatar that isn't clearly for this user.
+ * data: URLs are only OK when the profile row is already tagged with this user.
+ */
+export function avatarBelongsToUser(
+  url: string | null | undefined,
+  userId: string | null | undefined,
+): boolean {
+  if (!url || !userId) return false;
+  const cleaned = url.split('?')[0];
+  // Supabase storage path pattern
+  if (cleaned.includes('/avatars/') || cleaned.includes('avatars%2F')) {
+    const decoded = decodeURIComponent(cleaned);
+    // Require exact segment avatars/{userId}. or avatars/{userId}/
+    const re = new RegExp(`avatars[/]${userId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([./]|$)`);
+    return re.test(decoded);
+  }
+  // Local data-URL fallbacks: only allowed when caller also checks authUserId match
+  if (url.startsWith('data:image/')) return true;
+  // Unknown absolute URLs — do not trust across accounts
+  return false;
+}
+
+export function sanitizeAvatarUrl(
+  url: string | null | undefined,
+  userId: string | null | undefined,
+): string | null {
+  if (!url) return null;
+  return avatarBelongsToUser(url, userId) ? url : null;
+}
+
 function loadFromStorage(userId: string | null): UserProfile | null {
   try {
+    // Always drop the old unscoped key — it caused cross-account avatar leaks
+    const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (legacy) localStorage.removeItem(LEGACY_STORAGE_KEY);
+
+    if (!userId) return null;
+
     const key = storageKeyForUser(userId);
     const raw = localStorage.getItem(key);
-    if (raw) {
-      const profile = parseStoredProfile(raw);
-      // Reject cache that belongs to a different user (belt-and-suspenders)
-      if (profile && userId && profile.authUserId && profile.authUserId !== userId) {
-        localStorage.removeItem(key);
-        return null;
-      }
-      if (profile && userId && !profile.authUserId) {
-        profile.authUserId = userId;
-      }
-      return profile;
+    if (!raw) return null;
+
+    const profile = parseStoredProfile(raw);
+    if (!profile) {
+      localStorage.removeItem(key);
+      return null;
     }
 
-    // One-time migrate legacy unscoped key only if it matches this user (or has no owner)
-    const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (legacy) {
-      const profile = parseStoredProfile(legacy);
-      localStorage.removeItem(LEGACY_STORAGE_KEY);
-      if (!profile) return null;
-      if (profile.authUserId && userId && profile.authUserId !== userId) {
-        // Belonged to someone else — do not migrate
-        return null;
-      }
-      if (userId) {
-        profile.authUserId = userId;
-        saveToStorage(profile, userId);
-      }
-      return profile;
+    // Strict: only accept cache already tagged for THIS user. Never claim untagged cache.
+    if (profile.authUserId !== userId) {
+      localStorage.removeItem(key);
+      return null;
     }
+
+    profile.avatarUrl = sanitizeAvatarUrl(profile.avatarUrl, userId);
+    return profile;
   } catch {
     /* ignore */
   }
@@ -195,17 +220,18 @@ function saveToStorage(profile: UserProfile, userId: string | null): void {
 /** Clear cached profile for a user (call on sign-out / account switch). */
 export function clearProfileCache(userId?: string | null): void {
   try {
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
+    localStorage.removeItem(storageKeyForUser(null));
     if (userId) {
       localStorage.removeItem(storageKeyForUser(userId));
     }
-    localStorage.removeItem(storageKeyForUser(null));
-    localStorage.removeItem(LEGACY_STORAGE_KEY);
-    // Sweep any leftover scoped keys if we don't know the id
-    if (!userId && typeof localStorage !== 'undefined') {
+    // Always sweep every scoped profile key on logout/switch — safest against leaks
+    if (typeof localStorage !== 'undefined') {
       const toRemove: string[] = [];
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
         if (k && (k === LEGACY_STORAGE_KEY || k.startsWith(STORAGE_PREFIX))) {
+          // When userId given, still remove ALL keys so a switch never reuses another slot
           toRemove.push(k);
         }
       }
@@ -297,9 +323,9 @@ function applyRemoteRow(base: UserProfile, row: Record<string, unknown>, userId:
     }
   }
 
-  // Avatar: remote always wins when a profile row exists
+  // Avatar: remote always wins when a profile row exists (and must belong to this user)
   if (typeof row.avatar_url === 'string' && row.avatar_url.trim()) {
-    profile.avatarUrl = row.avatar_url;
+    profile.avatarUrl = sanitizeAvatarUrl(row.avatar_url.trim(), userId);
   } else {
     // Explicit null/empty on server → no avatar (do not keep cached image)
     profile.avatarUrl = null;
@@ -353,13 +379,17 @@ export async function loadUserProfile(): Promise<UserProfile> {
   const user = await getCurrentUser();
   const userId = user?.id ?? null;
 
-  let profile = loadFromStorage(userId);
-
-  // If cache is missing or tagged for another user, start clean
-  if (!profile || (userId && profile.authUserId && profile.authUserId !== userId)) {
-    profile = emptyProfileForUser(userId);
-  } else {
-    profile = { ...profile, authUserId: userId };
+  // Always start clean for identity — never seed avatar from untrusted cache first
+  let profile = emptyProfileForUser(userId);
+  const cached = loadFromStorage(userId);
+  if (cached && cached.authUserId === userId) {
+    // Reuse non-identity offline fields only; avatar still requires remote or path check
+    profile = {
+      ...cached,
+      authUserId: userId,
+      // Drop cached avatar until remote confirms (prevents stale cross-account data:image/*)
+      avatarUrl: null,
+    };
   }
 
   if (!profile.friendCode) {
@@ -376,20 +406,26 @@ export async function loadUserProfile(): Promise<UserProfile> {
         profile.displayName = dn;
         profile.handle = slugifyHandle(dn);
       }
+      profile.avatarUrl = sanitizeAvatarUrl(profile.avatarUrl, userId);
       saveToStorage(profile, userId);
     } else if (!row && userId) {
-      // Authenticated but no profile row yet — only keep local data tagged for this user
-      if (profile.authUserId && profile.authUserId !== userId) {
-        profile = emptyProfileForUser(userId);
-      } else {
-        profile = { ...profile, authUserId: userId };
-      }
+      // New profile row: keep offline fields from matching cache only, never foreign avatar
+      profile = {
+        ...profile,
+        authUserId: userId,
+        avatarUrl: null,
+      };
       saveToStorage(profile, userId);
     }
   } catch {
-    // Supabase unavailable — local only for this user
+    // Offline: may restore path-validated avatar from matching cache only
+    if (cached?.authUserId === userId) {
+      profile.avatarUrl = sanitizeAvatarUrl(cached.avatarUrl, userId);
+    }
   }
 
+  profile.authUserId = userId;
+  profile.avatarUrl = sanitizeAvatarUrl(profile.avatarUrl, userId);
   return profile;
 }
 
@@ -404,6 +440,7 @@ export async function saveUserProfile(profile: UserProfile): Promise<void> {
     interestSources: profile.interestSources || {},
     onboardingGoalIds: profile.onboardingGoalIds || [],
     authUserId: userId,
+    avatarUrl: sanitizeAvatarUrl(profile.avatarUrl, userId),
   });
   saveToStorage(normalized, userId);
 
