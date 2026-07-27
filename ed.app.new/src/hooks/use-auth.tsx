@@ -22,6 +22,7 @@ import {
   urlHasAuthArtifacts,
   urlIndicatesPasswordRecovery,
 } from '../lib/auth/urlCleanup';
+import { clearProfileCache } from '../lib/profileService';
 
 export interface AuthUser {
   id: string;
@@ -159,8 +160,12 @@ function useAuthInternal(): AuthState {
           });
         }
       } else if (event === 'SIGNED_OUT') {
+        // Drop any in-memory/global profile cache so the next account cannot show this user's avatar
+        clearProfileCache();
         setUser(null);
         setIsRecoveryMode(false);
+      } else if (event === 'USER_UPDATED' && session?.user) {
+        setUser(mapUser(session.user));
       }
     });
 
@@ -247,13 +252,17 @@ function useAuthInternal(): AuthState {
 
   const signOut = useCallback(async () => {
     setError(null);
+    const previousId = user?.id ?? null;
     const { error: signOutError } = await supabase.auth.signOut();
+    // Clear profile cache even if signOut partially fails — safer for account switch
+    clearProfileCache(previousId);
+    clearProfileCache();
     if (signOutError) {
       setError(signOutError);
       throw signOutError;
     }
     setUser(null);
-  }, []);
+  }, [user?.id]);
 
   return {
     user,

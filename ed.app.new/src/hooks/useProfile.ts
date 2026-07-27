@@ -4,6 +4,7 @@ import {
   saveUserProfile,
   uploadAvatar,
   addInterestToProfile,
+  clearProfileCache,
   type UserProfile,
   type InterestSource,
 } from '../lib/profileService';
@@ -14,44 +15,72 @@ import {
   type SocialInterestSource,
 } from '../lib/social/profileSignals';
 import { goalIdsFromLabels } from '../lib/onboarding/model';
+import { useAuth } from './use-auth';
 
 export function useProfile() {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadedForUser = useRef<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      // Hydrate signal cache from linked accounts (does not force-write interests)
       await hydrateSignalsFromLinkedAccounts();
       const data = await loadUserProfile();
+      // Guard: never surface a profile tagged for a different auth user
+      if (userId && data.authUserId && data.authUserId !== userId) {
+        clearProfileCache(data.authUserId);
+        const clean = await loadUserProfile();
+        setProfile(clean);
+        loadedForUser.current = userId;
+        return;
+      }
       setProfile(data);
+      loadedForUser.current = userId;
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [userId]);
 
+  // Reload profile whenever the signed-in user changes (login / logout / switch)
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    // Immediately drop previous account UI so we don't flash old avatar
+    if (loadedForUser.current && loadedForUser.current !== userId) {
+      setProfile(null);
+    }
+    void refresh();
+  }, [userId, refresh]);
 
   const persist = useCallback(async (next: UserProfile) => {
-    setProfile(next);
+    // Never write if the in-memory profile is for a different user
+    if (userId && next.authUserId && next.authUserId !== userId) {
+      console.warn('[useProfile] blocked save: profile authUserId mismatch');
+      return;
+    }
+    const tagged = { ...next, authUserId: userId };
+    setProfile(tagged);
     setSaving(true);
     try {
-      await saveUserProfile(next);
+      await saveUserProfile(tagged);
     } finally {
       setSaving(false);
     }
-  }, []);
+  }, [userId]);
 
   const updateField = useCallback(
     <K extends keyof UserProfile>(key: K, value: UserProfile[K]) => {
       setProfile((prev) => {
         if (!prev) return prev;
-        const next = { ...prev, [key]: value };
+        if (userId && prev.authUserId && prev.authUserId !== userId) return prev;
+        const next = { ...prev, [key]: value, authUserId: userId };
         if (saveTimer.current) clearTimeout(saveTimer.current);
         saveTimer.current = setTimeout(() => {
           saveUserProfile(next).catch(console.warn);
@@ -59,7 +88,7 @@ export function useProfile() {
         return next;
       });
     },
-    [],
+    [userId],
   );
 
   const saveNow = useCallback(async () => {
@@ -71,9 +100,14 @@ export function useProfile() {
     async (file: File) => {
       const url = await uploadAvatar(file);
       if (!profile) return;
-      await persist({ ...profile, avatarUrl: url });
+      // Don't attach avatar to a stale profile from another session
+      if (userId && profile.authUserId && profile.authUserId !== userId) {
+        await refresh();
+        return;
+      }
+      await persist({ ...profile, avatarUrl: url, authUserId: userId });
     },
-    [profile, persist],
+    [profile, persist, userId, refresh],
   );
 
   const addInterest = useCallback(

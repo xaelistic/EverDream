@@ -1,7 +1,8 @@
 /**
  * User profile — local persistence with optional Supabase sync.
- * Interests & dream goals come from onboarding, manual edits, and social signals
- * (Spotify / Meta) — never fake placeholder people or seeded demo junk.
+ *
+ * IMPORTANT: cache is scoped per auth user id. A single shared localStorage
+ * key used to leak avatars / interests across logins (login as B still showed A's photo).
  */
 
 import { getProfile, getCurrentUser, supabase } from './supabase/client';
@@ -11,7 +12,9 @@ import {
   type OnboardingGoalId,
 } from './onboarding/model';
 
-const STORAGE_KEY = 'everdream-user-profile';
+/** Legacy unscoped key — migrated once then removed */
+const LEGACY_STORAGE_KEY = 'everdream-user-profile';
+const STORAGE_PREFIX = 'everdream-user-profile:v1:';
 
 export type ProfileVisibility = 'private' | 'friends' | 'public';
 
@@ -35,6 +38,8 @@ export interface UserProfile {
   onboardedAt?: string | null;
   experienceLevel?: string | null;
   dreamRecall?: string | null;
+  /** Auth user this cache belongs to — never show another account's data */
+  authUserId?: string | null;
 }
 
 const DEFAULT_PROFILE: UserProfile = {
@@ -51,6 +56,7 @@ const DEFAULT_PROFILE: UserProfile = {
   onboardedAt: null,
   experienceLevel: null,
   dreamRecall: null,
+  authUserId: null,
 };
 
 function generateFriendCode(): string {
@@ -59,6 +65,11 @@ function generateFriendCode(): string {
 
 function slugifyHandle(name: string): string {
   return name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'dreamer';
+}
+
+function storageKeyForUser(userId: string | null | undefined): string {
+  if (userId) return `${STORAGE_PREFIX}${userId}`;
+  return `${STORAGE_PREFIX}anonymous`;
 }
 
 /**
@@ -91,7 +102,6 @@ function scrubPlaceholders(profile: UserProfile): UserProfile {
   if (displayName === 'DreamWalker') displayName = '';
   if (bio.startsWith('Exploring the landscapes of sleep')) bio = '';
 
-  // Rebuild sources map for known labels
   const nextSources: Record<string, InterestSource> = {};
   for (const label of interests) {
     nextSources[label] = interestSources[label] || 'manual';
@@ -108,10 +118,8 @@ function scrubPlaceholders(profile: UserProfile): UserProfile {
   };
 }
 
-function loadFromStorage(): UserProfile | null {
+function parseStoredProfile(raw: string): UserProfile | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<UserProfile>;
     return scrubPlaceholders({
       ...DEFAULT_PROFILE,
@@ -122,17 +130,89 @@ function loadFromStorage(): UserProfile | null {
       onboardingGoalIds: Array.isArray(parsed.onboardingGoalIds)
         ? (parsed.onboardingGoalIds as OnboardingGoalId[])
         : [],
+      avatarUrl: typeof parsed.avatarUrl === 'string' ? parsed.avatarUrl : null,
+      authUserId: typeof parsed.authUserId === 'string' ? parsed.authUserId : null,
     });
   } catch {
     return null;
   }
 }
 
-function saveToStorage(profile: UserProfile): void {
+function loadFromStorage(userId: string | null): UserProfile | null {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
+    const key = storageKeyForUser(userId);
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      const profile = parseStoredProfile(raw);
+      // Reject cache that belongs to a different user (belt-and-suspenders)
+      if (profile && userId && profile.authUserId && profile.authUserId !== userId) {
+        localStorage.removeItem(key);
+        return null;
+      }
+      if (profile && userId && !profile.authUserId) {
+        profile.authUserId = userId;
+      }
+      return profile;
+    }
+
+    // One-time migrate legacy unscoped key only if it matches this user (or has no owner)
+    const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (legacy) {
+      const profile = parseStoredProfile(legacy);
+      localStorage.removeItem(LEGACY_STORAGE_KEY);
+      if (!profile) return null;
+      if (profile.authUserId && userId && profile.authUserId !== userId) {
+        // Belonged to someone else — do not migrate
+        return null;
+      }
+      if (userId) {
+        profile.authUserId = userId;
+        saveToStorage(profile, userId);
+      }
+      return profile;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function saveToStorage(profile: UserProfile, userId: string | null): void {
+  try {
+    const key = storageKeyForUser(userId || profile.authUserId);
+    const toSave = {
+      ...profile,
+      authUserId: userId || profile.authUserId || null,
+    };
+    localStorage.setItem(key, JSON.stringify(toSave));
+    // Ensure legacy key is gone so it cannot re-infect other sessions
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
   } catch (e) {
     console.warn('[Profile] localStorage save failed:', e);
+  }
+}
+
+/** Clear cached profile for a user (call on sign-out / account switch). */
+export function clearProfileCache(userId?: string | null): void {
+  try {
+    if (userId) {
+      localStorage.removeItem(storageKeyForUser(userId));
+    }
+    localStorage.removeItem(storageKeyForUser(null));
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
+    // Sweep any leftover scoped keys if we don't know the id
+    if (!userId && typeof localStorage !== 'undefined') {
+      const toRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k === LEGACY_STORAGE_KEY || k.startsWith(STORAGE_PREFIX))) {
+          toRemove.push(k);
+        }
+      }
+      for (const k of toRemove) localStorage.removeItem(k);
+    }
+  } catch {
+    /* ignore */
   }
 }
 
@@ -145,14 +225,16 @@ function mergeInterest(
   if (!trimmed) return profile;
   const exists = profile.interests.some((i) => i.toLowerCase() === trimmed.toLowerCase());
   if (exists) {
-    // Don't downgrade social → manual if already social; upgrade manual → social ok
-    const current = profile.interestSources[trimmed] || profile.interestSources[
-      profile.interests.find((i) => i.toLowerCase() === trimmed.toLowerCase()) || trimmed
-    ];
+    const current =
+      profile.interestSources[trimmed] ||
+      profile.interestSources[
+        profile.interests.find((i) => i.toLowerCase() === trimmed.toLowerCase()) || trimmed
+      ];
     if (current === 'onboarding' || current === 'spotify' || current === 'meta') {
       return profile;
     }
-    const key = profile.interests.find((i) => i.toLowerCase() === trimmed.toLowerCase()) || trimmed;
+    const key =
+      profile.interests.find((i) => i.toLowerCase() === trimmed.toLowerCase()) || trimmed;
     return {
       ...profile,
       interestSources: { ...profile.interestSources, [key]: source },
@@ -185,75 +267,147 @@ export function mergeInterestsIntoProfile(
   return scrubPlaceholders(next);
 }
 
+function emptyProfileForUser(userId: string | null): UserProfile {
+  return {
+    ...DEFAULT_PROFILE,
+    friendCode: generateFriendCode(),
+    authUserId: userId,
+  };
+}
+
+/**
+ * Apply remote profile row as source of truth for identity fields.
+ * Avatar: always take remote (including null) so we never keep another user's photo.
+ */
+function applyRemoteRow(base: UserProfile, row: Record<string, unknown>, userId: string): UserProfile {
+  let profile: UserProfile = {
+    ...base,
+    authUserId: userId,
+  };
+
+  // Identity from remote when present
+  if (typeof row.display_name === 'string' && row.display_name) {
+    profile.displayName = row.display_name;
+    profile.handle = slugifyHandle(row.display_name);
+  } else if (row.display_name === null || row.display_name === '') {
+    // New account with no name — don't keep previous account name from cache
+    // Only clear if we just switched users (base was empty or same user id already)
+    if (!base.authUserId || base.authUserId === userId) {
+      // keep local name for same user offline edits unless remote explicitly empty and we loaded fresh
+    }
+  }
+
+  // Avatar: remote always wins when a profile row exists
+  if (typeof row.avatar_url === 'string' && row.avatar_url.trim()) {
+    profile.avatarUrl = row.avatar_url;
+  } else {
+    // Explicit null/empty on server → no avatar (do not keep cached image)
+    profile.avatarUrl = null;
+  }
+
+  if (Array.isArray(row.interests)) {
+    const remoteInterests = (row.interests as string[]).filter(Boolean);
+    // When remote has interests array (even empty after onboarding), prefer remote for multi-account safety
+    // Only replace if remote sent a non-null array (it did)
+    const sources = { ...profile.interestSources };
+    if (remoteInterests.length > 0) {
+      for (const label of remoteInterests) {
+        if (!sources[label]) sources[label] = 'onboarding';
+      }
+      profile.interests = remoteInterests;
+      profile.interestSources = sources;
+    } else if (!base.authUserId || base.authUserId !== userId) {
+      // Account switch / fresh load: empty remote means empty interests
+      profile.interests = [];
+      profile.interestSources = {};
+    }
+  }
+
+  if (Array.isArray(row.dream_goals)) {
+    const goals = (row.dream_goals as string[]).filter(Boolean);
+    if (goals.length > 0) {
+      profile.dreamGoals = goals;
+      if (!profile.onboardingGoalIds?.length) {
+        profile.onboardingGoalIds = goalIdsFromLabels(profile.dreamGoals);
+      }
+    } else if (!base.authUserId || base.authUserId !== userId) {
+      profile.dreamGoals = [];
+      profile.onboardingGoalIds = [];
+    }
+  } else if (Array.isArray(row.onboarding_goals) && (row.onboarding_goals as string[]).length) {
+    const ids = (row.onboarding_goals as string[]).filter(Boolean) as OnboardingGoalId[];
+    profile.onboardingGoalIds = ids;
+    if (!profile.dreamGoals.length) {
+      profile.dreamGoals = goalLabels(ids);
+    }
+  }
+
+  if (typeof row.onboarded_at === 'string') profile.onboardedAt = row.onboarded_at;
+  if (typeof row.experience_level === 'string') profile.experienceLevel = row.experience_level;
+  if (typeof row.dream_recall === 'string') profile.dreamRecall = row.dream_recall;
+
+  return scrubPlaceholders(profile);
+}
+
 export async function loadUserProfile(): Promise<UserProfile> {
-  let profile = loadFromStorage() ?? { ...DEFAULT_PROFILE };
+  const user = await getCurrentUser();
+  const userId = user?.id ?? null;
+
+  let profile = loadFromStorage(userId);
+
+  // If cache is missing or tagged for another user, start clean
+  if (!profile || (userId && profile.authUserId && profile.authUserId !== userId)) {
+    profile = emptyProfileForUser(userId);
+  } else {
+    profile = { ...profile, authUserId: userId };
+  }
 
   if (!profile.friendCode) {
     profile.friendCode = generateFriendCode();
-    saveToStorage(profile);
   }
 
   try {
     const row = await getProfile();
-    if (row) {
-      if (row.display_name && typeof row.display_name === 'string') {
-        profile.displayName = row.display_name;
-        profile.handle = slugifyHandle(row.display_name);
+    if (row && userId) {
+      // Remote profile row is authoritative for avatar / name / goals on load
+      profile = applyRemoteRow(profile, row as Record<string, unknown>, userId);
+      const dn = (row as { display_name?: string | null }).display_name;
+      if (typeof dn === 'string' && dn.trim()) {
+        profile.displayName = dn;
+        profile.handle = slugifyHandle(dn);
       }
-      if (row.avatar_url && typeof row.avatar_url === 'string') {
-        profile.avatarUrl = row.avatar_url;
+      saveToStorage(profile, userId);
+    } else if (!row && userId) {
+      // Authenticated but no profile row yet — only keep local data tagged for this user
+      if (profile.authUserId && profile.authUserId !== userId) {
+        profile = emptyProfileForUser(userId);
+      } else {
+        profile = { ...profile, authUserId: userId };
       }
-      const r = row as Record<string, unknown>;
-
-      if (Array.isArray(r.interests) && (r.interests as string[]).length) {
-        const remoteInterests = (r.interests as string[]).filter(Boolean);
-        // Prefer remote list when present; keep local source tags when labels match
-        const sources = { ...profile.interestSources };
-        for (const label of remoteInterests) {
-          if (!sources[label]) sources[label] = 'onboarding';
-        }
-        profile.interests = remoteInterests;
-        profile.interestSources = sources;
-      }
-
-      if (Array.isArray(r.dream_goals) && (r.dream_goals as string[]).length) {
-        profile.dreamGoals = (r.dream_goals as string[]).filter(Boolean);
-        if (!profile.onboardingGoalIds?.length) {
-          profile.onboardingGoalIds = goalIdsFromLabels(profile.dreamGoals);
-        }
-      } else if (Array.isArray(r.onboarding_goals) && (r.onboarding_goals as string[]).length) {
-        const ids = (r.onboarding_goals as string[]).filter(Boolean) as OnboardingGoalId[];
-        profile.onboardingGoalIds = ids;
-        if (!profile.dreamGoals.length) {
-          profile.dreamGoals = goalLabels(ids);
-        }
-      }
-
-      if (typeof r.onboarded_at === 'string') profile.onboardedAt = r.onboarded_at;
-      if (typeof r.experience_level === 'string') profile.experienceLevel = r.experience_level;
-      if (typeof r.dream_recall === 'string') profile.dreamRecall = r.dream_recall;
-      profile = scrubPlaceholders(profile);
-      saveToStorage(profile);
+      saveToStorage(profile, userId);
     }
   } catch {
-    // Supabase unavailable — local only
+    // Supabase unavailable — local only for this user
   }
 
   return profile;
 }
 
 export async function saveUserProfile(profile: UserProfile): Promise<void> {
+  const user = await getCurrentUser();
+  const userId = user?.id ?? profile.authUserId ?? null;
+
   const normalized: UserProfile = scrubPlaceholders({
     ...profile,
     handle: slugifyHandle(profile.displayName || 'dreamer'),
     friendCode: profile.friendCode || generateFriendCode(),
     interestSources: profile.interestSources || {},
     onboardingGoalIds: profile.onboardingGoalIds || [],
+    authUserId: userId,
   });
-  saveToStorage(normalized);
+  saveToStorage(normalized, userId);
 
   try {
-    const user = await getCurrentUser();
     if (!user) return;
 
     const update: Record<string, unknown> = {
@@ -291,6 +445,7 @@ export async function saveUserProfile(profile: UserProfile): Promise<void> {
 export async function uploadAvatar(file: File): Promise<string> {
   const user = await getCurrentUser();
   const ext = file.name.split('.').pop() || 'jpg';
+  // Always path by user id so avatars cannot collide across accounts
   const path = user
     ? `avatars/${user.id}.${ext}`
     : `avatars/local-${Date.now()}.${ext}`;
@@ -302,7 +457,10 @@ export async function uploadAvatar(file: File): Promise<string> {
 
     if (!error) {
       const { data } = supabase.storage.from('dream-media').getPublicUrl(path);
-      if (data?.publicUrl) return data.publicUrl;
+      if (data?.publicUrl) {
+        // Cache-bust so UI doesn't show previous object's browser-cached image
+        return `${data.publicUrl}${data.publicUrl.includes('?') ? '&' : '?'}v=${Date.now()}`;
+      }
     }
   }
 
@@ -315,11 +473,23 @@ export async function uploadAvatar(file: File): Promise<string> {
 }
 
 export function getPublicProfileByHandle(handle: string): UserProfile | null {
-  const profile = loadFromStorage();
-  if (!profile) return null;
-  if (profile.handle !== handle) return null;
-  if (profile.profileVisibility === 'private') return null;
-  return profile;
+  // Only current session profile is available offline
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k || !k.startsWith(STORAGE_PREFIX)) continue;
+      const raw = localStorage.getItem(k);
+      if (!raw) continue;
+      const profile = parseStoredProfile(raw);
+      if (!profile) continue;
+      if (profile.handle !== handle) continue;
+      if (profile.profileVisibility === 'private') return null;
+      return profile;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
 }
 
 export { slugifyHandle, generateFriendCode, DEFAULT_PROFILE };

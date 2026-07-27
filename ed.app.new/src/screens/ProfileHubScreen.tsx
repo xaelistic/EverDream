@@ -205,8 +205,10 @@ export function ProfileHub({ onClose, navigate, onFriendAdded }: ProfileHubProps
     <div className="space-y-6">
       <div className={`rounded-3xl border p-6 text-center ${card}`}>
         <div className="relative inline-block">
-          {profile.avatarUrl ? (
+          {profile.avatarUrl &&
+          (!profile.authUserId || !authUser?.id || profile.authUserId === authUser.id) ? (
             <img
+              key={`${authUser?.id || 'anon'}-${profile.avatarUrl}`}
               src={profile.avatarUrl}
               alt=""
               className={`w-24 h-24 rounded-full border-4 object-cover ${isPearl ? 'border-[var(--aqua-deep)]/30' : 'border-sage/30'}`}
