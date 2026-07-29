@@ -85,7 +85,7 @@ export function MoreScreen({ skin, isThemed, navigate }: MoreScreenProps) {
                   { label: 'Combine dreams', sub: 'Fuse NFTs into remixes', screen: 'combine', icon: Award },
                 ]
               : []),
-            { label: 'Achievements', sub: 'Small wins', screen: 'achievements', icon: Award },
+            { label: 'Achievements & referrals', sub: 'Milestones, share rewards, free tokens', screen: 'achievements', icon: Award },
           ].map(({ label, sub, screen, icon: Icon }) => (
             <button
               key={screen}

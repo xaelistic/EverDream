@@ -10,6 +10,8 @@ import {
 import type { RouteScreen } from '../hooks/useHashRoute';
 import { useSkinFull } from '../contexts/SkinContext';
 import { useProfile } from '../hooks/useProfile';
+import { useAuth } from '../hooks/use-auth';
+import { avatarBelongsToUser } from '../lib/profileService';
 
 type ShellProps = {
   active: RouteScreen;
@@ -70,9 +72,19 @@ function navIconClasses(on: boolean, isThemed: boolean): string {
 
 export default function Shell({ active, onNavigate, onOpenProfile, processingDreamCount = 0, children }: ShellProps) {
   const { isThemed } = useSkinFull();
-  const { profile } = useProfile();
+  const { user } = useAuth();
+  const { profile, loading: profileLoading } = useProfile();
   const recordTarget = getRecordButtonTarget(active);
   const recordActive = isRecordActive(active);
+  // Strict: must be this session's user, tagged cache, and path-safe avatar URL
+  const safeAvatarUrl =
+    !profileLoading &&
+    user?.id &&
+    profile?.authUserId === user.id &&
+    profile.avatarUrl &&
+    avatarBelongsToUser(profile.avatarUrl, user.id)
+      ? profile.avatarUrl
+      : null;
 
   const renderNavButton = ({ screen, label, icon: Icon }: (typeof navItems)[number]) => {
     const on = isNavActive(active, screen);
@@ -146,9 +158,10 @@ export default function Shell({ active, onNavigate, onOpenProfile, processingDre
               className={`w-10 h-10 rounded-full border transition-colors overflow-hidden flex items-center justify-center shrink-0 ${isThemed ? 'border-[var(--glass-border)] bg-[var(--glass-bg)] hover:bg-white/80' : 'border-line bg-cream hover:bg-parchment'}`}
               aria-label="Profile"
             >
-              {profile?.avatarUrl ? (
+              {safeAvatarUrl ? (
                 <img
-                  src={profile.avatarUrl}
+                  key={`${user?.id || 'anon'}-${safeAvatarUrl}`}
+                  src={safeAvatarUrl}
                   alt=""
                   className="w-full h-full object-cover"
                   referrerPolicy="no-referrer"

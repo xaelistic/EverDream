@@ -22,6 +22,7 @@ import {
   urlHasAuthArtifacts,
   urlIndicatesPasswordRecovery,
 } from '../lib/auth/urlCleanup';
+import { clearProfileCache } from '../lib/profileService';
 
 export interface AuthUser {
   id: string;
@@ -149,6 +150,8 @@ function useAuthInternal(): AuthState {
       }
 
       if (event === 'SIGNED_IN' && session?.user) {
+        // Wipe every cached profile so we never paint the previous account's avatar
+        clearProfileCache();
         setUser(mapUser(session.user));
         if (isRecoveryHash() || urlIndicatesPasswordRecovery()) {
           setIsRecoveryMode(true);
@@ -159,8 +162,11 @@ function useAuthInternal(): AuthState {
           });
         }
       } else if (event === 'SIGNED_OUT') {
+        clearProfileCache();
         setUser(null);
         setIsRecoveryMode(false);
+      } else if (event === 'USER_UPDATED' && session?.user) {
+        setUser(mapUser(session.user));
       }
     });
 
@@ -247,13 +253,17 @@ function useAuthInternal(): AuthState {
 
   const signOut = useCallback(async () => {
     setError(null);
+    const previousId = user?.id ?? null;
     const { error: signOutError } = await supabase.auth.signOut();
+    // Clear profile cache even if signOut partially fails — safer for account switch
+    clearProfileCache(previousId);
+    clearProfileCache();
     if (signOutError) {
       setError(signOutError);
       throw signOutError;
     }
     setUser(null);
-  }, []);
+  }, [user?.id]);
 
   return {
     user,

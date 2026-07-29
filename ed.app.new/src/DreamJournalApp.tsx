@@ -31,7 +31,20 @@ import { JournalScreen } from './screens/JournalScreen';
 import { InsightsScreen } from './screens/InsightsScreen';
 import { MoreScreen } from './screens/MoreScreen';
 import { RecordScreen } from './screens/RecordScreen';
+import { EducationDetailScreen } from './screens/EducationDetailScreen';
+import { AchievementsScreen } from './screens/AchievementsScreen';
 import { useHashRoute } from './hooks/useHashRoute';
+import {
+  evaluateDreamAchievements,
+  unlockAchievement,
+  type UnlockedAchievement,
+} from './lib/achievements';
+import {
+  captureReferralFromUrl,
+  consumePendingReferral,
+  applyReferralCode,
+} from './lib/referral';
+import { SLEEP_EDUCATION_CONTENT } from './lib/sleepEducation';
 import { getCategoryBadgeClass, getEmotionEmoji } from './utils/dreamPresentation';
 import PhotoUploadFlow from './components/photo-upload/PhotoUploadFlow';
 import type { ExtractedDreamEntry } from './components/photo-upload/PhotoUploadFlow';
@@ -71,6 +84,7 @@ import OnboardingFlow from './components/onboarding/OnboardingFlow';
 import { DailyReflectionCard } from './components/reflection/DailyReflectionCard';
 import { getDailyQuote, getPersonalizedDailyEducation } from './lib/dailyContent';
 import { educationInputsFromProfile } from './lib/onboarding/saveOnboarding';
+import { isOnboardedLocally, markOnboardedLocally } from './lib/onboarding/model';
 import { loadUserProfile } from './lib/profileService';
 import {
   shouldShowDailyReflection,
@@ -103,7 +117,12 @@ const DreamJournalApp = () => {
   const { route, navigate } = useHashRoute();
   const { skin, isThemed } = useSkinFull();
   const { user } = useAuth();
-  const { isAdmin, profile: userProfile, loading: subscriptionLoading } = useSubscription();
+  const {
+    isAdmin,
+    profile: userProfile,
+    loading: subscriptionLoading,
+    refresh: refreshSubscriptionProfile,
+  } = useSubscription();
 
   // ── Dream type ──────────────────────────────────────────────
   type Dream = {
@@ -219,8 +238,14 @@ const DreamJournalApp = () => {
   );
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
-  const [achievements, setAchievements] = useState([]);
-  const [showAchievement, setShowAchievement] = useState(null);
+  const [achievements, setAchievements] = useState<UnlockedAchievement[]>([]);
+  const [showAchievement, setShowAchievement] = useState<{
+    id: string;
+    title: string;
+    description: string;
+    icon: string;
+  } | null>(null);
+  const [educationModuleOverride, setEducationModuleOverride] = useState<string | null>(null);
   const [contextData, setContextData] = useState({
     mood: '',
     yesterdayEvents: '',
@@ -325,7 +350,7 @@ const DreamJournalApp = () => {
   const [hasAcceptedTerms, setHasAcceptedTerms] = useState(false);
 
   // Auto-show onboarding for first-time users (after terms).
-  // Triggered if no onboarded_at in profile, or via localStorage forceOnboarding=1 for QA.
+  // Local flag + remote onboarded_at both count — prevents re-trap after explore/save glitches.
   useEffect(() => {
     const force = localStorage.getItem('forceOnboarding') === '1';
     if (force && !showOnboarding) {
@@ -336,10 +361,12 @@ const DreamJournalApp = () => {
 
     if (!hasAcceptedTerms || showOnboarding || subscriptionLoading) return;
     if (!user || user.isAnonymous) return;
-    if (userProfile && !userProfile.onboarded_at && (route.screen === "home" || route.screen === "reflection")) {
+    if (isOnboardedLocally() || userProfile?.onboarded_at) return;
+    // Only prompt on home (not mid-record / journal / other flows)
+    if (userProfile && (route.screen === 'home' || route.screen === 'reflection')) {
       setShowOnboarding(true);
     }
-  }, [hasAcceptedTerms, showOnboarding, subscriptionLoading, user, userProfile]);
+  }, [hasAcceptedTerms, showOnboarding, subscriptionLoading, user, userProfile, route.screen]);
 
   const detailDream = useMemo(() => {
     if (route.screen !== 'dream' || !route.dreamId) return null;
@@ -474,10 +501,27 @@ const DreamJournalApp = () => {
       try {
         const storedAchievements = await window.storage?.get('achievements');
         if (storedAchievements?.value) {
-          setAchievements(JSON.parse(storedAchievements.value));
+          const parsed = JSON.parse(storedAchievements.value);
+          if (Array.isArray(parsed)) {
+            setAchievements(
+              parsed.map((a: { id: string; unlockedAt?: string }) => ({
+                id: a.id,
+                unlockedAt: a.unlockedAt || new Date().toISOString(),
+              })),
+            );
+          }
         }
       } catch (error) {
         console.log('No achievements yet');
+      }
+      try {
+        captureReferralFromUrl();
+        const pendingRef = consumePendingReferral();
+        if (pendingRef) {
+          applyReferralCode(pendingRef);
+        }
+      } catch {
+        /* ignore referral capture errors */
       }
 
       try {
@@ -1376,74 +1420,43 @@ const DreamJournalApp = () => {
     navigate('home');
   };
 
-  // Check achievements
+  const persistAchievements = async (updated: UnlockedAchievement[]) => {
+    setAchievements(updated);
+    try {
+      await window.storage?.set('achievements', JSON.stringify(updated));
+    } catch (error) {
+      console.error('Achievement storage error:', error);
+    }
+  };
+
+  const unlockAndNotify = async (id: string) => {
+    const result = unlockAchievement(achievements, id);
+    if (result.newlyUnlocked.length === 0) return;
+    await persistAchievements(result.unlocked);
+    const first = result.newlyUnlocked[0];
+    setShowAchievement({
+      id: first.id,
+      title: first.title,
+      description: first.description,
+      icon: first.icon,
+    });
+    setTimeout(() => setShowAchievement(null), 3000);
+  };
+
+  // Check achievements after journal / dream updates
   const checkAchievements = async (newDreams) => {
-    const newAchievements = [];
-    
-    if (newDreams.length === 1 && !achievements.find(a => a.id === 'first_dream')) {
-      newAchievements.push({
-        id: 'first_dream',
-        title: 'Dream Keeper',
-        description: 'Recorded your first dream',
-        icon: '🌟',
-        unlockedAt: new Date().toISOString()
-      });
-    }
-    
-    const streak = calculateStreak(newDreams);
-    if (streak >= 7 && !achievements.find(a => a.id === 'week_streak')) {
-      newAchievements.push({
-        id: 'week_streak',
-        title: 'Dedicated Dreamer',
-        description: 'Recorded dreams for 7 days straight',
-        icon: '🔥',
-        unlockedAt: new Date().toISOString()
-      });
-    }
-    
-    if (newDreams.length >= 10 && !achievements.find(a => a.id === 'ten_dreams')) {
-      newAchievements.push({
-        id: 'ten_dreams',
-        title: 'Dream Explorer',
-        description: 'Recorded 10 dreams',
-        icon: '🎯',
-        unlockedAt: new Date().toISOString()
-      });
-    }
-    
-    if (newDreams.some(d => d.category === 'lucid') && !achievements.find(a => a.id === 'first_lucid')) {
-      newAchievements.push({
-        id: 'first_lucid',
-        title: 'Lucid Awakening',
-        description: 'Recorded your first lucid dream',
-        icon: '✨',
-        unlockedAt: new Date().toISOString()
-      });
-    }
+    const result = evaluateDreamAchievements(achievements, newDreams, calculateStreak);
+    if (result.newlyUnlocked.length === 0) return;
 
-    const highRarityDreams = newDreams.filter(d => d.assetMetadata?.rarityScore > 0.8);
-    if (highRarityDreams.length > 0 && !achievements.find(a => a.id === 'rare_asset')) {
-      newAchievements.push({
-        id: 'rare_asset',
-        title: 'Rare Dreamer',
-        description: 'Created a high-rarity dream asset',
-        icon: '💎',
-        unlockedAt: new Date().toISOString()
-      });
-    }
-
-    if (newAchievements.length > 0) {
-      const updatedAchievements = [...achievements, ...newAchievements];
-      setAchievements(updatedAchievements);
-      try {
-        await window.storage.set('achievements', JSON.stringify(updatedAchievements));
-      } catch (error) {
-        console.error('Achievement storage error:', error);
-      }
-      
-      setShowAchievement(newAchievements[0]);
-      setTimeout(() => setShowAchievement(null), 3000);
-    }
+    await persistAchievements(result.unlocked);
+    const first = result.newlyUnlocked[0];
+    setShowAchievement({
+      id: first.id,
+      title: first.title,
+      description: first.description,
+      icon: first.icon,
+    });
+    setTimeout(() => setShowAchievement(null), 3000);
   };
 
   const findSimilarDreams = (dream) => {
@@ -1847,7 +1860,8 @@ const DreamJournalApp = () => {
             }}
             onJournalAboutQuote={() => {
               setShowDailyReflection(false);
-              navigate('more');
+              dismissReflectionForToday();
+              navigate('record');
             }}
             onGoHome={() => {
               dismissReflectionForToday();
@@ -1881,12 +1895,29 @@ const DreamJournalApp = () => {
           />
         )}
 
+        {route.screen === 'education' && (
+          <EducationDetailScreen
+            education={
+              (educationModuleOverride
+                ? SLEEP_EDUCATION_CONTENT.find((m) => m.id === educationModuleOverride)
+                : null) || dailyEducation
+            }
+            onBack={() => {
+              setEducationModuleOverride(null);
+              navigate('home');
+            }}
+            onSelectModule={(mod) => setEducationModuleOverride(mod.id)}
+          />
+        )}
+
         {route.screen === 'tracker' && (
           <TrackerScreen
             dreams={dreams}
             settings={settings}
             wearableData={wearableData}
             onOpenDream={(dreamId) => navigate('dream', dreamId)}
+            onConnectTracker={() => navigate('wearables')}
+            onOpenEducation={() => navigate('education')}
             onLogDream={(dateKey) => {
               // Actually log a dream for this tracker date (fixes non-working + symbol / log from tracker)
               const dreamId = `dream-tracker-${dateKey}-${Date.now()}`;
@@ -2108,47 +2139,12 @@ const DreamJournalApp = () => {
         )}
 
         {route.screen === 'achievements' && (
-          <div className="space-y-4">
-            <h2 className="text-2xl font-bold mb-4">Achievements</h2>
-            
-            {achievements.length === 0 ? (
-              <EmptyState icon={Award} message="Complete challenges to unlock achievements" />
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {achievements.map(achievement => (
-                  <div 
-                    key={achievement.id}
-                    className="bg-gradient-to-br from-yellow-600 to-orange-600 rounded-xl p-4 shadow-lg"
-                  >
-                    <div className="text-4xl mb-2">{achievement.icon}</div>
-                    <h3 className="font-bold text-lg">{achievement.title}</h3>
-                    <p className="text-sm text-yellow-100">{achievement.description}</p>
-                    <div className="text-xs text-yellow-200 mt-2">
-                      Unlocked {new Date(achievement.unlockedAt).toLocaleDateString()}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="bg-white bg-opacity-10 backdrop-blur-sm rounded-xl p-4 border border-white border-opacity-10 mt-6">
-              <h3 className="font-semibold mb-3">Coming Soon...</h3>
-              <div className="space-y-2 text-sm text-purple-200">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center">🏆</div>
-                  <div>Dream Master - Record 50 dreams</div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center">🌙</div>
-                  <div>Night Owl - Record dreams for 30 days straight</div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center">💎</div>
-                  <div>Rare Collection - 5 high-rarity dream assets</div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <AchievementsScreen
+            achievements={achievements}
+            onShareReferral={() => {
+              // Sharing invite counts toward social virality (not first asset share)
+            }}
+          />
         )}
 
         {route.screen === 'privacy' && (
@@ -2952,13 +2948,22 @@ const DreamJournalApp = () => {
 
       {/* Profile Hub Modal */}
       {showProfile && (
-        <ProfileHub onClose={() => setShowProfile(false)} navigate={navigate} />
+        <ProfileHub
+          onClose={() => setShowProfile(false)}
+          navigate={navigate}
+          onFriendAdded={() => {
+            void unlockAndNotify('first_friend');
+          }}
+        />
       )}
 
       <ShareModal
         dream={selectedDream}
         isOpen={showShareModal && !!selectedDream}
         onClose={() => setShowShareModal(false)}
+        onShared={() => {
+          void unlockAndNotify('first_share');
+        }}
       />
 
       {/* Achievement Popup */}
@@ -2968,7 +2973,7 @@ const DreamJournalApp = () => {
               <div className="text-3xl">{showAchievement.icon}</div>
               <div>
                 <div className="font-semibold text-ink text-sm">
-                  {showAchievement.title === 'Journal entry saved' ? 'Saved to your journal' : 'Lovely milestone'}
+                  {showAchievement.icon} {showAchievement.title}
                 </div>
                 <div className="text-xs text-muted mt-0.5 leading-relaxed">{showAchievement.description}</div>
               </div>
@@ -3078,29 +3083,25 @@ const DreamJournalApp = () => {
       {/* Onboarding Flow (full screen for first-run setup / goals / sleep profile) */}
       {showOnboarding && (
         <OnboardingFlow
-          onComplete={() => {
+          onComplete={({ action }) => {
             setShowOnboarding(false);
-            // Refresh education preferences + send user to first capture
+            markOnboardedLocally();
+            void refreshSubscriptionProfile();
             void loadUserProfile().then((p) => {
               setEducationProfile(
                 educationInputsFromProfile({
                   interests: p.interests,
                   dream_goals: p.dreamGoals,
+                  onboarding_goals: undefined,
                 }),
               );
             });
-            navigate('record');
-          }}
-          onSkip={() => {
-            setShowOnboarding(false);
-            void loadUserProfile().then((p) => {
-              setEducationProfile(
-                educationInputsFromProfile({
-                  interests: p.interests,
-                  dream_goals: p.dreamGoals,
-                }),
-              );
-            });
+            // first_dream → capture; explore / skip → home (never record)
+            if (action === 'first_dream') {
+              navigate('record');
+            } else {
+              navigate('home');
+            }
           }}
         />
       )}

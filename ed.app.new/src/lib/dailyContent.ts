@@ -86,15 +86,16 @@ export function getPersonalizedDailyEducation(opts?: {
   const interestIds = opts?.interestIds ?? [];
   const tags = new Set(deriveEducationTags(goalIds, interestIds));
 
-  // also soft-match free-text labels
+  // Soft-match free-text labels (lucidity only if user literally mentioned it)
   const labelBlob = (opts?.interestLabels ?? []).join(' ').toLowerCase();
-  if (/lucid/.test(labelBlob)) tags.add('lucid_dreaming').add('dreams');
+  if (/\blucid\b/.test(labelBlob)) tags.add('lucid_dreaming').add('dreams');
   if (/recall|journal/.test(labelBlob)) tags.add('journaling_habit').add('dreams');
   if (/sleep|hygiene|circadian/.test(labelBlob)) {
     tags.add('sleep_hygiene');
     tags.add('circadian');
   }
-  if (/symbol|jung|psych/.test(labelBlob)) tags.add('psychology').add('dreams');
+  if (/symbol|jung|psych|meaning|understand/.test(labelBlob)) tags.add('psychology').add('dreams');
+  if (/visuali[sz]|image|art|keepsake/.test(labelBlob)) tags.add('creativity').add('dreams');
   if (/meditat|wind/.test(labelBlob)) tags.add('meditation').add('sleep_hygiene');
   if (/creat/.test(labelBlob)) tags.add('creativity').add('dreams');
   if (/nightmare|anxiet/.test(labelBlob)) tags.add('psychology').add('dreams');

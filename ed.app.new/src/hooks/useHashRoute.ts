@@ -18,7 +18,8 @@ export type RouteScreen =
   | 'more'
   | 'import-photos'
   | 'admin'
-  | 'video-journal';
+  | 'video-journal'
+  | 'education';
 
 export type AppRoute = {
   screen: RouteScreen;
@@ -56,6 +57,7 @@ function parseHash(): AppRoute {
     'import-photos',
     'admin',
     'video-journal',
+    'education',
   ];
   if (screen === 'reflection') {
     return { screen: 'home', dreamId: null, shareSlug: null };

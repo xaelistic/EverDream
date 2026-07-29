@@ -254,6 +254,7 @@ export default function PhoneTestTools() {
   };
 
   const forceOnboarding = () => {
+    localStorage.removeItem('everdream_onboarded');
     localStorage.setItem('forceOnboarding', '1');
     addLog('✅ Onboarding queued — reload the page');
   };
