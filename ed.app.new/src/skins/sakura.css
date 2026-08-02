@@ -28,8 +28,9 @@
   --glass-blur: 10px;
   --glass-border: rgba(244, 168, 184, 0.28);
   --glass-shadow: 0 1px 8px rgba(244, 168, 184, 0.12), 0 1px 3px rgba(0, 0, 0, 0.03);
-  --header-bg: rgba(255, 245, 247, 0.94);
-  --nav-bg: rgba(255, 245, 247, 0.98);
+  /* Near-solid so header text stays readable over dream images */
+  --header-bg: rgba(255, 252, 253, 0.97);
+  --nav-bg: rgba(255, 252, 253, 0.98);
 
   --font-ui: 'Inter', system-ui, sans-serif;
   --font-dream: 'Playfair Display', Georgia, serif;

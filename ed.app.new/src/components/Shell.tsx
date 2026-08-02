@@ -42,7 +42,7 @@ function isNavActive(active: RouteScreen, screen: RouteScreen): boolean {
     return active === 'home' || active === 'reflection';
   }
   if (screen === 'more') {
-    return ['more', 'wearables', 'privacy', 'achievements', 'assets', 'import-photos', 'admin', 'settings'].includes(active);
+    return ['more', 'wearables', 'privacy', 'achievements', 'assets', 'import-photos', 'admin', 'settings', 'favourites'].includes(active);
   }
   return active === screen;
 }
@@ -114,7 +114,7 @@ export default function Shell({ active, onNavigate, onOpenProfile, processingDre
 
   return (
     <div className={`min-h-screen flex flex-col font-sans ${isThemed ? 'text-[var(--text-primary)]' : 'text-ink'}`}>
-      <header className={`sticky top-0 z-40 border-b backdrop-blur-md ${isThemed ? 'border-[var(--glass-border)] bg-[var(--header-bg)]' : 'border-line bg-cream/95'}`}>
+      <header className={`sticky top-0 z-40 border-b backdrop-blur-xl ${isThemed ? 'border-[var(--glass-border)] bg-[var(--header-bg)]' : 'border-line bg-white/98'}`}>
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
             <div className={`w-9 h-9 rounded-full border flex items-center justify-center shadow-paper shrink-0 ${isThemed ? 'bg-[var(--glass-bg)] border-[var(--glass-border)]' : 'bg-parchment border-line'}`}>
@@ -176,7 +176,7 @@ export default function Shell({ active, onNavigate, onOpenProfile, processingDre
 
       <main className="flex-1 w-full max-w-lg mx-auto px-4 py-5 pb-28">{children}</main>
 
-      <nav className={`fixed bottom-0 inset-x-0 z-40 border-t backdrop-blur-md pb-[env(safe-area-inset-bottom,0px)] ${isThemed ? 'border-[var(--glass-border)] bg-[var(--nav-bg)]' : 'border-line bg-cream/98'}`}>
+      <nav className={`fixed bottom-0 inset-x-0 z-40 border-t backdrop-blur-xl pb-[env(safe-area-inset-bottom,0px)] ${isThemed ? 'border-[var(--glass-border)] bg-[var(--nav-bg)]' : 'border-line bg-white/98'}`}>
         <div className="max-w-lg mx-auto px-2 pt-2 pb-3 flex justify-around items-end">
           {/* Left nav items: Home, Journal */}
           {navItems.slice(0, 2).map(renderNavButton)}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Share2, Video } from 'lucide-react';
+import { Sparkles, Share2, Video, Star } from 'lucide-react';
 import { getEmotionEmoji } from '../../utils/dreamPresentation';
 
 export interface DreamCardProps {
@@ -20,13 +20,23 @@ export interface DreamCardProps {
   getEmotionEmoji: (emotion: string) => string;
   onShare: (dream: unknown) => void;
   onClick: () => void;
+  isFavourite?: boolean;
+  onToggleFavourite?: () => void;
 }
 
 /**
  * DreamCard — Compact dream card for the journal list.
  * Shows category badge, emotion, date, nugget preview, and AI analysis indicator.
  */
-export function DreamCard({ dream, getCategoryBadgeClass, getEmotionEmoji: getEmoji, onShare, onClick }: DreamCardProps) {
+export function DreamCard({
+  dream,
+  getCategoryBadgeClass,
+  getEmotionEmoji: getEmoji,
+  onShare,
+  onClick,
+  isFavourite = false,
+  onToggleFavourite,
+}: DreamCardProps) {
   const formattedDate = (() => {
     try {
       const date = new Date(dream.date);
@@ -46,6 +56,7 @@ export function DreamCard({ dream, getCategoryBadgeClass, getEmotionEmoji: getEm
     <div
       onClick={onClick}
       style={{
+        position: 'relative',
         background: 'var(--glass-bg, rgba(255,255,255,0.65))',
         backdropFilter: 'blur(8px)',
         border: '1px solid var(--glass-border, rgba(168,237,220,0.22))',
@@ -64,6 +75,39 @@ export function DreamCard({ dream, getCategoryBadgeClass, getEmotionEmoji: getEm
         e.currentTarget.style.boxShadow = 'var(--glass-shadow, 0 1px 6px rgba(168,237,220,0.10))';
       }}
     >
+      {onToggleFavourite && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleFavourite();
+          }}
+          style={{
+            position: 'absolute',
+            top: 12,
+            right: 12,
+            zIndex: 2,
+            width: 36,
+            height: 36,
+            borderRadius: '9999px',
+            background: 'rgba(255,255,255,0.92)',
+            border: '1px solid var(--glass-border, rgba(168,237,220,0.22))',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            padding: 0,
+          }}
+          aria-label={isFavourite ? 'Remove from favourites' : 'Add to favourites'}
+          aria-pressed={isFavourite}
+        >
+          <Star
+            size={16}
+            color={isFavourite ? '#f59e0b' : '#9b96b0'}
+            fill={isFavourite ? '#fbbf24' : 'none'}
+          />
+        </button>
+      )}
       {/* Video Thumbnail or Generated Image */}
       {dream.videoCapture?.url ? (
         <div style={{ position: 'relative', marginBottom: '12px', borderRadius: '12px', overflow: 'hidden' }}>

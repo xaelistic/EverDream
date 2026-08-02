@@ -1,8 +1,8 @@
 import { useEffect, useState, useRef } from 'react';
-import { ArrowLeft, Upload, Award, Shield, Eye, Camera, MessageCircle } from 'lucide-react';
+import { ArrowLeft, Upload, Award, Shield, Eye, Camera, MessageCircle, Star } from 'lucide-react';
 import { FEATURE_NFT_UI_ENABLED } from '../config/features';
 import DreamVisualizer from '../components/dreams/DreamVisualizer';
-import type { EmotionCapture } from './face/FacialEmotionDetector';
+import type { EmotionCapture } from '../components/face/FacialEmotionDetector';
 import { mediaStorageManager } from '../lib/mediaStorage';
 import { useSubscription } from '../hooks/use-subscription';
 
@@ -69,6 +69,8 @@ interface DreamDetailScreenProps {
   getCategoryBadgeClass: (category: string) => string;
   getEmotionEmoji: (emotion: string) => string;
   onImageGenerated: (asset: GeneratedImage) => void;
+  isFavourite?: boolean;
+  onToggleFavourite?: () => void;
 }
 
 export function DreamDetailScreen({
@@ -80,6 +82,8 @@ export function DreamDetailScreen({
   getCategoryBadgeClass,
   getEmotionEmoji,
   onImageGenerated,
+  isFavourite = false,
+  onToggleFavourite,
 }: DreamDetailScreenProps) {
   const { isAdmin } = useSubscription();
   const [resolvedVideoUrl, setResolvedVideoUrl] = useState<string | null>(
@@ -136,14 +140,30 @@ export function DreamDetailScreen({
 
   return (
     <div className="space-y-5">
-      <button
-        type="button"
-        onClick={() => navigate('journal')}
-        className="inline-flex items-center gap-2 text-sm font-medium text-muted hover:text-ink"
-        aria-label="Back to journal"
-      >
-        <ArrowLeft className="w-4 h-4" strokeWidth={1.75} /> Journal
-      </button>
+      <div className="flex items-center justify-between gap-3">
+        <button
+          type="button"
+          onClick={() => navigate('journal')}
+          className="inline-flex items-center gap-2 text-sm font-medium text-muted hover:text-ink"
+          aria-label="Back to journal"
+        >
+          <ArrowLeft className="w-4 h-4" strokeWidth={1.75} /> Journal
+        </button>
+        {onToggleFavourite && (
+          <button
+            type="button"
+            onClick={onToggleFavourite}
+            className="w-10 h-10 rounded-full border border-line bg-cream hover:bg-parchment shadow-paper flex items-center justify-center transition"
+            aria-label={isFavourite ? 'Remove from favourites' : 'Add to favourites'}
+            aria-pressed={isFavourite}
+          >
+            <Star
+              className={`w-5 h-5 ${isFavourite ? 'text-amber-500 fill-amber-400' : 'text-muted'}`}
+              strokeWidth={1.75}
+            />
+          </button>
+        )}
+      </div>
       <div className="rounded-3xl border border-line bg-cream shadow-lift overflow-hidden">
         <div className="space-y-4 p-5 sm:p-6">
           {/* Dream Visualizer — "Visualize Dream" button + image display */}

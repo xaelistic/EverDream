@@ -22,6 +22,7 @@ import {
   Camera,
   Check,
   LineChart,
+  Star,
 } from 'lucide-react';
 import Shell from './components/Shell';
 import { TrackerScreen } from './components/tracker/TrackerScreen';
@@ -46,6 +47,11 @@ import {
 } from './lib/referral';
 import { SLEEP_EDUCATION_CONTENT } from './lib/sleepEducation';
 import { getCategoryBadgeClass, getEmotionEmoji } from './utils/dreamPresentation';
+import {
+  loadFavouriteIds,
+  saveFavouriteIds,
+  toggleFavouriteId,
+} from './lib/favourites';
 import PhotoUploadFlow from './components/photo-upload/PhotoUploadFlow';
 import type { ExtractedDreamEntry } from './components/photo-upload/PhotoUploadFlow';
 import { generateDreamImage } from './modules/sleep/dreamAssetGenerator';
@@ -236,8 +242,8 @@ const DreamJournalApp = () => {
     () => dreams.find((d) => !d.isSample) ?? null,
     [dreams],
   );
-  const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
+  const [favouriteIds, setFavouriteIds] = useState<string[]>([]);
   const [achievements, setAchievements] = useState<UnlockedAchievement[]>([]);
   const [showAchievement, setShowAchievement] = useState<{
     id: string;
@@ -513,6 +519,13 @@ const DreamJournalApp = () => {
         }
       } catch (error) {
         console.log('No achievements yet');
+      }
+
+      try {
+        const favs = await loadFavouriteIds();
+        setFavouriteIds(favs);
+      } catch {
+        console.log('No favourites yet');
       }
       try {
         captureReferralFromUrl();
@@ -1766,13 +1779,23 @@ const DreamJournalApp = () => {
     ];
   };
 
-  const filteredDreams = dreams.filter(dream => {
-    const matchesSearch = dream.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         dream.nugget?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         dream.themes?.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredDreams = dreams.filter((dream) => {
     const matchesCategory = filterCategory === 'all' || dream.category === filterCategory;
-    return matchesSearch && matchesCategory;
+    return matchesCategory;
   });
+
+  const favouriteDreams = useMemo(
+    () => dreams.filter((d) => favouriteIds.includes(d.id)),
+    [dreams, favouriteIds],
+  );
+
+  const handleToggleFavourite = useCallback((dreamId: string) => {
+    setFavouriteIds((prev) => {
+      const next = toggleFavouriteId(prev, dreamId);
+      void saveFavouriteIds(next);
+      return next;
+    });
+  }, []);
 
   const insights = getSleepInsights();
   const recommendations = getCircadianRecommendations();
@@ -1874,8 +1897,6 @@ const DreamJournalApp = () => {
         {route.screen === 'journal' && (
           <JournalScreen
             dreams={dreams}
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
             filterCategory={filterCategory}
             setFilterCategory={setFilterCategory}
             isLoadingDreams={isLoadingDreams}
@@ -1888,10 +1909,39 @@ const DreamJournalApp = () => {
             }}
             onNavigate={navigate}
             onShare={shareDream}
+            favouriteIds={favouriteIds}
+            onToggleFavourite={handleToggleFavourite}
             getCategoryBadgeClass={getCategoryBadgeClass}
             getEmotionEmoji={getEmotionEmoji}
             ErrorBanner={ErrorBanner}
             LoadingOverlay={LoadingOverlay}
+          />
+        )}
+
+        {route.screen === 'favourites' && (
+          <JournalScreen
+            dreams={favouriteDreams}
+            filterCategory="all"
+            setFilterCategory={() => {}}
+            isLoadingDreams={isLoadingDreams}
+            dreamError={dreamError}
+            onDismissError={() => setDreamError(null)}
+            onRetry={() => {
+              setDreamError(null);
+              setIsLoadingDreams(true);
+              window.location.reload();
+            }}
+            onNavigate={navigate}
+            onShare={shareDream}
+            favouriteIds={favouriteIds}
+            onToggleFavourite={handleToggleFavourite}
+            getCategoryBadgeClass={getCategoryBadgeClass}
+            getEmotionEmoji={getEmotionEmoji}
+            ErrorBanner={ErrorBanner}
+            LoadingOverlay={LoadingOverlay}
+            title="Favourites"
+            subtitle="Dreams you have starred for quick return."
+            hideFilter
           />
         )}
 
@@ -2446,13 +2496,35 @@ const DreamJournalApp = () => {
       {/* Dream entry */}
       {route.screen === 'dream' && detailDream && (
           <div className="space-y-5">
-            <button
-              type="button"
-              onClick={() => navigate('journal')}
-              className="inline-flex items-center gap-2 text-sm font-medium text-muted hover:text-ink"
-            >
-              <ArrowLeft className="w-4 h-4" strokeWidth={1.75} /> Journal
-            </button>
+            <div className="flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => navigate('journal')}
+                className="inline-flex items-center gap-2 text-sm font-medium text-muted hover:text-ink"
+              >
+                <ArrowLeft className="w-4 h-4" strokeWidth={1.75} /> Journal
+              </button>
+              <button
+                type="button"
+                onClick={() => handleToggleFavourite(detailDream.id)}
+                className="w-10 h-10 rounded-full border border-line bg-cream hover:bg-parchment shadow-paper flex items-center justify-center transition"
+                aria-label={
+                  favouriteIds.includes(detailDream.id)
+                    ? 'Remove from favourites'
+                    : 'Add to favourites'
+                }
+                aria-pressed={favouriteIds.includes(detailDream.id)}
+              >
+                <Star
+                  className={`w-5 h-5 ${
+                    favouriteIds.includes(detailDream.id)
+                      ? 'text-amber-500 fill-amber-400'
+                      : 'text-muted'
+                  }`}
+                  strokeWidth={1.75}
+                />
+              </button>
+            </div>
           <div className="rounded-3xl border border-line bg-cream shadow-lift overflow-hidden">
           <div className="space-y-4 p-5 sm:p-6">
             {/* Dream Visualizer — "Visualize Dream" button + image display */}

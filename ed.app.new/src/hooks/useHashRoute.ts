@@ -16,6 +16,7 @@ export type RouteScreen =
   | 'achievements'
   | 'assets'
   | 'more'
+  | 'favourites'
   | 'import-photos'
   | 'admin'
   | 'video-journal'
@@ -54,6 +55,7 @@ function parseHash(): AppRoute {
     'achievements',
     'assets',
     'more',
+    'favourites',
     'import-photos',
     'admin',
     'video-journal',

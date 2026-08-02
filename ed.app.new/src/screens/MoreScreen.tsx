@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Palette, Brain, Camera, Watch, Shield, Award, Eye, ChevronRight } from 'lucide-react';
+import { Palette, Brain, Camera, Watch, Award, Eye, ChevronRight, Star } from 'lucide-react';
 import { FEATURE_NFT_UI_ENABLED, FEATURE_SKINS_UI_ENABLED } from '../config/features';
 import type { SkinId } from '../contexts/SkinContext';
 import { getSkinMeta } from '../lib/skins';
@@ -28,7 +28,7 @@ export function MoreScreen({ skin, isThemed, navigate }: MoreScreenProps) {
       <div>
         <h2 className="font-serif text-2xl font-medium text-ink">More</h2>
         <p className="text-sm text-muted mt-1">
-          Sleep sync, keepsakes, milestones, and your data choices.
+          Favourites, sleep sync, milestones, and your data choices.
         </p>
       </div>
 
@@ -75,10 +75,11 @@ export function MoreScreen({ skin, isThemed, navigate }: MoreScreenProps) {
         </div>
         <div className="divide-y divide-[var(--glass-border)]">
           {[
+            { label: 'Favourites', sub: 'Dreams you have starred', screen: 'favourites', icon: Star },
             { label: 'Insights', sub: 'Patterns & correlations', screen: 'dashboard', icon: Brain },
             { label: 'Import journal photos', sub: 'OCR from pictures', screen: 'import-photos', icon: Camera },
             { label: 'Sleep & wearables', sub: 'Sessions and sync', screen: 'wearables', icon: Watch },
-            { label: 'Keepsakes', sub: 'Images & provenance', screen: 'assets', icon: Shield },
+            // Keepsakes hidden for now — not needed in current product surface
             ...(FEATURE_NFT_UI_ENABLED
               ? [
                   { label: 'XAEL Exchange', sub: 'Trade qualia, energy & compute', screen: 'exchange', icon: Award },
