@@ -102,7 +102,7 @@ import LoadingScreen from './components/loading-screen';
 import type { DreamAsset } from './modules/sleep/types';
 import { initDreamService, syncFromSupabase } from './lib/dreamService';
 import { generateDreamId, toDreamsUpsertRow } from './lib/dreamsRecord';
-import { persistUserMedia, signedMediaUrl } from './lib/mediaPersist';
+import { persistUserMedia } from './lib/mediaPersist';
 import { mediaStorageManager } from './lib/mediaStorage';
 import { 
   updateUserProfileFromDream, 
