@@ -152,14 +152,12 @@ export default function ShareModal({ dream, isOpen, onClose, onShared }: ShareMo
       const result = await createPublicShareLink(shareable, payload);
       if (result.ok && result.url) {
         await copyToClipboard(result.url);
-        setStatus('Link copied.');
+        setStatus('Public link copied.');
         onShared?.();
         return;
       }
 
-      await copyToClipboard(payload.url);
-      setStatus(result.message || 'Link copied.');
-      onShared?.();
+      setStatus(result.message || 'Could not create a public link.');
     } catch {
       setStatus('Could not copy link.');
     } finally {

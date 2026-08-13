@@ -88,6 +88,25 @@ export async function shareNative(payload: import('../socialShare').SharePayload
   return { ok: true, method: 'fallback', message: 'Copied to clipboard' };
 }
 
+async function functionsErrorMessage(
+  error: unknown,
+  data?: { error?: string } | null,
+): Promise<string> {
+  if (data?.error) return data.error;
+  const err = error as { message?: string; context?: Response } | null;
+  if (err?.context) {
+    try {
+      const body = await err.context.clone().json() as { error?: string };
+      if (body?.error) return body.error;
+    } catch {
+      /* ignore */
+    }
+  }
+  const raw = err?.message || 'Share link failed';
+  if (/non-2xx/i.test(raw)) return 'Could not create a public share link. Try again in a moment.';
+  return raw;
+}
+
 export async function createPublicShareLink(
   dream: import('../socialShare').ShareableDream,
   payload: import('../socialShare').SharePayload,
@@ -102,7 +121,7 @@ export async function createPublicShareLink(
     },
   });
 
-  if (error) return { ok: false, message: error.message };
+  if (error) return { ok: false, message: await functionsErrorMessage(error, data) };
   if (!data?.publicUrl) return { ok: false, message: data?.error || 'Share link not created' };
   return { ok: true, url: data.publicUrl };
 }
