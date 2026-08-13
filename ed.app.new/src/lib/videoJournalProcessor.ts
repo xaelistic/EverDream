@@ -12,6 +12,7 @@ import { transcribeAudio as transcribeWithWhisper } from './transcriptionWhisper
 import { analyzeDream, type DreamAnalysis } from './dream-analyzer';
 import { detectDreamScenes, type DreamScene } from './dreamScenes';
 import { normalizeCategory, normalizeEmotion, deriveDreamTitle } from './dreamClassify';
+import { cleanDreamTranscript, dreamTellingFromTranscript } from './cleanDreamTranscript';
 
 export type DreamProcessStep = 'transcribe' | 'analyse' | 'image' | 'complete';
 import { generateDreamImage } from '../modules/sleep/dreamAssetGenerator';
@@ -278,7 +279,7 @@ async function transcribeMediaBlob(
     const result = await transcribeWithWhisper(blob, { onProgress, language: 'en' });
     if (result.text && result.text.length > 5 && result.source !== 'fallback') {
       return {
-        text: result.text.trim(),
+        text: dreamTellingFromTranscript(result.text),
         source: result.source === 'hf-whisper' ? 'whisper' : 'web-speech',
       };
     }
@@ -307,7 +308,7 @@ async function transcribeVideoJournal(
     const result = await transcribeWithWhisper(audioBlob, { onProgress, language: 'en' });
     if (result.text && result.text.length > 5 && result.source !== 'fallback') {
       return {
-        text: result.text.trim(),
+        text: dreamTellingFromTranscript(result.text),
         source: result.source === 'hf-whisper' ? 'whisper' : 'web-speech',
       };
     }
@@ -327,11 +328,6 @@ function mergeEmotionIntoAnalysis(
 
   if (capturedEmotion?.dominantEmotion) {
     emotion = capturedEmotion.dominantEmotion;
-    const emoNote = ` (Facial expression during recording: ${capturedEmotion.dominantEmotion}, confidence ${Math.round((capturedEmotion.confidence || 0) * 100)}%)`;
-    if (analysis.interpretation?.meaning) {
-      analysis.interpretation.meaning += emoNote;
-    }
-    analysis.narrative = (analysis.narrative || '') + emoNote;
     logStage('emotion_merged', { emotion: capturedEmotion.dominantEmotion });
   }
 
@@ -397,7 +393,7 @@ export async function processVideoJournal(
   let finalAnalysis: DreamAnalysis;
   try {
     logStage('analysis_start');
-    finalAnalysis = await analyzeDream(transcriptText);
+    finalAnalysis = await analyzeDream(dreamTellingFromTranscript(transcriptText));
 
     // Enrich with profile
     const profile = await loadCurrentUserProfile();
@@ -411,15 +407,12 @@ export async function processVideoJournal(
       themes: ['video', 'personal-recording'],
       emotion: normalizeEmotion(undefined, { text: transcriptText, face: input.capturedEmotion?.dominantEmotion }),
       symbols: [],
-      narrative:
-        transcriptText.length > 50
-          ? transcriptText
-          : 'The dreamer recorded a video description of their dream.',
+      narrative: dreamTellingFromTranscript(transcriptText),
       nugget: deriveDreamTitle(undefined, transcriptText),
       interpretation: {
         symbols: {},
-        meaning: 'Personal video reflection captured immediately upon waking.',
-        commonPattern: 'Video journals provide rich emotional context.',
+        meaning: 'A first-person telling of the dream as recalled on waking.',
+        commonPattern: 'Dreams like this often show up after a vivid night of sleep.',
       },
     };
   }
@@ -433,6 +426,7 @@ export async function processVideoJournal(
     text: transcriptText || analysis.narrative,
     valence: analysis.valence,
   });
+  analysis.narrative = cleanDreamTranscript(analysis.narrative || '');
   analysis.category = normalizeCategory(analysis.category, transcriptText || analysis.narrative, analysis.valence);
   analysis.nugget = deriveDreamTitle(analysis.nugget, analysis.narrative || transcriptText);
 
@@ -476,7 +470,7 @@ export async function processVideoJournal(
   const dream: VideoJournalDream = {
     id: crypto.randomUUID?.() || `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     date: new Date().toISOString(),
-    content: transcriptText,
+    content: dreamTellingFromTranscript(transcriptText, analysis.narrative),
     category: analysis.category,
     themes: analysis.themes,
     emotion: finalEmotion,
@@ -585,7 +579,8 @@ export async function processAudioJournal(
   onStep?.('analyse');
   let finalAnalysis: DreamAnalysis;
   try {
-    finalAnalysis = await analyzeDream(transcriptText);
+    finalAnalysis = await analyzeDream(dreamTellingFromTranscript(transcriptText));
+    finalAnalysis.narrative = cleanDreamTranscript(finalAnalysis.narrative || '');
     finalAnalysis.category = normalizeCategory(finalAnalysis.category, transcriptText, finalAnalysis.valence);
     finalAnalysis.emotion = normalizeEmotion(finalAnalysis.emotion, { text: transcriptText, valence: finalAnalysis.valence });
     finalAnalysis.nugget = deriveDreamTitle(finalAnalysis.nugget, finalAnalysis.narrative || transcriptText);
@@ -593,15 +588,15 @@ export async function processAudioJournal(
     logError('analysis', error);
     finalAnalysis = {
       category: normalizeCategory(undefined, transcriptText),
-      themes: ['audio', 'voice-note', 'personal-recording'],
+      themes: ['audio', 'voice-note'],
       emotion: normalizeEmotion(undefined, { text: transcriptText }),
       symbols: [],
-      narrative: transcriptText.length > 50 ? transcriptText : 'Voice journal of a dream description.',
+      narrative: dreamTellingFromTranscript(transcriptText),
       nugget: deriveDreamTitle(undefined, transcriptText),
       interpretation: {
         symbols: {},
-        meaning: 'Personal voice reflection captured on waking.',
-        commonPattern: 'Voice journals capture tone and immediacy.',
+        meaning: 'A first-person telling of the dream as recalled on waking.',
+        commonPattern: 'Dreams like this often show up after a vivid night of sleep.',
       },
     };
   }
@@ -639,7 +634,7 @@ export async function processAudioJournal(
   const dream: AudioJournalDream = {
     id: crypto.randomUUID?.() || `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     date: new Date().toISOString(),
-    content: transcriptText,
+    content: dreamTellingFromTranscript(transcriptText, finalAnalysis.narrative),
     category: finalAnalysis.category,
     themes: finalAnalysis.themes,
     emotion: finalAnalysis.emotion || 'wonder',

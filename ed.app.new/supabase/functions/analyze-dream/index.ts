@@ -91,6 +91,12 @@ Return ONLY valid JSON (no markdown) with this exact shape:
 
 valence is -1 (distress) to 1 (ease).
 
+The input may be a messy voice memo.
+- Never write Speaker 1, Speaker 2, speaker labels, or timestamps.
+- Drop fillers (um, uh, like, you know, I mean).
+- Drop any talk about recording, filming, transcribing, or the app.
+- narrative and nugget are the dream itself only, first person present tense.
+
 Dream:
 `;
 
@@ -129,6 +135,23 @@ function emptyAnalysis(): DreamAnalysis {
     valence: 0,
     interpretation: { symbols: {}, meaning: '', commonPattern: '' },
   };
+}
+
+function stripTranscriptMeta(raw: string): string {
+  let text = (raw || '').replace(/\r\n/g, '\n');
+  text = text.replace(/^\s*(?:\[?\s*)?(?:speaker|spk)[\s_-]*\d+\s*\]?\s*[:.\-–—]?\s*/gim, '');
+  text = text.replace(/\b(?:speaker|spk)[\s_-]*\d+\b[:.\-–—]?\s*/gi, '');
+  text = text.replace(/\[?\b\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+)?\b\]?/g, '');
+  text = text.replace(
+    /[^.!?\n]*(?:\b(?:record(?:ing|ed)?|filming|video journal|audio journal|voice memo|transcript|transcrib(?:e|ing)|speaker\s*\d+)\b)[^.!?\n]*[.!?]?/gi,
+    ' ',
+  );
+  text = text.replace(/\b(?:um+|uh+|er+|ah+|hmm+|you know|i mean)\b[,.]?/gi, ' ');
+  text = text.replace(/\s+/g, ' ').trim();
+  if (!text) return '';
+  text = text.charAt(0).toUpperCase() + text.slice(1);
+  if (!/[.!?…]$/.test(text)) text += '.';
+  return text;
 }
 
 function clamp(n: number, min: number, max: number): number {
@@ -254,8 +277,8 @@ function normalizeAnalysis(raw: Partial<DreamAnalysis>, sourceText = ''): DreamA
     themes,
     emotion,
     symbols,
-    narrative: String(raw.narrative || '').slice(0, 2500),
-    nugget: String(raw.nugget || '').slice(0, 240),
+    narrative: stripTranscriptMeta(String(raw.narrative || '')).slice(0, 2500),
+    nugget: stripTranscriptMeta(String(raw.nugget || '')).slice(0, 240),
     valence,
     interpretation: {
       symbols: symbolMap,
@@ -386,7 +409,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return jsonResponse({ error: 'Invalid JSON body' }, 400, headers);
     }
 
-    const text = typeof body.text === 'string' ? body.text.trim() : '';
+    const text = typeof body.text === 'string' ? stripTranscriptMeta(body.text) : '';
     if (text.length < 10) {
       return jsonResponse(
         {

@@ -49,6 +49,23 @@ const MAX_AUDIO_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB
 
 // ── Helpers ──────────────────────────────────────────────────
 
+function stripTranscriptMeta(raw: string): string {
+  let text = (raw || '').replace(/\r\n/g, '\n');
+  text = text.replace(/^\s*(?:\[?\s*)?(?:speaker|spk)[\s_-]*\d+\s*\]?\s*[:.\-–—]?\s*/gim, '');
+  text = text.replace(/\b(?:speaker|spk)[\s_-]*\d+\b[:.\-–—]?\s*/gi, '');
+  text = text.replace(/\[?\b\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+)?\b\]?/g, '');
+  text = text.replace(
+    /[^.!?\n]*(?:\b(?:record(?:ing|ed)?|filming|video journal|audio journal|voice memo|transcript|transcrib(?:e|ing)|speaker\s*\d+)\b)[^.!?\n]*[.!?]?/gi,
+    ' ',
+  );
+  text = text.replace(/\b(?:um+|uh+|er+|ah+|hmm+|you know|i mean)\b[,.]?/gi, ' ');
+  text = text.replace(/\s+/g, ' ').trim();
+  if (!text) return '';
+  text = text.charAt(0).toUpperCase() + text.slice(1);
+  if (!/[.!?…]$/.test(text)) text += '.';
+  return text;
+}
+
 function jsonResponse(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
@@ -143,7 +160,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         const raw = await orResponse.text();
         if (orResponse.ok) {
           const parsed = JSON.parse(raw) as { text?: string };
-          const text = (parsed.text || '').trim();
+          const text = stripTranscriptMeta(parsed.text || '');
           if (text) {
             return jsonResponse({ text, language, source: 'openrouter-whisper' });
           }
@@ -173,7 +190,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
       if (hfResponse.ok) {
         const result = await hfResponse.json();
-        const text = (result.text || '').trim();
+        const text = stripTranscriptMeta(result.text || '');
         return jsonResponse({
           text,
           language: result.language || language,

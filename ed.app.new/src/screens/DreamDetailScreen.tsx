@@ -21,6 +21,7 @@ import { persistUserMedia, signedMediaUrl } from '../lib/mediaPersist';
 import { useSubscription } from '../hooks/use-subscription';
 import { coerceNarrativeText } from '../lib/normalizeDreamAnalysis';
 import { deriveDreamTitle, presentDream } from '../lib/dreamClassify';
+import { dreamTellingFromTranscript } from '../lib/cleanDreamTranscript';
 import { analyzeDream } from '../lib/dream-analyzer';
 import { generateDreamImage } from '../modules/sleep/dreamAssetGenerator';
 import { generateParallaxVideo } from '../lib/assets/pipeline';
@@ -166,7 +167,10 @@ export function DreamDetailScreen({
     () => coerceNarrativeText(detailDream.narrative, ''),
     [detailDream.narrative],
   );
-  const transcript = (detailDream.content || '').trim();
+  const transcript = dreamTellingFromTranscript(
+    detailDream.content || '',
+    analysisNarrative,
+  );
   const canShowTranscript = transcript.length > 0 && !isPlaceholderTranscript(transcript);
   const transcriptParagraphs = useMemo(() => formatTranscriptParagraphs(transcript), [transcript]);
   const analysisPending = analysisLooksPending(

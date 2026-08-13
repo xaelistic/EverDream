@@ -1,3 +1,5 @@
+import { cleanDreamTranscript } from './cleanDreamTranscript';
+
 export interface DreamScene {
   id: string;
   title: string;
@@ -9,7 +11,7 @@ const SCENE_CUE =
   /(?:^|[.!?]\s+)(then|suddenly|later|next|after that|afterwards|meanwhile|eventually|the scene (?:changed|shifted)|i (?:found|was suddenly|ended up))/i;
 
 export function formatTranscriptParagraphs(text: string): string {
-  const cleaned = text.replace(/\r\n/g, '\n').replace(/[ \t]+\n/g, '\n').trim();
+  const cleaned = cleanDreamTranscript(text).replace(/\r\n/g, '\n').replace(/[ \t]+\n/g, '\n').trim();
   if (!cleaned) return '';
 
   if (/\n\s*\n/.test(cleaned)) {

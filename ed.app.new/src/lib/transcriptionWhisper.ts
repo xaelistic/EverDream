@@ -17,6 +17,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { addToBacklog } from './taskBacklog';
 import { ServiceOverloadedError, isOverloadError } from './api/errorHandling';
+import { cleanDreamTranscript } from './cleanDreamTranscript';
 
 // ── Inline Rate Limiter (avoids import issues in test env) ───
 
@@ -304,7 +305,7 @@ export async function transcribeWithWhisper(
         onProgress?.('Transcription complete!');
 
         return {
-          text: (result.text || '').trim(),
+          text: cleanDreamTranscript(result.text || ''),
           language: result.language || language,
           source: 'hf-whisper',
         };
@@ -382,7 +383,7 @@ async function transcribeWithHFDirect(
   const text = result.text || '';
 
   return {
-    text: text.trim(),
+    text: cleanDreamTranscript(text),
     language: result.language || _language,
     source: 'hf-whisper',
   };
@@ -449,7 +450,7 @@ export async function transcribeWithWebSpeech(
       URL.revokeObjectURL(objectUrl);
       if (event.error === 'no-speech' || event.error === 'aborted') {
         resolve({
-          text: transcript.trim() || 'No speech detected',
+          text: cleanDreamTranscript(transcript) || 'No speech detected',
           confidence: confidence || 0.5,
           duration: (Date.now() - startTime) / 1000,
           source: 'web-speech',
@@ -469,7 +470,7 @@ export async function transcribeWithWebSpeech(
 
     recognition.onend = () => {
       finish({
-        text: transcript.trim() || 'No speech detected',
+        text: cleanDreamTranscript(transcript) || 'No speech detected',
         confidence: confidence || 0.5,
         duration: (Date.now() - startTime) / 1000,
         source: 'web-speech',

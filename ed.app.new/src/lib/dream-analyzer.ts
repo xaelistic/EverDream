@@ -24,6 +24,7 @@ import { addToBacklog } from './taskBacklog';
 import { ServiceOverloadedError, isOverloadError } from './api/errorHandling';
 import { coerceNarrativeText, normalizeDreamAnalysis } from './normalizeDreamAnalysis';
 import { normalizeCategory, normalizeEmotion } from './dreamClassify';
+import { cleanDreamTranscript } from './cleanDreamTranscript';
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -80,6 +81,8 @@ const ANALYSIS_PROMPT = `Analyze this dream and provide a detailed response in J
     "commonPattern": "when people typically have dreams like this"
   }
 }
+
+The input may be a messy voice memo. Never mention Speaker 1 or any speaker label. Drop fillers and any talk about recording or transcribing. Write the dream itself only.
 
 Dream: {DREAM_TEXT}
 
@@ -199,10 +202,10 @@ function validateAndNormalizeAnalysis(
   console.log('[DreamAnalyzer] Validating and normalizing analysis result...');
 
   const converted = normalizeDreamAnalysis(analysis, sourceText);
-  const narrative = coerceNarrativeText(converted.narrative, sourceText);
+  const narrative = cleanDreamTranscript(coerceNarrativeText(converted.narrative, sourceText));
   const nugget =
     typeof converted.nugget === 'string' && converted.nugget.length > 0
-      ? converted.nugget
+      ? cleanDreamTranscript(converted.nugget)
       : narrative.substring(0, 100);
   const meaning = coerceNarrativeText(
     converted.interpretation?.meaning,
@@ -255,7 +258,7 @@ export async function analyzeDream(text: string): Promise<DreamAnalysis> {
     return FALLBACK_ANALYSIS;
   }
 
-  const trimmed = text.trim();
+  const trimmed = cleanDreamTranscript(text);
   if (trimmed.length < 10) {
     console.warn('[DreamAnalyzer] Text too short for meaningful analysis (< 10 chars)');
     return { ...FALLBACK_ANALYSIS, narrative: trimmed, nugget: trimmed.substring(0, 100) };
