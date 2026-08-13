@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { X, Share2, Link2, Loader2, Instagram, Facebook } from 'lucide-react';
+import { X, Share2, Link2, Loader2, Instagram, Facebook, MessageCircle } from 'lucide-react';
 import type { Dream } from './DreamList';
 import { getEmotionEmoji } from '../../utils/dreamPresentation';
 import { presentDream } from '../../lib/dreamClassify';
@@ -34,13 +34,14 @@ const CHANNELS: Array<{
   label: string;
   icon: typeof Instagram;
 }> = [
+  { id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle },
   { id: 'story', label: 'Story', icon: Instagram },
   { id: 'feed', label: 'Facebook', icon: Facebook },
   { id: 'link', label: 'Link', icon: Link2 },
 ];
 
 export default function ShareModal({ dream, isOpen, onClose, onShared }: ShareModalProps) {
-  const [format, setFormat] = useState<ShareCardFormat>('story');
+  const [format, setFormat] = useState<ShareCardFormat>('whatsapp');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
   const [loading, setLoading] = useState(false);
@@ -82,7 +83,7 @@ export default function ShareModal({ dream, isOpen, onClose, onShared }: ShareMo
       });
       setPreviewBlob(null);
       setStatus(null);
-      setFormat('story');
+      setFormat('whatsapp');
     }
   }, [isOpen]);
 
@@ -140,9 +141,11 @@ export default function ShareModal({ dream, isOpen, onClose, onShared }: ShareMo
         );
         setStatus(
           result === 'shared'
-            ? format === 'feed'
-              ? 'Choose Facebook or another app. This is a 1:1 card with heading.'
-              : 'Choose an app — this is a 9:16 story card with watermark.'
+            ? format === 'whatsapp'
+              ? 'Choose WhatsApp — 4:5 card with a solid caption panel.'
+              : format === 'feed'
+                ? 'Choose Facebook or another app. 1:1 card with heading.'
+                : 'Choose an app — story card with a solid caption panel.'
             : 'Saved — share from your gallery.',
         );
         onShared?.();
@@ -238,7 +241,7 @@ export default function ShareModal({ dream, isOpen, onClose, onShared }: ShareMo
         </div>
 
         <div className="p-5 space-y-5">
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {CHANNELS.map((channel) => {
               const Icon = channel.icon;
               const active = format === channel.id;
@@ -269,7 +272,7 @@ export default function ShareModal({ dream, isOpen, onClose, onShared }: ShareMo
             <div
               className="mx-auto w-full rounded-2xl overflow-hidden border-2 border-sage/20 bg-sage/5 relative"
               style={{
-                maxWidth: format === 'story' ? 220 : format === 'feed' ? 280 : '100%',
+                maxWidth: format === 'story' ? 200 : format === 'link' ? '100%' : 260,
                 aspectRatio: spec.aspect,
               }}
             >
@@ -328,8 +331,8 @@ export default function ShareModal({ dream, isOpen, onClose, onShared }: ShareMo
           )}
 
           <p className="text-center text-[11px] text-muted leading-relaxed px-2">
-            Story is 9:16. Facebook is a 1:1 card with heading, date, and mood.
-            Copy link uses a 1.91:1 preview for chats and Facebook posts.
+            WhatsApp uses a 4:5 card: image on top, dark caption panel underneath
+            so the title stays readable. Story is 9:16, Facebook is 1:1.
           </p>
         </div>
       </div>

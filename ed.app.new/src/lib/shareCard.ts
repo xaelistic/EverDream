@@ -7,7 +7,7 @@ export const STORY_WIDTH = 1080;
 export const STORY_HEIGHT = 1920;
 
 export type ShareCardKind = 'reflection' | 'sleep' | 'dream';
-export type ShareCardFormat = 'story' | 'feed' | 'link';
+export type ShareCardFormat = 'story' | 'whatsapp' | 'feed' | 'link';
 
 export const SHARE_FORMATS: Record<
   ShareCardFormat,
@@ -17,8 +17,15 @@ export const SHARE_FORMATS: Record<
     width: 1080,
     height: 1920,
     label: 'Story',
-    hint: '9:16 · Instagram, TikTok, WhatsApp',
+    hint: '9:16 · Instagram / TikTok',
     aspect: '9 / 16',
+  },
+  whatsapp: {
+    width: 1080,
+    height: 1350,
+    label: 'WhatsApp',
+    hint: '4:5 · chats and status',
+    aspect: '4 / 5',
   },
   feed: {
     width: 1080,
@@ -35,6 +42,11 @@ export const SHARE_FORMATS: Record<
     aspect: '1.91 / 1',
   },
 };
+
+const PANEL = '#1b221c';
+const CREAM = '#f4f7f2';
+const CREAM_SOFT = 'rgba(244, 247, 242, 0.88)';
+const CREAM_DIM = 'rgba(232, 240, 230, 0.72)';
 
 export interface ReflectionCardInput {
   mood: string;
@@ -127,7 +139,46 @@ function createCanvas(width: number, height: number): CanvasRenderingContext2D {
   canvas.height = height;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas not supported');
+  ctx.fillStyle = PANEL;
+  ctx.fillRect(0, 0, width, height);
   return ctx;
+}
+
+function drawSolidPanel(
+  ctx: CanvasRenderingContext2D,
+  panelY: number,
+  input: DreamCardInput,
+  sizes: { title: number; quote: number; titleLh: number; quoteLh: number; titleLines: number; quoteLines: number },
+): void {
+  const w = ctx.canvas.width;
+  const h = ctx.canvas.height;
+  const pad = 56;
+
+  ctx.fillStyle = PANEL;
+  ctx.fillRect(0, panelY, w, h - panelY);
+  ctx.fillStyle = 'rgba(232, 240, 230, 0.18)';
+  ctx.fillRect(0, panelY, w, 3);
+
+  ctx.fillStyle = CREAM_DIM;
+  ctx.font = '600 22px system-ui, sans-serif';
+  ctx.fillText('EVERDREAM  ·  DREAM JOURNAL', pad, panelY + 48);
+
+  ctx.fillStyle = CREAM;
+  ctx.font = `bold ${sizes.title}px Georgia, serif`;
+  let y = wrapText(ctx, cardTitle(input), pad, panelY + 108, w - pad * 2, sizes.titleLh, sizes.titleLines);
+
+  ctx.fillStyle = CREAM_SOFT;
+  ctx.font = `italic ${sizes.quote}px Georgia, serif`;
+  y = wrapText(ctx, `“${cardQuote(input)}”`, pad, y + 18, w - pad * 2, sizes.quoteLh, sizes.quoteLines);
+
+  ctx.fillStyle = CREAM_DIM;
+  ctx.font = '24px system-ui, sans-serif';
+  const meta = [cardDate(input.date), input.category, input.emotion].filter(Boolean).join('  ·  ');
+  ctx.fillText(meta, pad, Math.min(y + 36, h - 58));
+
+  ctx.fillStyle = CREAM;
+  ctx.font = 'bold 24px Georgia, serif';
+  ctx.fillText('EverDream  🌙', w - 248, h - 36);
 }
 
 function createStoryCanvas(): CanvasRenderingContext2D {
@@ -403,92 +454,34 @@ export async function generateSleepCard(input: SleepCardInput): Promise<Blob> {
   return canvasToBlob(ctx.canvas);
 }
 
-async function generateStoryDreamCard(input: DreamCardInput, img: HTMLImageElement | null): Promise<Blob> {
-  const { width: w, height: h } = SHARE_FORMATS.story;
+async function generateSplitDreamCard(
+  input: DreamCardInput,
+  img: HTMLImageElement | null,
+  format: 'story' | 'whatsapp' | 'feed',
+): Promise<Blob> {
+  const { width: w, height: h } = SHARE_FORMATS[format];
   const ctx = createCanvas(w, h);
-  const pad = 72;
-  const title = cardTitle(input);
-  const quote = cardQuote(input);
+  const panelRatio = format === 'feed' ? 0.46 : 0.42;
+  const panelY = Math.round(h * (1 - panelRatio));
 
   if (img) {
-    drawCover(ctx, img, 0, 0, w, h);
-    const wash = ctx.createLinearGradient(0, h * 0.28, 0, h);
-    wash.addColorStop(0, 'rgba(28, 36, 30, 0.05)');
-    wash.addColorStop(0.45, 'rgba(28, 36, 30, 0.45)');
-    wash.addColorStop(1, 'rgba(28, 36, 30, 0.92)');
-    ctx.fillStyle = wash;
-    ctx.fillRect(0, 0, w, h);
+    drawCover(ctx, img, 0, 0, w, panelY + 4);
   } else {
-    drawSageBackground(ctx);
-  }
-
-  const ink = img ? '#f4f7f2' : '#2d3a2d';
-  ctx.fillStyle = img ? 'rgba(244,247,242,0.72)' : '#5a6e5a';
-  ctx.font = '600 28px system-ui, sans-serif';
-  ctx.fillText('DREAM JOURNAL', pad, 160);
-
-  ctx.fillStyle = ink;
-  ctx.font = 'bold 64px Georgia, serif';
-  const titleEnd = wrapText(ctx, title, pad, 250, w - pad * 2, 76, 3);
-
-  ctx.font = 'italic 36px Georgia, serif';
-  ctx.fillStyle = img ? 'rgba(244,247,242,0.92)' : '#3d4f3d';
-  const quoteEnd = wrapText(ctx, `“${quote}”`, pad, titleEnd + 36, w - pad * 2, 48, 5);
-
-  ctx.font = '28px system-ui, sans-serif';
-  ctx.fillStyle = img ? 'rgba(244,247,242,0.8)' : '#5a6e5a';
-  const meta = [cardDate(input.date), input.category, input.emotion].filter(Boolean).join('  ·  ');
-  ctx.fillText(meta, pad, Math.min(quoteEnd + 28, h - 220));
-
-  drawEverdreamWatermark(ctx);
-  return canvasToBlob(ctx.canvas, 'image/jpeg', 0.9);
-}
-
-async function generateFeedDreamCard(input: DreamCardInput, img: HTMLImageElement | null): Promise<Blob> {
-  const { width: w, height: h } = SHARE_FORMATS.feed;
-  const ctx = createCanvas(w, h);
-  const pad = 64;
-  const title = cardTitle(input);
-  const quote = cardQuote(input);
-
-  drawSageBackground(ctx);
-
-  ctx.fillStyle = '#5a6e5a';
-  ctx.font = '600 26px system-ui, sans-serif';
-  ctx.fillText('EVERDREAM', pad, 78);
-  ctx.font = '24px system-ui, sans-serif';
-  ctx.fillText('🌙  Dream journal', pad + 220, 78);
-
-  ctx.fillStyle = '#2d3a2d';
-  ctx.font = 'bold 56px Georgia, serif';
-  const titleEnd = wrapText(ctx, title, pad, 150, w - pad * 2, 66, 3);
-
-  ctx.font = '26px system-ui, sans-serif';
-  ctx.fillStyle = '#4a5d4a';
-  const meta = [cardDate(input.date), input.category, input.emotion].filter(Boolean).join('   ·   ');
-  ctx.fillText(meta, pad, titleEnd + 8);
-
-  const frameY = titleEnd + 40;
-  const frameH = 460;
-  if (img) {
-    ctx.fillStyle = 'rgba(255,255,255,0.45)';
-    roundedRectPath(ctx, pad - 8, frameY - 8, w - pad * 2 + 16, frameH + 16, 36);
-    ctx.fill();
-    drawCover(ctx, img, pad, frameY, w - pad * 2, frameH, 28);
-  } else {
-    ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    roundedRectPath(ctx, pad, frameY, w - pad * 2, frameH, 28);
-    ctx.fill();
+    ctx.fillStyle = '#2a332c';
+    ctx.fillRect(0, 0, w, panelY);
     ctx.font = '80px system-ui, sans-serif';
-    ctx.fillText('🌙', w / 2 - 40, frameY + frameH / 2 + 20);
+    ctx.fillText('🌙', w / 2 - 40, panelY / 2 + 20);
   }
 
-  ctx.fillStyle = '#2d3a2d';
-  ctx.font = 'italic 34px Georgia, serif';
-  wrapText(ctx, `“${quote}”`, pad, frameY + frameH + 70, w - pad * 2, 44, 3);
+  const typeSizes =
+    format === 'feed'
+      ? { title: 44, quote: 28, titleLh: 52, quoteLh: 38, titleLines: 2, quoteLines: 3 }
+      : format === 'whatsapp'
+        ? { title: 48, quote: 30, titleLh: 56, quoteLh: 40, titleLines: 2, quoteLines: 3 }
+        : { title: 52, quote: 32, titleLh: 60, quoteLh: 42, titleLines: 3, quoteLines: 4 };
 
-  drawEverdreamWatermark(ctx);
-  return canvasToBlob(ctx.canvas, 'image/jpeg', 0.9);
+  drawSolidPanel(ctx, panelY, input, typeSizes);
+  return canvasToBlob(ctx.canvas, 'image/jpeg', 0.92);
 }
 
 async function generateLinkDreamCard(input: DreamCardInput, img: HTMLImageElement | null): Promise<Blob> {
@@ -497,61 +490,49 @@ async function generateLinkDreamCard(input: DreamCardInput, img: HTMLImageElemen
   const title = cardTitle(input);
   const quote = cardQuote(input);
 
-  drawSageBackground(ctx);
+  const imageW = Math.floor(w * 0.5);
+  if (img) drawCover(ctx, img, 0, 0, imageW, h);
 
-  const imageW = Math.floor(w * 0.52);
-  if (img) {
-    drawCover(ctx, img, 0, 0, imageW, h);
-    const edge = ctx.createLinearGradient(imageW - 80, 0, imageW, 0);
-    edge.addColorStop(0, 'rgba(232, 240, 230, 0)');
-    edge.addColorStop(1, 'rgba(232, 240, 230, 1)');
-    ctx.fillStyle = edge;
-    ctx.fillRect(imageW - 80, 0, 80, h);
-  }
+  const textX = img ? imageW + 44 : 56;
+  const textW = w - textX - 48;
 
-  const textX = img ? imageW + 48 : 64;
-  const textW = w - textX - 56;
+  ctx.fillStyle = CREAM_DIM;
+  ctx.font = '600 20px system-ui, sans-serif';
+  ctx.fillText('EVERDREAM  ·  DREAM JOURNAL', textX, 78);
 
-  ctx.fillStyle = '#5a6e5a';
-  ctx.font = '600 22px system-ui, sans-serif';
-  ctx.fillText('EVERDREAM  ·  DREAM JOURNAL', textX, 86);
+  ctx.fillStyle = CREAM;
+  ctx.font = 'bold 40px Georgia, serif';
+  const titleEnd = wrapText(ctx, title, textX, 148, textW, 48, 3);
 
-  ctx.fillStyle = '#2d3a2d';
-  ctx.font = 'bold 44px Georgia, serif';
-  const titleEnd = wrapText(ctx, title, textX, 160, textW, 52, 3);
+  ctx.font = 'italic 24px Georgia, serif';
+  ctx.fillStyle = CREAM_SOFT;
+  wrapText(ctx, `“${quote}”`, textX, titleEnd + 20, textW, 34, 3);
 
-  ctx.font = 'italic 26px Georgia, serif';
-  ctx.fillStyle = '#3d4f3d';
-  wrapText(ctx, `“${quote}”`, textX, titleEnd + 24, textW, 36, 3);
-
-  ctx.font = '22px system-ui, sans-serif';
-  ctx.fillStyle = '#5a6e5a';
-  const meta = [cardDate(input.date), input.category, input.emotion].filter(Boolean).join('  ·  ');
-  ctx.fillText(meta, textX, h - 78);
-
-  ctx.font = 'bold 22px Georgia, serif';
-  ctx.fillStyle = '#2d3a2d';
-  ctx.fillText('EverDream', w - 200, h - 36);
   ctx.font = '20px system-ui, sans-serif';
-  ctx.fillText('🌙', w - 56, h - 36);
+  ctx.fillStyle = CREAM_DIM;
+  const meta = [cardDate(input.date), input.category, input.emotion].filter(Boolean).join('  ·  ');
+  ctx.fillText(meta, textX, h - 52);
 
-  return canvasToBlob(ctx.canvas, 'image/jpeg', 0.9);
+  ctx.font = 'bold 20px Georgia, serif';
+  ctx.fillStyle = CREAM;
+  ctx.fillText('EverDream  🌙', w - 220, h - 28);
+
+  return canvasToBlob(ctx.canvas, 'image/jpeg', 0.92);
 }
 
 export async function generateDreamCard(
   input: DreamCardInput,
-  format: ShareCardFormat = 'story',
+  format: ShareCardFormat = 'whatsapp',
 ): Promise<Blob> {
   const img = input.imageUrl ? await loadImage(input.imageUrl) : null;
-  if (format === 'feed') return generateFeedDreamCard(input, img);
   if (format === 'link') return generateLinkDreamCard(input, img);
-  return generateStoryDreamCard(input, img);
+  return generateSplitDreamCard(input, img, format === 'feed' || format === 'story' ? format : 'whatsapp');
 }
 
 export async function generateShareCard(
   kind: ShareCardKind,
   input: ReflectionCardInput | SleepCardInput | DreamCardInput,
-  format: ShareCardFormat = 'story',
+  format: ShareCardFormat = 'whatsapp',
 ): Promise<Blob> {
   switch (kind) {
     case 'reflection':

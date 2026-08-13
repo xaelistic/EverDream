@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { SHARE_FORMATS, dreamToShareInput } from './shareCard';
 
 describe('share card formats', () => {
-  it('uses 9:16 for stories, 1:1 for Facebook, 1.91:1 for link previews', () => {
+  it('uses 9:16 for stories, 4:5 for WhatsApp, 1:1 for Facebook, 1200x630 for links', () => {
     expect(SHARE_FORMATS.story.width / SHARE_FORMATS.story.height).toBeCloseTo(9 / 16, 3);
+    expect(SHARE_FORMATS.whatsapp.width / SHARE_FORMATS.whatsapp.height).toBeCloseTo(4 / 5, 3);
     expect(SHARE_FORMATS.feed.width).toBe(SHARE_FORMATS.feed.height);
     expect(SHARE_FORMATS.link).toMatchObject({ width: 1200, height: 630 });
   });
