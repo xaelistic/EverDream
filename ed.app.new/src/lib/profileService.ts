@@ -5,6 +5,7 @@
  * key used to leak avatars / interests across logins (login as B still showed A's photo).
  */
 
+import { friendCodeFromProfileId } from './friendCode';
 import { getProfile, getCurrentUser, supabase } from './supabase/client';
 import {
   goalIdsFromLabels,
@@ -59,8 +60,11 @@ const DEFAULT_PROFILE: UserProfile = {
   authUserId: null,
 };
 
-function generateFriendCode(): string {
-  return `DREAM-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+export { friendCodeFromProfileId } from './friendCode';
+
+/** @deprecated Prefer friendCodeFromProfileId — random codes never match the database. */
+export function generateFriendCode(seed?: string): string {
+  return seed ? friendCodeFromProfileId(seed) : '';
 }
 
 function slugifyHandle(name: string): string {
@@ -296,7 +300,7 @@ export function mergeInterestsIntoProfile(
 function emptyProfileForUser(userId: string | null): UserProfile {
   return {
     ...DEFAULT_PROFILE,
-    friendCode: generateFriendCode(),
+    friendCode: '',
     authUserId: userId,
   };
 }
@@ -372,6 +376,16 @@ function applyRemoteRow(base: UserProfile, row: Record<string, unknown>, userId:
   if (typeof row.experience_level === 'string') profile.experienceLevel = row.experience_level;
   if (typeof row.dream_recall === 'string') profile.dreamRecall = row.dream_recall;
 
+  if (typeof row.handle === 'string' && row.handle.trim()) {
+    profile.handle = row.handle.trim();
+  }
+
+  if (typeof row.friend_code === 'string' && row.friend_code.trim()) {
+    profile.friendCode = row.friend_code.trim().toUpperCase();
+  } else if (typeof row.id === 'string' && row.id) {
+    profile.friendCode = friendCodeFromProfileId(row.id);
+  }
+
   return scrubPlaceholders(profile);
 }
 
@@ -390,10 +404,6 @@ export async function loadUserProfile(): Promise<UserProfile> {
       // Drop cached avatar until remote confirms (prevents stale cross-account data:image/*)
       avatarUrl: null,
     };
-  }
-
-  if (!profile.friendCode) {
-    profile.friendCode = generateFriendCode();
   }
 
   try {
@@ -436,7 +446,7 @@ export async function saveUserProfile(profile: UserProfile): Promise<void> {
   const normalized: UserProfile = scrubPlaceholders({
     ...profile,
     handle: slugifyHandle(profile.displayName || 'dreamer'),
-    friendCode: profile.friendCode || generateFriendCode(),
+    friendCode: profile.friendCode || '',
     interestSources: profile.interestSources || {},
     onboardingGoalIds: profile.onboardingGoalIds || [],
     authUserId: userId,
@@ -447,16 +457,28 @@ export async function saveUserProfile(profile: UserProfile): Promise<void> {
   try {
     if (!user) return;
 
+    const remote = await getProfile();
+    const remoteId = typeof remote?.id === 'string' ? remote.id : '';
+    const remoteCode = typeof remote?.friend_code === 'string' ? remote.friend_code.trim().toUpperCase() : '';
+    const stableCode =
+      remoteCode ||
+      normalized.friendCode ||
+      (remoteId ? friendCodeFromProfileId(remoteId) : '');
+    if (stableCode) {
+      normalized.friendCode = stableCode;
+      saveToStorage(normalized, userId);
+    }
+
     const update: Record<string, unknown> = {
       display_name: normalized.displayName || null,
       handle: normalized.handle || null,
-      friend_code: normalized.friendCode || null,
       avatar_url: normalized.avatarUrl,
       updated_at: new Date().toISOString(),
       interests: normalized.interests,
       dream_goals: normalized.dreamGoals,
       onboarding_goals: normalized.onboardingGoalIds,
     };
+    if (stableCode) update.friend_code = stableCode;
     if (normalized.experienceLevel) update.experience_level = normalized.experienceLevel;
     if (normalized.dreamRecall) update.dream_recall = normalized.dreamRecall;
     if (normalized.onboardedAt) update.onboarded_at = normalized.onboardedAt;
@@ -531,4 +553,4 @@ export function getPublicProfileByHandle(handle: string): UserProfile | null {
   return null;
 }
 
-export { slugifyHandle, generateFriendCode, DEFAULT_PROFILE };
+export { slugifyHandle, DEFAULT_PROFILE };

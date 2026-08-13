@@ -1,5 +1,8 @@
+import { looksLikeFriendCode } from './friendCode';
 import { supabase, getCurrentUser, getProfile } from './supabase/client';
 import { inviteLandingUrl, inviteMessage } from './friendsInvite';
+
+export { looksLikeFriendCode };
 
 export { inviteLandingUrl, inviteMessage };
 
@@ -89,7 +92,7 @@ export async function respondToFriendRequest(friendshipId: string, accept: boole
 
 export async function connectByFriendCode(code: string): Promise<DreamerHit> {
   const cleaned = code.trim();
-  if (cleaned.length < 4) throw new Error('Enter a full friend code.');
+  if (!looksLikeFriendCode(cleaned)) throw new Error('Enter a full friend code like DREAM-AB12CD.');
   const { data, error } = await supabase.rpc('connect_by_friend_code', { code: cleaned });
   if (error) throw new Error(error.message.replace(/^.*ERROR:\s*/i, ''));
   const row = Array.isArray(data) ? data[0] : data;
@@ -99,7 +102,23 @@ export async function connectByFriendCode(code: string): Promise<DreamerHit> {
     handle: row.handle || null,
     displayName: row.display_name || row.handle || 'Dreamer',
     avatarUrl: row.avatar_url || null,
-    friendCode: cleaned,
+    friendCode: cleaned.toUpperCase().replace(/\s+/g, ''),
+  };
+}
+
+export function friendRowFromHit(
+  hit: DreamerHit,
+  status: FriendRow['status'],
+  incoming = false,
+): FriendRow {
+  return {
+    id: `local-${hit.id}`,
+    profileId: hit.id,
+    name: hit.displayName,
+    handle: hit.handle,
+    avatarUrl: hit.avatarUrl,
+    status,
+    incoming,
   };
 }
 

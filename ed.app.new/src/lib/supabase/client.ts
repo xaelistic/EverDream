@@ -81,19 +81,17 @@ export async function getProfile(): Promise<Record<string, unknown> | null> {
     .from('profiles')
     .select('*')
     .eq('auth_user_id', user.id)
+    .limit(2);
+
+  if (data && data.length >= 1) return data[0];
+  if (error) return null;
+
+  const { data: newProfile } = await supabase
+    .from('profiles')
+    .insert({ auth_user_id: user.id })
+    .select()
     .single();
-
-  if (error && error.code === 'PGRST116') {
-    // No profile yet, create one
-    const { data: newProfile } = await supabase
-      .from('profiles')
-      .insert({ auth_user_id: user.id })
-      .select()
-      .single();
-    return newProfile;
-  }
-
-  return data;
+  return newProfile;
 }
 
 // ============================================================

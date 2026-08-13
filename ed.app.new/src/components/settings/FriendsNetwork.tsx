@@ -13,13 +13,15 @@ import {
 } from 'lucide-react';
 import { useToast } from '../ui/Toast';
 import {
+  connectByFriendCode,
   createFriendInvite,
+  friendRowFromHit,
   listFriendships,
+  looksLikeFriendCode,
   openInviteChannel,
   respondToFriendRequest,
   searchDreamers,
   sendFriendRequest,
-  connectByFriendCode,
   type DreamerHit,
   type FriendRow,
   type InviteChannel,
@@ -55,7 +57,8 @@ export function FriendsNetwork({
 
   const refresh = useCallback(async () => {
     try {
-      setFriends(await listFriendships());
+      const next = await listFriendships();
+      setFriends((prev) => (next.length > 0 ? next : prev));
     } catch (err) {
       addToast({ type: 'error', message: err instanceof Error ? err.message : 'Could not load friends.' });
     } finally {
@@ -93,17 +96,27 @@ export function FriendsNetwork({
     };
   }, [query, addToast]);
 
-  const handleConnectCode = async () => {
-    if (!code.trim()) {
+  const rememberFriend = (row: FriendRow) => {
+    setFriends((prev) => {
+      if (prev.some((item) => item.profileId === row.profileId && item.status === row.status)) return prev;
+      return [row, ...prev.filter((item) => item.profileId !== row.profileId)];
+    });
+  };
+
+  const handleConnectCode = async (raw = code) => {
+    if (!raw.trim()) {
       addToast({ type: 'warning', message: 'Paste a friend code like DREAM-AB12CD.' });
       return;
     }
     setCodeBusy(true);
     try {
-      const friend = await connectByFriendCode(code);
+      const friend = await connectByFriendCode(raw);
+      rememberFriend(friendRowFromHit(friend, 'accepted'));
       addToast({ type: 'success', message: `${friend.displayName} is now in your friends list.` });
       onFriendAdded?.();
       setCode('');
+      setQuery('');
+      setHits([]);
       await refresh();
     } catch (err) {
       addToast({ type: 'error', message: err instanceof Error ? err.message : 'Could not add that code.' });
@@ -115,8 +128,13 @@ export function FriendsNetwork({
   const handleAdd = async (hit: DreamerHit) => {
     setAddingId(hit.id);
     try {
+      if (looksLikeFriendCode(query)) {
+        await handleConnectCode(hit.friendCode || query);
+        return;
+      }
       await sendFriendRequest(hit.id);
-      addToast({ type: 'success', message: `Request sent to @${hit.handle || hit.displayName}.` });
+      rememberFriend(friendRowFromHit(hit, 'pending'));
+      addToast({ type: 'success', message: `Request sent to @${hit.handle || hit.displayName}. They still need to accept.` });
       onFriendAdded?.();
       setQuery('');
       setHits([]);
@@ -379,7 +397,7 @@ export function FriendsNetwork({
             ))}
             {friends.length === 0 && (
               <p className="text-sm text-muted py-3 text-center">
-                No friends yet. Search a username or send an invite.
+                No friends yet. Paste their DREAM- code above, search a username, or send an invite.
               </p>
             )}
           </div>
