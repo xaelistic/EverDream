@@ -146,88 +146,20 @@ export async function downloadDreamImage(imageUrl: string, basename = 'everdream
 }
 
 export async function generateShareCardImage(dream: ShareableDream): Promise<void> {
-  const canvas = document.createElement('canvas');
-  const size = 1080;
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-
-  const imageUrl = getDreamImageUrl(dream);
-  const grad = ctx.createLinearGradient(0, 0, 0, size);
-  grad.addColorStop(0, '#0f172a');
-  grad.addColorStop(0.5, '#1e1b4b');
-  grad.addColorStop(1, '#312e81');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, size, size);
-
-  const hasImage = !!imageUrl;
-  if (hasImage && imageUrl) {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    await new Promise<void>((resolve) => {
-      img.onload = () => {
-        ctx.drawImage(img, 0, 0, size, size * 0.75);
-        const overlay = ctx.createLinearGradient(0, size * 0.55, 0, size);
-        overlay.addColorStop(0, 'rgba(15,23,42,0.1)');
-        overlay.addColorStop(1, 'rgba(15,23,42,0.95)');
-        ctx.fillStyle = overlay;
-        ctx.fillRect(0, 0, size, size);
-        resolve();
-      };
-      img.onerror = () => resolve();
-      img.src = imageUrl;
-    });
-  }
-
-  ctx.fillStyle = hasImage ? '#e0e7ff' : '#c4b5fd';
-  ctx.font = 'bold 38px system-ui, sans-serif';
-  ctx.fillText('EVERDREAM', 70, 85);
-  ctx.font = '24px system-ui, sans-serif';
-  ctx.fillStyle = hasImage ? '#c7d2fe' : '#a5b4fc';
-  ctx.fillText('🌙 Dream Journal', 70, 120);
-
-  const nugget = dream.nugget || dream.content || 'A dream remembered...';
-  ctx.fillStyle = '#f1e7ff';
-  ctx.font = 'bold 48px Georgia, serif';
-
-  const maxWidth = 860;
-  const lineHeight = 62;
-  let y = hasImage ? 620 : 380;
-  const words = nugget.split(' ');
-  let line = '';
-  for (let n = 0; n < words.length; n++) {
-    const testLine = `${line}${words[n]} `;
-    if (ctx.measureText(testLine).width > maxWidth && n > 0) {
-      ctx.fillText(line, 70, y);
-      line = `${words[n]} `;
-      y += lineHeight;
-    } else {
-      line = testLine;
-    }
-  }
-  ctx.fillText(line, 70, y);
-
-  ctx.fillStyle = hasImage ? '#e0e7ff' : '#c4b5fd';
-  ctx.font = '28px system-ui, sans-serif';
-  ctx.fillText(new Date(dream.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }), 70, y + 55);
-
-  if (dream.emotion) {
-    ctx.fillStyle = 'rgba(167, 139, 250, 0.25)';
-    ctx.fillRect(70, y + 70, 260, 42);
-    ctx.fillStyle = '#e0e7ff';
-    ctx.font = '24px system-ui, sans-serif';
-    ctx.fillText(`✨ ${dream.emotion}`, 82, y + 98);
-  }
-
-  ctx.fillStyle = '#64748b';
-  ctx.font = '22px system-ui, sans-serif';
-  ctx.fillText('EverDream • Yours forever', 70, size - 70);
-
-  const link = document.createElement('a');
-  link.download = `everdream-${dream.date}.png`;
-  link.href = canvas.toDataURL('image/png');
-  link.click();
+  const { generateDreamCard, dreamToShareInput, shareImageBlob } = await import('./shareCard');
+  const blob = await generateDreamCard(
+    dreamToShareInput({
+      title: dream.title,
+      nugget: dream.nugget,
+      content: dream.content,
+      emotion: dream.emotion || dream.mood,
+      category: dream.category,
+      date: dream.date,
+      generatedImage: getDreamImageUrl(dream) ? { url: getDreamImageUrl(dream)! } : undefined,
+    }),
+    'feed',
+  );
+  await shareImageBlob(blob, `everdream-${dream.date}.jpg`, dream.title || 'My dream');
 }
 
 // OAuth connect/disconnect: see src/lib/auth/socialAuth.ts and src/lib/social/shareService.ts

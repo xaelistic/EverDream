@@ -110,6 +110,7 @@ async function functionsErrorMessage(
 export async function createPublicShareLink(
   dream: import('../socialShare').ShareableDream,
   payload: import('../socialShare').SharePayload,
+  extras?: { cardImage?: string },
 ): Promise<{ ok: boolean; url?: string; message?: string }> {
   const { data, error } = await supabase.functions.invoke('share-link', {
     body: {
@@ -118,6 +119,7 @@ export async function createPublicShareLink(
       ogTitle: payload.title,
       ogDescription: payload.text,
       ogImageUrl: payload.imageUrl,
+      cardImage: extras?.cardImage,
     },
   });
 

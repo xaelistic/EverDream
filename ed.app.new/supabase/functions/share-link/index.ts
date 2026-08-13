@@ -39,6 +39,45 @@ function appBaseUrl(): string {
   return (Deno.env.get('APP_BASE_URL') || 'https://everdream.n1g3.com').replace(/\/$/, '');
 }
 
+function publicSupabaseUrl(): string {
+  return (
+    Deno.env.get('SUPABASE_PUBLIC_URL') ||
+    Deno.env.get('SERVICE_URL_SUPABASEKONG') ||
+    'https://supabase.n1g3.com'
+  ).replace(/\/$/, '');
+}
+
+async function persistShareCard(
+  dataUrl: string,
+  supabaseUrl: string,
+  serviceKey: string,
+): Promise<string | null> {
+  const match = dataUrl.match(/^data:(image\/(?:png|jpeg|jpg|webp));base64,(.+)$/i);
+  if (!match) return null;
+  const contentType = match[1].toLowerCase() === 'image/jpg' ? 'image/jpeg' : match[1];
+  const binary = atob(match[2]);
+  if (binary.length > 4 * 1024 * 1024) return null;
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg';
+  const path = `share/${crypto.randomUUID()}.${ext}`;
+  const upload = await fetch(`${supabaseUrl.replace(/\/$/, '')}/storage/v1/object/public-assets/${path}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${serviceKey}`,
+      apikey: serviceKey,
+      'Content-Type': contentType,
+      'x-upsert': 'true',
+    },
+    body: bytes,
+  });
+  if (!upload.ok) {
+    console.warn('[share-link] card upload failed:', upload.status, (await upload.text()).slice(0, 180));
+    return null;
+  }
+  return `${publicSupabaseUrl()}/storage/v1/object/public/public-assets/${path}`;
+}
+
 Deno.serve(async (req: Request): Promise<Response> => {
   const headers = corsHeaders(req);
   if (req.method === 'OPTIONS') return new Response('ok', { headers });
@@ -97,9 +136,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
       ogTitle?: string;
       ogDescription?: string;
       ogImageUrl?: string;
+      cardImage?: string;
     };
     const dreamId = String(body.dreamId || '').trim();
     if (!dreamId) return json({ error: 'dreamId required' }, 400, headers);
+
+    let ogImageUrl = body.ogImageUrl || null;
+    if (body.cardImage) {
+      const stored = await persistShareCard(body.cardImage, supabaseUrl, serviceKey);
+      if (stored) ogImageUrl = stored;
+    }
 
     const { data: profile, error: profileError } = await admin
       .from('profiles')
@@ -122,7 +168,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         caption: body.caption || null,
         og_title: body.ogTitle || null,
         og_description: body.ogDescription || null,
-        og_image_url: body.ogImageUrl || null,
+        og_image_url: ogImageUrl,
       })
       .select()
       .single();

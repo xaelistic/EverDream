@@ -57,28 +57,30 @@ export function PublicShareScreen({ slug }: { slug: string }) {
   }
 
   return (
-    <div className="min-h-screen bg-cream text-ink p-6 max-w-lg mx-auto">
-      <div className="text-center mb-6">
-        <Moon className="mx-auto mb-3 text-sage" />
-        <h1 className="font-serif text-2xl">{link.og_title || 'A dream from EverDream'}</h1>
-        <p className="text-sm text-muted mt-2">Shared dream journal entry</p>
+    <div className="min-h-screen bg-parchment text-ink">
+      <div className="max-w-lg mx-auto p-6">
+        <p className="text-[11px] uppercase tracking-[0.2em] text-muted text-center mb-4">
+          EverDream · Dream journal
+        </p>
+        <div className="rounded-[2rem] border border-line bg-cream shadow-lift overflow-hidden">
+          {link.og_image_url && (
+            <img
+              src={link.og_image_url}
+              alt={link.og_title || 'Shared dream'}
+              className="w-full object-cover"
+            />
+          )}
+          <div className="p-6 space-y-3">
+            <h1 className="font-serif text-2xl leading-snug">{link.og_title || 'A dream from EverDream'}</h1>
+            <p className="font-serif italic leading-relaxed text-lg text-ink/90">
+              {link.og_description || link.caption}
+            </p>
+          </div>
+        </div>
+        <p className="text-xs text-muted text-center mt-8">
+          Shared from EverDream — everdream.app
+        </p>
       </div>
-
-      {link.og_image_url && (
-        <img
-          src={link.og_image_url}
-          alt="Dream visualization"
-          className="w-full rounded-3xl border border-line shadow-paper mb-5"
-        />
-      )}
-
-      <p className="font-serif italic leading-relaxed text-lg">
-        {link.og_description || link.caption}
-      </p>
-
-      <p className="text-xs text-muted text-center mt-8">
-        EverDream — track, reflect, and share your dreams
-      </p>
     </div>
   );
 }
