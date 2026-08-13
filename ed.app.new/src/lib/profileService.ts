@@ -449,6 +449,8 @@ export async function saveUserProfile(profile: UserProfile): Promise<void> {
 
     const update: Record<string, unknown> = {
       display_name: normalized.displayName || null,
+      handle: normalized.handle || null,
+      friend_code: normalized.friendCode || null,
       avatar_url: normalized.avatarUrl,
       updated_at: new Date().toISOString(),
       interests: normalized.interests,

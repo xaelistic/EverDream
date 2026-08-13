@@ -12,8 +12,6 @@ import {
   Watch,
   Share2,
   ChevronRight,
-  Copy,
-  Check,
   X,
   Loader2,
   LogOut,
@@ -29,6 +27,7 @@ import {
   type SocialInterestSource,
 } from '../lib/social/profileSignals';
 import type { RouteScreen } from '../hooks/useHashRoute';
+import { FriendsNetwork } from '../components/settings/FriendsNetwork';
 
 interface ProfileHubProps {
   onClose: () => void;
@@ -36,14 +35,6 @@ interface ProfileHubProps {
   /** Fired when user successfully sends a friend request (achievements) */
   onFriendAdded?: () => void;
 }
-
-interface Friend {
-  id: string;
-  name: string;
-  sharedDreams: number;
-}
-
-const friends: Friend[] = []; // real friends only — never placeholders
 
 function sourceBadge(source: InterestSource | undefined): { label: string; className: string } | null {
   if (!source || source === 'manual') return null;
@@ -79,10 +70,7 @@ export function ProfileHub({ onClose, navigate, onFriendAdded }: ProfileHubProps
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
   const [activeTab, setActiveTab] = useState<'profile' | 'friends' | 'more'>('profile');
-  const [showAddFriend, setShowAddFriend] = useState(false);
   const [showShareProfile, setShowShareProfile] = useState(false);
-  const [friendCode, setFriendCode] = useState('');
-  const [copiedCode, setCopiedCode] = useState(false);
   const [newInterest, setNewInterest] = useState('');
   const [newGoal, setNewGoal] = useState('');
   const [showAddInterest, setShowAddInterest] = useState(false);
@@ -116,29 +104,6 @@ export function ProfileHub({ onClose, navigate, onFriendAdded }: ProfileHubProps
       });
     } finally {
       setSocialBusy(null);
-    }
-  };
-
-  const handleAddFriend = () => {
-    if (!friendCode.trim()) {
-      addToast({ type: 'warning', message: 'Please enter a friend code.' });
-      return;
-    }
-    addToast({ type: 'success', message: `Friend request sent to ${friendCode}!` });
-    onFriendAdded?.();
-    setShowAddFriend(false);
-    setFriendCode('');
-  };
-
-  const handleCopyFriendCode = async () => {
-    if (!profile?.friendCode) return;
-    try {
-      await navigator.clipboard.writeText(profile.friendCode);
-      setCopiedCode(true);
-      addToast({ type: 'success', message: 'Friend code copied!' });
-      setTimeout(() => setCopiedCode(false), 2000);
-    } catch {
-      addToast({ type: 'error', message: 'Could not copy ÔÇö try selecting manually.' });
     }
   };
 
@@ -479,67 +444,13 @@ export function ProfileHub({ onClose, navigate, onFriendAdded }: ProfileHubProps
   );
 
   const renderNetworkTab = () => (
-    <div className="space-y-4">
-      <div className={`rounded-2xl border p-4 ${card}`}>
-        <h4 className="font-medium text-ink mb-2">Your Friend Code</h4>
-        <p className="text-xs text-muted mb-3">Share this code so friends can connect with you.</p>
-        <div className="flex items-center gap-2">
-          <code className={`flex-1 px-3 py-2 rounded-xl text-sm font-mono ${isPearl ? 'bg-white/60' : 'bg-parchment'}`}>
-            {profile.friendCode}
-          </code>
-          <button type="button" onClick={handleCopyFriendCode} className={`p-2 rounded-xl ${isPearl ? 'bg-[var(--aqua-deep)] text-white' : 'bg-sage text-cream'}`}>
-            {copiedCode ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-          </button>
-        </div>
-      </div>
-
-      <div className={`rounded-2xl border p-4 ${card}`}>
-        <div className="flex items-center justify-between mb-3">
-          <h4 className="font-medium text-ink">Friends</h4>
-          <button
-            type="button"
-            onClick={() => setShowAddFriend(!showAddFriend)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium ${isPearl ? 'bg-[var(--aqua-deep)] text-white' : 'bg-sage text-cream'}`}
-          >
-            <Plus className="w-3 h-3" />
-            Add Friend
-          </button>
-        </div>
-        {showAddFriend && (
-          <div className="mt-3 flex gap-2">
-            <input
-              type="text"
-              value={friendCode}
-              onChange={(e) => setFriendCode(e.target.value)}
-              placeholder="Enter friend code"
-              className={`flex-1 px-3 py-2 rounded-xl text-sm border outline-none ${isPearl ? 'bg-white/60 border-[var(--glass-border)]' : 'bg-parchment border-line'}`}
-            />
-            <button type="button" onClick={handleAddFriend} className={`px-4 py-2 rounded-xl text-sm font-medium ${isPearl ? 'bg-[var(--aqua-deep)] text-white' : 'bg-sage text-cream'}`}>
-              Send
-            </button>
-          </div>
-        )}
-        <div className="mt-4 space-y-3">
-          {friends.length === 0 ? (
-            <p className="text-sm text-muted py-4 text-center">
-              No friends connected yet. Share your friend code when you&apos;re ready — we never show fake people here.
-            </p>
-          ) : (
-            friends.map((friend) => (
-              <div key={friend.id} className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isPearl ? 'bg-[var(--aqua-light)]/30' : 'bg-sage/20'}`}>
-                  <User className="w-5 h-5 text-muted" strokeWidth={1.5} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h5 className="text-sm font-medium text-ink truncate">{friend.name}</h5>
-                  <p className="text-xs text-muted">{friend.sharedDreams} shared dreams</p>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-    </div>
+    <FriendsNetwork
+      card={card}
+      isPearl={isPearl}
+      displayName={profile.displayName}
+      friendCode={profile.friendCode}
+      onFriendAdded={onFriendAdded}
+    />
   );
 
   return (
