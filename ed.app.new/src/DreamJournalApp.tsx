@@ -102,6 +102,8 @@ import LoadingScreen from './components/loading-screen';
 import type { DreamAsset } from './modules/sleep/types';
 import { initDreamService, syncFromSupabase } from './lib/dreamService';
 import { generateDreamId, toDreamsUpsertRow } from './lib/dreamsRecord';
+import { persistUserMedia, signedMediaUrl } from './lib/mediaPersist';
+import { mediaStorageManager } from './lib/mediaStorage';
 import { 
   updateUserProfileFromDream, 
   enrichAnalysisWithProfile, 
@@ -191,8 +193,9 @@ const DreamJournalApp = () => {
       potentialValue: string;
     };
     sourceAudio?: string | null;
-    audioCapture?: { url?: string; capturedAt?: string; duration?: number; mediaId?: string } | null;
-    videoCapture?: { url: string; capturedAt: string; duration?: number; thumbnail?: string; mediaId?: string } | null;
+    audioCapture?: { url?: string; path?: string; capturedAt?: string; duration?: number; mediaId?: string } | null;
+    videoCapture?: { url: string; path?: string; capturedAt: string; duration?: number; thumbnail?: string; mediaId?: string } | null;
+    mediaStoragePath?: string | null;
     captureMode?: string;
     capturedEmotions?: EmotionCapture | null;
     context?: {
@@ -589,6 +592,46 @@ const DreamJournalApp = () => {
             }
           } catch (err) {
             console.warn('[App] Local dream backfill failed:', err);
+          }
+          try {
+            const stored = await window.storage?.get('dreams');
+            const local = stored?.value ? (JSON.parse(stored.value) as Dream[]) : [];
+            for (const dream of local) {
+              const stuck = /processing your/i.test(dream.content || '') || /processing in progress/i.test(dream.narrative || '');
+              if (!stuck) continue;
+              const mediaId = dream.videoCapture?.mediaId || dream.audioCapture?.mediaId;
+              if (!mediaId) continue;
+              const media = await mediaStorageManager.getMedia(mediaId);
+              if (!media?.blob) continue;
+              if (dream.captureMode === 'video' || dream.videoCapture) {
+                const uploaded = await persistUserMedia({ blob: media.blob, kind: 'video', dreamId: dream.id });
+                const { dream: processed } = await processVideoJournal({
+                  videoBlob: media.blob,
+                  duration: dream.videoCapture?.duration || 0,
+                  mediaId,
+                  thumbnail: dream.videoCapture?.thumbnail,
+                });
+                const nextDream = {
+                  ...processed,
+                  id: dream.id,
+                  videoCapture: {
+                    ...processed.videoCapture,
+                    url: uploaded?.url || processed.videoCapture.url,
+                    path: uploaded?.path,
+                    mediaId,
+                  },
+                  mediaStoragePath: uploaded?.path || dream.mediaStoragePath,
+                };
+                setDreams((prev) => {
+                  const next = prev.map((d) => (d.id === dream.id ? nextDream : d));
+                  saveDreamsToStorage(next).catch(console.error);
+                  return next;
+                });
+                syncDreamToSupabase(nextDream).catch(console.error);
+              }
+            }
+          } catch (err) {
+            console.warn('[App] Stuck dream reprocess failed:', err);
           }
         });
       } else {
@@ -2223,7 +2266,10 @@ const DreamJournalApp = () => {
             } else if (result.videoUrl || result.videoBlob) {
               stopCaptureMedia();
               const dreamId = generateDreamId();
-              const videoUrl = result.videoUrl || URL.createObjectURL(result.videoBlob);
+              const localVideoUrl = result.videoUrl || (result.videoBlob ? URL.createObjectURL(result.videoBlob) : '');
+              const uploaded = result.videoBlob
+                ? await persistUserMedia({ blob: result.videoBlob, kind: 'video', dreamId })
+                : null;
               newDream = {
                 id: dreamId,
                 date: new Date().toISOString(),
@@ -2237,12 +2283,14 @@ const DreamJournalApp = () => {
                 interpretation: { symbols: {}, meaning: 'Processing your recording', commonPattern: '' },
                 captureMode: 'video',
                 videoCapture: {
-                  url: videoUrl,
+                  url: uploaded?.url || localVideoUrl,
+                  path: uploaded?.path,
                   capturedAt: new Date().toISOString(),
                   duration: result.duration,
                   thumbnail: result.thumbnail,
                   mediaId: result.mediaId,
                 },
+                mediaStoragePath: uploaded?.path || null,
                 generatedImage: result.thumbnail
                   ? { url: result.thumbnail, prompt: 'Video thumbnail', style: 'photo', generatedAt: new Date().toISOString(), source: 'video-capture' }
                   : null,
@@ -2256,47 +2304,49 @@ const DreamJournalApp = () => {
                 console.warn('[RecordScreen] Supabase sync error:', err);
               });
               navigate('journal');
-              addToast({ type: 'info', message: 'Recording saved. Processing your dream…' });
+              addToast({
+                type: 'info',
+                message: uploaded?.path
+                  ? 'Video saved. Transcribing and generating your image…'
+                  : 'Video saved on this device. Cloud upload failed — processing locally.',
+              });
 
-              const videoBlob = result.videoBlob;
               (async () => {
                 try {
                   const { dream: processedDream } = await processVideoJournal({
-                    videoBlob,
-                    videoUrl,
+                    videoBlob: result.videoBlob,
+                    videoUrl: uploaded?.url || localVideoUrl,
                     thumbnail: result.thumbnail,
                     duration: result.duration,
                     mediaId: result.mediaId,
                     hasAudio: result.hasAudio,
                   });
 
-                  let finalDream = { ...processedDream, id: dreamId };
-
-                  if (videoBlob && supabaseClient) {
-                    try {
-                      const user = await getCurrentUser();
-                      if (user) {
-                        const path = `${user.id || 'anon'}/video-${Date.now()}.webm`;
-                        const { error: uploadErr } = await supabaseClient.storage
-                          .from('dream-media')
-                          .upload(path, videoBlob, { contentType: videoBlob.type || 'video/webm', upsert: true });
-                        if (!uploadErr) {
-                          const { data: pub } = supabaseClient.storage.from('dream-media').getPublicUrl(path);
-                          if (pub?.publicUrl && finalDream.videoCapture) {
-                            finalDream = {
-                              ...finalDream,
-                              videoCapture: { ...finalDream.videoCapture, url: pub.publicUrl },
-                            };
-                          }
-                        }
-                      }
-                    } catch (e) {
-                      console.warn('[VideoRecord] Supabase video upload error (non-fatal):', e);
-                    }
+                  let image = processedDream.generatedImage;
+                  if (image?.url?.startsWith('data:')) {
+                    const storedImage = await persistUserMedia({
+                      blob: await (await fetch(image.url)).blob(),
+                      kind: 'image',
+                      dreamId,
+                    });
+                    if (storedImage?.url) image = { ...image, url: storedImage.url };
                   }
 
+                  const finalDream = {
+                    ...processedDream,
+                    id: dreamId,
+                    videoCapture: {
+                      ...processedDream.videoCapture,
+                      url: uploaded?.url || processedDream.videoCapture.url,
+                      path: uploaded?.path,
+                      mediaId: result.mediaId,
+                    },
+                    mediaStoragePath: uploaded?.path || null,
+                    generatedImage: image,
+                  };
+
                   setDreams((prev) => {
-                    const next = prev.map((d) => (d.id === dreamId ? { ...finalDream, id: dreamId } : d));
+                    const next = prev.map((d) => (d.id === dreamId ? finalDream : d));
                     saveDreamsToStorage(next).catch(console.error);
                     return next;
                   });
@@ -2304,7 +2354,7 @@ const DreamJournalApp = () => {
                   addToast({ type: 'success', message: 'Your video dream is ready in the journal.' });
                 } catch (error) {
                   console.error('[RecordScreen] Video journal processing failed:', error);
-                  addToast({ type: 'warning', message: 'Video saved, but transcription failed. You can edit it in your journal.' });
+                  addToast({ type: 'warning', message: 'Video is saved. Transcription or image generation failed — open the dream to retry.' });
                 } finally {
                   stopCaptureMedia();
                 }

@@ -83,6 +83,7 @@ export interface JournalDreamLike {
   context?: unknown;
   sleepData?: unknown;
   isSample?: boolean;
+  mediaStoragePath?: string | null;
 }
 
 export function toDreamsUpsertRow(dream: JournalDreamLike, profileId: string): Record<string, unknown> {
@@ -103,6 +104,12 @@ export function toDreamsUpsertRow(dream: JournalDreamLike, profileId: string): R
     media_type: mediaTypeFromCapture(dream.captureMode),
     narrative,
     content: content || narrative,
+    transcript: content && !/processing your/i.test(content) ? content : null,
+    media_storage_path:
+      dream.mediaStoragePath
+      || (dream.videoCapture as { path?: string } | undefined)?.path
+      || (dream.audioCapture as { path?: string } | undefined)?.path
+      || null,
     themes,
     valence: toValence(dream.moodValence),
     arousal: 0,

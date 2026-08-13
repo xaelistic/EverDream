@@ -27,7 +27,7 @@ const AUDIO_PLACEHOLDER =
 const PLACEHOLDER_TRANSCRIPT = VIDEO_PLACEHOLDER;
 
 export interface VideoJournalInput {
-  videoBlob: Blob;
+  videoBlob?: Blob;
   videoUrl?: string;
   thumbnail?: string;
   duration: number;
@@ -339,9 +339,18 @@ async function resolveVideoUrl(
 export async function processVideoJournal(
   input: VideoJournalInput,
 ): Promise<VideoJournalProcessResult> {
+  let videoBlob = input.videoBlob;
+  if ((!videoBlob || videoBlob.size === 0) && input.mediaId) {
+    const stored = await mediaStorageManager.getMedia(input.mediaId);
+    if (stored?.blob) videoBlob = stored.blob;
+  }
+  if (!videoBlob || videoBlob.size === 0) {
+    throw new Error('Video recording is missing — cannot transcribe or generate an image.');
+  }
+
   logStage('start', {
-    blobSize: input.videoBlob.size,
-    blobType: input.videoBlob.type,
+    blobSize: videoBlob.size,
+    blobType: videoBlob.type,
     duration: input.duration,
     hasAudio: input.hasAudio ?? true,
     mediaId: input.mediaId,
@@ -350,7 +359,7 @@ export async function processVideoJournal(
   // 1. Transcribe
   logStage('transcription_start');
   const { text: transcriptText, source: transcriptSource } = await transcribeVideoJournal(
-    input.videoBlob,
+    videoBlob,
     (status) => logStage('transcription_progress', { status }),
   );
   logStage('transcription_complete', { source: transcriptSource, length: transcriptText.length });

@@ -17,6 +17,7 @@ import { FEATURE_NFT_UI_ENABLED } from '../config/features';
 import DreamVisualizer from '../components/dreams/DreamVisualizer';
 import type { EmotionCapture } from '../components/face/FacialEmotionDetector';
 import { mediaStorageManager } from '../lib/mediaStorage';
+import { signedMediaUrl } from '../lib/mediaPersist';
 import { useSubscription } from '../hooks/use-subscription';
 import { coerceNarrativeText } from '../lib/normalizeDreamAnalysis';
 import type { DreamAsset } from '../modules/sleep/types';
@@ -74,7 +75,7 @@ interface Dream {
   capturedEmotions?: EmotionCapture | null;
   isSample?: boolean;
   sourcePhotos?: string[];
-  videoCapture?: { url: string; capturedAt: string; duration?: number; thumbnail?: string; mediaId?: string } | null;
+  videoCapture?: { url: string; path?: string; capturedAt: string; duration?: number; thumbnail?: string; mediaId?: string } | null;
   audioCapture?: AudioCapture | null;
   sourceAudio?: string | null;
   audioFile?: string;
@@ -147,22 +148,31 @@ export function DreamDetailScreen({
 
     const resolveVideo = async () => {
       const mediaId = detailDream.videoCapture?.mediaId;
-      if (!mediaId) {
-        setResolvedVideoUrl(detailDream.videoCapture?.url ?? null);
-        return;
+      const path = detailDream.videoCapture?.path;
+      const fallback = detailDream.videoCapture?.url ?? null;
+
+      if (mediaId) {
+        try {
+          const media = await mediaStorageManager.getMedia(mediaId);
+          if (media) {
+            objectUrl = URL.createObjectURL(media.blob);
+            setResolvedVideoUrl(objectUrl);
+            return;
+          }
+        } catch {
+          /* fall through */
+        }
       }
 
-      try {
-        const media = await mediaStorageManager.getMedia(mediaId);
-        if (media) {
-          objectUrl = URL.createObjectURL(media.blob);
-          setResolvedVideoUrl(objectUrl);
-        } else {
-          setResolvedVideoUrl(detailDream.videoCapture?.url ?? null);
+      if (path) {
+        const signed = await signedMediaUrl(path);
+        if (signed) {
+          setResolvedVideoUrl(signed);
+          return;
         }
-      } catch {
-        setResolvedVideoUrl(detailDream.videoCapture?.url ?? null);
       }
+
+      setResolvedVideoUrl(fallback && !fallback.startsWith('blob:') ? fallback : null);
     };
 
     resolveVideo();
@@ -170,7 +180,7 @@ export function DreamDetailScreen({
     return () => {
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [detailDream.id, detailDream.videoCapture?.mediaId, detailDream.videoCapture?.url]);
+  }, [detailDream.id, detailDream.videoCapture?.mediaId, detailDream.videoCapture?.url, detailDream.videoCapture?.path]);
 
   useEffect(() => {
     let objectUrl: string | null = null;

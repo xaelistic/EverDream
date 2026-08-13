@@ -100,19 +100,62 @@ Deno.serve(async (req: Request): Promise<Response> => {
       );
     }
 
-    // Optional language hint from header
     const language = req.headers.get('X-Language') || 'en';
+    const contentType = req.headers.get('Content-Type') || 'audio/webm';
+    const openRouterKey = Deno.env.get('OPENROUTER_API_KEY');
 
-    // Get API key from environment
-    const hfApiKey = Deno.env.get('HF_INFERENCE_API_KEY');
-
-    // Build headers for HuggingFace
-    const hfHeaders: Record<string, string> = {};
-    if (hfApiKey) {
-      hfHeaders['Authorization'] = `Bearer ${hfApiKey}`;
+    if (openRouterKey) {
+      try {
+        const bytes = new Uint8Array(audioBytes);
+        let binary = '';
+        const chunk = 0x8000;
+        for (let i = 0; i < bytes.length; i += chunk) {
+          binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunk, bytes.length)));
+        }
+        const format = contentType.includes('wav')
+          ? 'wav'
+          : contentType.includes('mp4') || contentType.includes('m4a')
+            ? 'm4a'
+            : contentType.includes('mpeg') || contentType.includes('mp3')
+              ? 'mp3'
+              : contentType.includes('ogg')
+                ? 'ogg'
+                : 'webm';
+        const orResponse = await fetch('https://openrouter.ai/api/v1/audio/transcriptions', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${openRouterKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer': 'https://everdream.app',
+            'X-Title': 'EverDream',
+          },
+          body: JSON.stringify({
+            model: Deno.env.get('OPENROUTER_TRANSCRIBE_MODEL') || 'openai/whisper-large-v3',
+            language,
+            input_audio: {
+              data: btoa(binary),
+              format,
+            },
+          }),
+        });
+        const raw = await orResponse.text();
+        if (orResponse.ok) {
+          const parsed = JSON.parse(raw) as { text?: string };
+          const text = (parsed.text || '').trim();
+          if (text) {
+            return jsonResponse({ text, language, source: 'openrouter-whisper' });
+          }
+        }
+        console.warn('[transcribe-audio] OpenRouter failed:', orResponse.status, raw.slice(0, 240));
+      } catch (err) {
+        console.warn('[transcribe-audio] OpenRouter error:', err);
+      }
     }
 
-    // Retry loop for model loading
+    const hfApiKey = Deno.env.get('HF_INFERENCE_API_KEY');
+    const hfHeaders: Record<string, string> = {};
+    if (hfApiKey) hfHeaders['Authorization'] = `Bearer ${hfApiKey}`;
+
     let lastError = '';
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       if (attempt > 0) {
@@ -129,26 +172,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
       if (hfResponse.ok) {
         const result = await hfResponse.json();
         const text = (result.text || '').trim();
-
-        const transcription: TranscriptionResult = {
+        return jsonResponse({
           text,
           language: result.language || language,
           source: 'hf-whisper',
-        };
-
-        return jsonResponse(transcription);
+        });
       }
 
       const errorText = await hfResponse.text();
-
-      // If model is loading, retry
       if (hfResponse.status === 503 || errorText.includes('loading')) {
         lastError = errorText;
-        console.warn(`[transcribe-audio] Model loading (attempt ${attempt + 1})`);
         continue;
       }
-
-      // Non-retryable error
       console.error(`[transcribe-audio] HF error ${hfResponse.status}:`, errorText);
       return errorResponse(
         `Transcription service returned ${hfResponse.status}. Please try again.`,
@@ -156,8 +191,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       );
     }
 
-    // Exhausted retries
-    console.error('[transcribe-audio] Model loading timeout after retries');
+    console.error('[transcribe-audio] Model loading timeout after retries', lastError);
     return errorResponse(
       'Transcription model is still loading. Please try again in a moment.',
       502,
