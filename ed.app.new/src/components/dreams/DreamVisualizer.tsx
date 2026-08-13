@@ -125,7 +125,7 @@ export default function DreamVisualizer({
         </div>
       )}
 
-      {error && (
+      {error && !isGenerating && (
         <div className="mx-5 sm:mx-6 mt-4 rounded-2xl border border-blush/60 bg-blush/20 px-4 py-3 text-center">
           <p className="text-sm text-duskDeep mb-2">{error}</p>
           <button

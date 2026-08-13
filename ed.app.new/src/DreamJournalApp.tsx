@@ -2241,28 +2241,75 @@ const DreamJournalApp = () => {
             if (result.id && result.captureMode === 'audio' && result.narrative) {
               newDream = result;
             } else if (result.uploadedText && text.trim().length >= 10) {
-              setIsProcessing(true);
-              try {
-                const { analysis, generatedImage } = await processTextJournal(text.trim());
-                newDream = {
-                  id: generateDreamId(),
-                  date: new Date().toISOString(),
-                  content: text.trim(),
-                  category: analysis.category,
-                  themes: analysis.themes,
-                  emotion: analysis.emotion,
-                  symbols: analysis.symbols,
-                  narrative: analysis.narrative,
-                  nugget: analysis.nugget,
-                  interpretation: analysis.interpretation,
-                  captureMode: 'text',
-                  sourceFile: result.fileName,
-                  generatedImage,
-                  isSample: false,
-                };
-              } finally {
-                setIsProcessing(false);
-              }
+              const dreamId = generateDreamId();
+              const sourceText = text.trim();
+              newDream = {
+                id: dreamId,
+                date: new Date().toISOString(),
+                content: sourceText,
+                category: 'uncategorized',
+                themes: ['imported'],
+                emotion: 'neutral',
+                symbols: [],
+                narrative: sourceText,
+                nugget: sourceText.slice(0, 90) + (sourceText.length > 90 ? '…' : ''),
+                interpretation: {
+                  symbols: {},
+                  meaning: 'Analysing your uploaded dream…',
+                  commonPattern: '',
+                },
+                captureMode: 'text',
+                sourceFile: result.fileName,
+                generatedImage: null,
+                isSample: false,
+              };
+              const uploadedDreams = [newDream, ...dreams.filter((d) => !d.isSample)];
+              setDreams(uploadedDreams);
+              await saveDreamsToStorage(uploadedDreams);
+              syncDreamToSupabase(newDream).catch((err: unknown) => {
+                console.warn('[Upload] Supabase sync error:', err);
+              });
+              navigate('dream', dreamId);
+              addToast({ type: 'info', message: 'Dream saved. Running analysis and image generation…' });
+
+              (async () => {
+                try {
+                  const { analysis, generatedImage } = await processTextJournal(sourceText);
+                  let image = generatedImage;
+                  if (image?.url?.startsWith('data:')) {
+                    try {
+                      const stored = await persistUserMedia({
+                        blob: await (await fetch(image.url)).blob(),
+                        kind: 'image',
+                        dreamId,
+                      });
+                      if (stored?.url) image = { ...image, url: stored.url };
+                    } catch (err) {
+                      console.warn('[Upload] image persist failed:', err);
+                    }
+                  }
+                  const finalDream = {
+                    ...newDream,
+                    ...analysis,
+                    content: sourceText,
+                    generatedImage: image,
+                  };
+                  setDreams((prev) => {
+                    const next = prev.map((d) => (d.id === dreamId ? finalDream : d));
+                    saveDreamsToStorage(next).catch(console.error);
+                    return next;
+                  });
+                  syncDreamToSupabase(finalDream).catch(console.error);
+                  addToast({ type: 'success', message: 'Analysis and image are ready.' });
+                } catch (err) {
+                  console.error('[Upload] processing failed:', err);
+                  addToast({
+                    type: 'warning',
+                    message: err instanceof Error ? err.message : 'Saved the text, but analysis/image failed. Try Regenerate.',
+                  });
+                }
+              })();
+              return;
             } else if (result.videoUrl || result.videoBlob) {
               stopCaptureMedia();
               const dreamId = generateDreamId();

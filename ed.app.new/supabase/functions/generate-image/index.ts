@@ -187,6 +187,46 @@ async function fetchWithTimeout(
   }
 }
 
+async function persistGeneratedImage(result: GenerationResult): Promise<GenerationResult> {
+  if (!result.bytes || result.bytes.length === 0) return result;
+  const supabaseUrl = (Deno.env.get('SUPABASE_URL') || '').replace(/\/$/, '');
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+  const publicBase = (
+    Deno.env.get('SUPABASE_PUBLIC_URL') ||
+    Deno.env.get('SERVICE_URL_SUPABASEKONG') ||
+    'https://supabase.n1g3.com'
+  ).replace(/\/$/, '');
+  if (!supabaseUrl || !serviceKey) return result;
+
+  const ext = result.contentType.includes('jpeg') || result.contentType.includes('jpg')
+    ? 'jpg'
+    : result.contentType.includes('webp')
+      ? 'webp'
+      : 'png';
+  const path = `generated/${crypto.randomUUID()}.${ext}`;
+  const upload = await fetch(
+    `${supabaseUrl}/storage/v1/object/public-assets/${path}`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${serviceKey}`,
+        apikey: serviceKey,
+        'Content-Type': result.contentType || 'image/png',
+        'x-upsert': 'true',
+      },
+      body: result.bytes,
+    },
+  );
+  if (!upload.ok) {
+    const detail = await upload.text();
+    console.warn('[generate-image] storage upload failed:', upload.status, detail.slice(0, 200));
+    return result;
+  }
+  const imageUrl = `${publicBase}/storage/v1/object/public/public-assets/${path}`;
+  console.log('[generate-image] stored', imageUrl);
+  return { ...result, imageUrl };
+}
+
 function successResponse(
   result: GenerationResult,
   format: 'json' | 'binary',
@@ -597,7 +637,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       console.log(
         `[generate-image] OpenRouter succeeded model=${result.model} cost=${result.cost_usd ?? 'n/a'}`,
       );
-      return successResponse(result, outputFormat, headers);
+      return successResponse(await persistGeneratedImage(result), outputFormat, headers);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.warn('[generate-image] OpenRouter failed:', msg);
