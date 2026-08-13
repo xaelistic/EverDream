@@ -43,7 +43,7 @@ export interface DreamAnalysis {
 
 // ── Constants ────────────────────────────────────────────────
 
-const ANALYSIS_TIMEOUT_MS = 15000; // 15 second timeout
+const ANALYSIS_TIMEOUT_MS = 45000;
 
 const FALLBACK_ANALYSIS: DreamAnalysis = {
   category: 'uncategorized',

@@ -1,91 +1,19 @@
 /**
- * Supabase Edge Function: analyze-dream
+ * Supabase Edge Function: analyze-dream v4
  *
- * XAEL NVCNT Matrix Analysis - Multi-provider with automatic fallback.
- * Analyzes dreams using the Subconscious Data Structurer protocol.
+ * Returns the client DreamAnalysis shape (category, themes, symbols,
+ * narrative, nugget, interpretation) — not the old NVCNT-only payload.
  *
- * NVCNT Matrix Dimensions:
- * - Narrative: Coherence and story arc (anti-spam gatekeeper)
- * - Valence: Absolute emotional magnitude + polarity
- * - Complexity: (Avg Abstraction Level * Semantic Variance)
- *   - hierarchical_depth: 0.0 (concrete) to 1.0 (abstract/philosophical)
- *   - semantic_variance: 0.0 (same domain) to 1.0 (bridged domains)
- *   - conceptual_payload: Array of concepts with abstraction levels
- * - Novelty: Statistical rarity of words/scenarios
- * - Texture: Sensory/material/lighting density for 3D/VR rendering
+ * Voice: insightful, health-conscious, symbolic, informative, not woo.
  *
- * Provider Priority:
- * 1. OpenRouter owl-alpha (FREE - high-performance agentic model)
- * 2. Google Gemini 1.5 Flash (free tier - 60 req/min)
- * 3. OpenAI GPT-4o-mini (cheap - ~$0.15/1M tokens)
- * 4. NVIDIA Nemotron (open source, cost-effective)
+ * OpenRouter (EN stack — Gemini reserved for later non-EN):
+ *   1. OPENROUTER_ANALYSIS_MODEL or z-ai/glm-4.7-flash
+ *   2. deepseek/deepseek-v4-flash-0731
  *
- * Environment variables (set via `supabase secrets set`):
- *   OPENROUTER_API_KEY — OpenRouter API key (required, free tier available)
- *   GEMINI_API_KEY — Google AI Studio key (free tier, optional backup)
- *   OPENAI_API_KEY — OpenAI API key ($5 free credit, optional backup)
- *   NVIDIA_API_KEY — NVIDIA API key for Nemotron models (optional backup)
- *
- * Request body:
- *   { text: string } — The dream text to analyze
- *
- * Response:
- *   { analysis: NVCNTMatrix, provider: string, model: string }
- *
- * Error responses:
- *   400 — Missing or invalid input
- *   502 — All providers failed
- *   500 — Unexpected server error
+ * Secrets:
+ *   OPENROUTER_API_KEY
+ *   OPENROUTER_ANALYSIS_MODEL (optional)
  */
-
-
-
-// ── Types ────────────────────────────────────────────────────
-
-interface ConceptualPayload {
-  concept: string;
-  abstraction_level: number; // 1-10 (1=physical object, 10=high-order philosophy)
-  domain_cluster: string; // e.g., "physics", "emotion", "sociology"
-}
-
-interface ComplexityMetric {
-  score: number; // 0.0 to 1.0
-  hierarchical_depth: number; // 0.0 to 1.0
-  semantic_variance: number; // 0.0 to 1.0
-  conceptual_payload: ConceptualPayload[];
-}
-
-interface NarrativeMetric {
-  score: number; // 0.0 to 1.0
-  summary: string;
-}
-
-interface ValenceMetric {
-  score: number; // 0.0 to 1.0 (absolute emotional magnitude)
-  polarity: number; // -1.0 to 1.0
-}
-
-interface NoveltyMetric {
-  score: number; // 0.0 to 1.0
-  unique_identifiers: string[];
-}
-
-interface TextureMetric {
-  score: number; // 0.0 to 1.0
-  render_prompt: string;
-}
-
-interface NVCNTMatrix {
-  narrative: NarrativeMetric;
-  valence: ValenceMetric;
-  complexity: ComplexityMetric;
-  novelty: NoveltyMetric;
-  texture: TextureMetric;
-}
-
-interface AnalyzeRequestBody {
-  text?: string;
-}
 
 interface DreamAnalysis {
   category: string;
@@ -94,12 +22,16 @@ interface DreamAnalysis {
   symbols: string[];
   narrative: string;
   nugget: string;
-  valence?: number;
+  valence: number;
   interpretation: {
     symbols: Record<string, string>;
     meaning: string;
     commonPattern: string;
   };
+}
+
+interface AnalyzeRequestBody {
+  text?: string;
 }
 
 interface ProviderResult {
@@ -108,302 +40,229 @@ interface ProviderResult {
   model: string;
 }
 
-// ── Constants ────────────────────────────────────────────────
+const MAX_INPUT_LENGTH = 8000;
+const DEFAULT_MODEL = 'z-ai/glm-4.7-flash';
+const FALLBACK_MODELS = ['deepseek/deepseek-v4-flash-0731'];
 
-const MAX_INPUT_LENGTH = 10000;
+const ALLOWED_ORIGINS = [
+  'https://everdream.n1g3.com',
+  'https://everdream.app',
+  'https://www.everdream.app',
+  'http://localhost:5173',
+  'http://localhost:4173',
+  'http://127.0.0.1:5173',
+];
 
-const CORS_HEADERS: Record<string, string> = {
-  'Access-Control-Allow-Origin': 'https://everdream.n1g3.com',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+const CATEGORIES = [
+  'nightmare',
+  'lucid',
+  'recurring',
+  'peaceful',
+  'prophetic',
+  'anxiety',
+  'adventure',
+] as const;
 
-const NVCNT_FALLBACK: NVCNTMatrix = {
-  narrative: {
-    score: 0.0,
-    summary: '',
-  },
-  valence: {
-    score: 0.0,
-    polarity: 0.0,
-  },
-  complexity: {
-    score: 0.0,
-    hierarchical_depth: 0.0,
-    semantic_variance: 0.0,
-    conceptual_payload: [],
-  },
-  novelty: {
-    score: 0.0,
-    unique_identifiers: [],
-  },
-  texture: {
-    score: 0.0,
-    render_prompt: '',
-  },
-};
+const ANALYSIS_PROMPT = `You are EverDream's dream analyst: a sleep-health coach who also understands symbolism.
 
-const XAEL_PROMPT = `You are the Subconscious Data Structurer for the DreamScape Protocol.
-Analyze the dream transcript and extract the NVCNT Matrix.
+Write like a clear clinician-journalist, not a mystic.
+- Be insightful and specific to THIS dream.
+- Use symbols as metaphors for emotion, stress, relationships, and body/sleep state.
+- Be health-conscious when it fits (sleep debt, overstimulation, unresolved tension, recovery).
+- Do not diagnose, predict the future, or claim a dream has one true meaning.
+- Prefer "often associated with" / "may reflect" over certainty.
+- Do not sound spacey, cosmic, or New Age.
 
-CRITICAL DEFINITIONS:
-- COMPLEXITY is NOT about big words or visual weirdness. It is about CONCEPTUAL HIERARCHY (abstract/philosophical depth) and SEMANTIC VARIANCE (how conceptually distant the ideas are from one another).
-- NOVELTY is about statistical rarity and unusual linguistic choices.
-- TEXTURE is purely about sensory, material, and spatial renderability.
-
-Return a STRICT JSON object matching this schema:
-
+Return ONLY valid JSON (no markdown) with this exact shape:
 {
-  "narrative": {
-    "score": 0.0 to 1.0,
-    "summary": "string"
-  },
-  "valence": {
-    "score": 0.0 to 1.0,
-    "polarity": -1.0 to 1.0
-  },
-  "complexity": {
-    "score": 0.0 to 1.0,
-    "hierarchical_depth": 0.0 to 1.0,
-    "semantic_variance": 0.0 to 1.0,
-    "conceptual_payload": [
-      {
-        "concept": "string",
-        "abstraction_level": 1 to 10,
-        "domain_cluster": "string"
-      }
-    ]
-  },
-  "novelty": {
-    "score": 0.0 to 1.0,
-    "unique_identifiers": ["string"]
-  },
-  "texture": {
-    "score": 0.0 to 1.0,
-    "render_prompt": "string"
+  "category": "nightmare|lucid|recurring|peaceful|prophetic|anxiety|adventure",
+  "themes": ["3-5 short themes"],
+  "emotion": "one primary emotion word",
+  "symbols": ["2-6 concrete symbols from the dream"],
+  "narrative": "120-180 words, first person present tense, vivid but not purple prose",
+  "nugget": "one concrete sentence, 12-20 words",
+  "valence": -1.0,
+  "interpretation": {
+    "symbols": { "symbol": "plain-language association" },
+    "meaning": "2-4 sentences of useful psychological / health-aware insight",
+    "commonPattern": "when dreams like this often show up in waking life"
   }
 }
 
-Dream: {DREAM_TEXT}
+valence is -1 (distress) to 1 (ease).
 
-Respond ONLY with valid JSON, no markdown.`;
+Dream:
+`;
 
-// ── Helpers ──────────────────────────────────────────────────
+function corsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get('Origin') || '';
+  return {
+    'Access-Control-Allow-Origin': ALLOWED_ORIGINS.includes(origin)
+      ? origin
+      : 'https://everdream.n1g3.com',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers':
+      'authorization, x-client-info, apikey, content-type',
+    Vary: 'Origin',
+  };
+}
 
-function jsonResponse(data: unknown, status = 200): Response {
+function jsonResponse(
+  data: unknown,
+  status: number,
+  extra: Record<string, string>,
+): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
+    headers: { 'Content-Type': 'application/json', ...extra },
   });
 }
 
-const CLIENT_FALLBACK_ANALYSIS: DreamAnalysis = {
-  category: 'uncategorized',
-  themes: ['dream', 'experience'],
-  emotion: 'neutral',
-  symbols: [],
-  narrative: '',
-  nugget: '',
-  valence: 0,
-  interpretation: {
-    symbols: {},
-    meaning: 'Analysis unavailable',
-    commonPattern: '',
-  },
-};
+function emptyAnalysis(): DreamAnalysis {
+  return {
+    category: 'uncategorized',
+    themes: [],
+    emotion: 'neutral',
+    symbols: [],
+    narrative: '',
+    nugget: '',
+    valence: 0,
+    interpretation: { symbols: {}, meaning: '', commonPattern: '' },
+  };
+}
 
-function nvcntToDreamAnalysis(matrix: NVCNTMatrix, sourceText: string): DreamAnalysis {
-  const summary = matrix.narrative?.summary || sourceText;
-  const polarity = matrix.valence?.polarity ?? 0;
-  const symbols = matrix.complexity?.conceptual_payload
-    ?.map((item) => item.concept)
-    .filter((concept): concept is string => typeof concept === 'string' && concept.length > 0) ?? [];
+function clamp(n: number, min: number, max: number): number {
+  if (Number.isNaN(n)) return 0;
+  return Math.min(max, Math.max(min, n));
+}
 
-  let category = 'uncategorized';
-  if (polarity <= -0.3) category = 'anxiety';
-  else if (polarity >= 0.3) category = 'peaceful';
+function normalizeAnalysis(raw: Partial<DreamAnalysis>): DreamAnalysis {
+  const category = String(raw.category || 'uncategorized').toLowerCase();
+  const themes = Array.isArray(raw.themes)
+    ? raw.themes.map(String).filter(Boolean).slice(0, 6)
+    : [];
+  const symbols = Array.isArray(raw.symbols)
+    ? raw.symbols.map(String).filter(Boolean).slice(0, 8)
+    : [];
+  const interpRaw = raw.interpretation;
+  const interp =
+    interpRaw && typeof interpRaw === 'object'
+      ? interpRaw
+      : { symbols: {}, meaning: typeof interpRaw === 'string' ? interpRaw : '', commonPattern: '' };
+  const symbolMap: Record<string, string> = {};
+  if (interp.symbols && typeof interp.symbols === 'object') {
+    for (const [k, v] of Object.entries(interp.symbols)) {
+      if (k && v) symbolMap[String(k)] = String(v);
+    }
+  }
 
   return {
-    category,
-    themes: matrix.novelty?.unique_identifiers?.slice(0, 5) ?? ['dream'],
-    emotion: polarity >= 0 ? 'positive' : polarity <= -0.2 ? 'anxious' : 'neutral',
+    category: (CATEGORIES as readonly string[]).includes(category)
+      ? category
+      : 'uncategorized',
+    themes,
+    emotion: String(raw.emotion || 'neutral').slice(0, 40),
     symbols,
-    narrative: summary,
-    nugget: summary.substring(0, 100),
-    valence: polarity,
+    narrative: String(raw.narrative || '').slice(0, 2500),
+    nugget: String(raw.nugget || '').slice(0, 240),
+    valence: parseValence(raw.valence),
     interpretation: {
-      symbols: {},
-      meaning: summary || 'Analysis unavailable',
-      commonPattern: '',
+      symbols: symbolMap,
+      meaning: String(interp.meaning || '').slice(0, 1500),
+      commonPattern: String(interp.commonPattern || '').slice(0, 400),
     },
   };
 }
 
-function errorResponse(message: string, status: number): Response {
-  return jsonResponse({ error: message, analysis: CLIENT_FALLBACK_ANALYSIS, provider: 'none' }, status);
+function parseValence(value: unknown): number {
+  if (typeof value === 'number') return clamp(value, -1, 1);
+  const text = String(value || '').toLowerCase();
+  if (text.includes('distress') || text.includes('neg')) return -0.4;
+  if (text.includes('ease') || text.includes('pos')) return 0.4;
+  if (text.includes('mix') || text.includes('ambiv')) return 0;
+  const n = Number(value);
+  return clamp(Number.isFinite(n) ? n : 0, -1, 1);
 }
 
-async function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function parseModelJson(content: string): DreamAnalysis {
+  const clean = content.replace(/```json|```/g, '').trim();
+  const start = clean.indexOf('{');
+  const end = clean.lastIndexOf('}');
+  if (start < 0 || end <= start) throw new Error('Model returned no JSON object');
+  const parsed = JSON.parse(clean.slice(start, end + 1)) as Partial<DreamAnalysis>;
+  const analysis = normalizeAnalysis(parsed);
+  if (!analysis.narrative && !analysis.nugget && analysis.themes.length === 0) {
+    throw new Error('Model JSON missing usable analysis fields');
+  }
+  return analysis;
 }
 
-// ── Provider: OpenRouter (Free models) ───────────────────────
-
-async function analyzeWithOpenRouter(text: string): Promise<ProviderResult> {
+async function analyzeWithOpenRouter(
+  text: string,
+  model: string,
+): Promise<ProviderResult> {
   const apiKey = Deno.env.get('OPENROUTER_API_KEY');
   if (!apiKey) throw new Error('OPENROUTER_API_KEY not set');
 
-  // Use owl-alpha model from OpenRouter - FREE, high-performance for agentic workloads
-  const model = 'openrouter/owl-alpha';
-
-  try {
-    console.log(`[analyze-dream][openrouter] Using model: ${model}`);
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'HTTP-Referer': 'https://everdream.app',
-        'X-Title': 'EverDream',
-      },
-      body: JSON.stringify({
-        model,
-        messages: [{
-          role: 'user',
-          content: XAEL_PROMPT.replace('{DREAM_TEXT}', text),
-        }],
-        max_tokens: 2000,
-      }),
-    });
-
-    console.log(`[analyze-dream][openrouter] Response status: ${response.status}`);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`OpenRouter returned ${response.status}: ${errorText}`);
-    }
-
-    const data = await response.json();
-    console.log(`[analyze-dream][openrouter] Response received, choices: ${data.choices?.length || 0}`);
-    
-    const content = data.choices?.[0]?.message?.content || '{}';
-    const clean = content.replace(/```json|```/g, '').trim();
-    const matrix = JSON.parse(clean) as NVCNTMatrix;
-
-    return { analysis: nvcntToDreamAnalysis(matrix, text), provider: 'openrouter', model };
-  } catch (err) {
-    throw new Error(`OpenRouter failed: ${err instanceof Error ? err.message : String(err)}`);
-  }
-}
-
-// ── Provider: Google Gemini (Free tier) ──────────────────────
-
-async function analyzeWithGemini(text: string): Promise<ProviderResult> {
-  const apiKey = Deno.env.get('GEMINI_API_KEY');
-  if (!apiKey) throw new Error('GEMINI_API_KEY not set');
-
-  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-
-  const response = await fetch(geminiUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{
-        parts: [{ text: XAEL_PROMPT.replace('{DREAM_TEXT}', text) }],
-      }],
-      generationConfig: { maxOutputTokens: 2000 },
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Gemini returned ${response.status}`);
-  }
-
-  const data = await response.json();
-  const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-  const clean = content.replace(/```json|```/g, '').trim();
-  const matrix = JSON.parse(clean) as NVCNTMatrix;
-
-  return { analysis: nvcntToDreamAnalysis(matrix, text), provider: 'gemini', model: 'gemini-1.5-flash' };
-}
-
-// ── Provider: OpenAI GPT-4o-mini (Cheap) ─────────────────────
-
-async function analyzeWithOpenAI(text: string): Promise<ProviderResult> {
-  const apiKey = Deno.env.get('OPENAI_API_KEY');
-  if (!apiKey) throw new Error('OPENAI_API_KEY not set');
-
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
+      Authorization: `Bearer ${apiKey}`,
+      'HTTP-Referer': 'https://everdream.app',
+      'X-Title': 'EverDream',
     },
     body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages: [{
-        role: 'user',
-        content: XAEL_PROMPT.replace('{DREAM_TEXT}', text),
-      }],
-      max_tokens: 2000,
+      model,
+      messages: [
+        { role: 'system', content: 'Return only compact valid JSON. No markdown.' },
+        { role: 'user', content: ANALYSIS_PROMPT + text },
+      ],
+      temperature: 0.4,
+      max_tokens: 1800,
     }),
   });
 
+  const raw = await response.text();
   if (!response.ok) {
-    throw new Error(`OpenAI returned ${response.status}`);
+    throw new Error(`OpenRouter ${model} ${response.status}: ${raw.slice(0, 280)}`);
   }
 
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content || '{}';
-  const clean = content.replace(/```json|```/g, '').trim();
-  const matrix = JSON.parse(clean) as NVCNTMatrix;
+  const data = JSON.parse(raw) as {
+    choices?: Array<{ message?: { content?: string | null; reasoning?: string } }>;
+    error?: { message?: string };
+  };
+  if (data.error?.message) throw new Error(data.error.message);
 
-  return { analysis: nvcntToDreamAnalysis(matrix, text), provider: 'openai', model: 'gpt-4o-mini' };
+  const message = data.choices?.[0]?.message;
+  const analysis = parseModelJson(extractModelText(message));
+  return { analysis, provider: 'openrouter', model };
 }
 
-// ── Provider: NVIDIA Nemotron (Open Source, Cost-Effective) ──────
-
-async function analyzeWithNemotron(text: string): Promise<ProviderResult> {
-  const apiKey = Deno.env.get('NVIDIA_API_KEY');
-  if (!apiKey) throw new Error('NVIDIA_API_KEY not set');
-
-  const response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: 'nvidia/nemotron-4-340b-instruct',
-      messages: [{
-        role: 'user',
-        content: XAEL_PROMPT.replace('{DREAM_TEXT}', text),
-      }],
-      max_tokens: 2000,
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Nemotron returned ${response.status}`);
+function extractModelText(message?: {
+  content?: string | null;
+  reasoning?: string;
+  reasoning_details?: Array<string | { text?: string }>;
+}): string {
+  const parts: string[] = [];
+  if (message?.content) parts.push(message.content);
+  if (message?.reasoning) parts.push(message.reasoning);
+  for (const detail of message?.reasoning_details || []) {
+    if (typeof detail === 'string') parts.push(detail);
+    else if (detail?.text) parts.push(detail.text);
   }
-
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content || '{}';
-  const clean = content.replace(/```json|```/g, '').trim();
-  const matrix = JSON.parse(clean) as NVCNTMatrix;
-
-  return { analysis: nvcntToDreamAnalysis(matrix, text), provider: 'nemotron', model: 'nemotron-4-340b' };
+  const withJson = parts.find((part) => part.includes('{') && part.includes('}'));
+  return withJson || parts.join('\n');
 }
-
-// ── Main Handler ──────────────────────────────────────────────
 
 Deno.serve(async (req: Request): Promise<Response> => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: CORS_HEADERS });
-  }
+  const headers = corsHeaders(req);
 
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers });
+  }
   if (req.method !== 'POST') {
-    return errorResponse('Method not allowed. Use POST.', 405);
+    return jsonResponse({ error: 'Method not allowed. Use POST.' }, 405, headers);
   }
 
   try {
@@ -411,69 +270,52 @@ Deno.serve(async (req: Request): Promise<Response> => {
     try {
       body = await req.json();
     } catch {
-      return errorResponse('Invalid JSON body', 400);
+      return jsonResponse({ error: 'Invalid JSON body' }, 400, headers);
     }
 
-    const { text } = body;
-    if (!text || typeof text !== 'string') {
-      return errorResponse('Missing or invalid "text" field.', 400);
-    }
-
-    const trimmed = text.trim();
-    if (trimmed.length < 10) {
-      return jsonResponse({
-        analysis: {
-          ...CLIENT_FALLBACK_ANALYSIS,
-          narrative: trimmed,
-          nugget: trimmed.substring(0, 100),
+    const text = typeof body.text === 'string' ? body.text.trim() : '';
+    if (text.length < 10) {
+      return jsonResponse(
+        {
+          analysis: emptyAnalysis(),
+          provider: 'none',
+          note: 'Text too short for meaningful analysis',
         },
-        provider: 'none',
-        note: 'Text too short for meaningful analysis',
-      });
+        200,
+        headers,
+      );
     }
 
-    const safeText = trimmed.length > MAX_INPUT_LENGTH
-      ? trimmed.substring(0, MAX_INPUT_LENGTH)
-      : trimmed;
-
-    // Try providers in order: free → cheap → expensive
-    // OpenRouter (owl-alpha) is now first - it's FREE and high-performance
-    const providers = [
-      { name: 'openrouter', fn: () => analyzeWithOpenRouter(safeText) },
-      { name: 'gemini', fn: () => analyzeWithGemini(safeText) },
-      { name: 'openai', fn: () => analyzeWithOpenAI(safeText) },
-      { name: 'nemotron', fn: () => analyzeWithNemotron(safeText) },
-    ];
-
+    const safeText = text.slice(0, MAX_INPUT_LENGTH);
+    const primary =
+      Deno.env.get('OPENROUTER_ANALYSIS_MODEL') || DEFAULT_MODEL;
+    const models = [primary, ...FALLBACK_MODELS.filter((m) => m !== primary)];
     const errors: string[] = [];
 
-    for (const provider of providers) {
+    for (const model of models) {
       try {
-        console.log(`[analyze-dream] Trying ${provider.name}...`);
-        const result = await provider.fn();
-        console.log(`[analyze-dream] ${provider.name} succeeded`);
-        return jsonResponse(result);
+        console.log(`[analyze-dream] Trying ${model}...`);
+        const result = await analyzeWithOpenRouter(safeText, model);
+        console.log(`[analyze-dream] ${model} succeeded`);
+        return jsonResponse(result, 200, headers);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`[analyze-dream] ${provider.name} failed: ${msg}`);
-        errors.push(`${provider.name}: ${msg}`);
+        console.warn(`[analyze-dream] ${model} failed: ${msg}`);
+        errors.push(`${model}: ${msg}`);
       }
     }
 
-    // All providers failed
-    console.error('[analyze-dream] All providers failed:', errors);
-    return jsonResponse({
-      analysis: {
-        ...CLIENT_FALLBACK_ANALYSIS,
-        narrative: safeText,
-        nugget: safeText.substring(0, 100),
+    return jsonResponse(
+      {
+        analysis: emptyAnalysis(),
+        provider: 'none',
+        errors,
       },
-      provider: 'none',
-      errors,
-    });
-
+      200,
+      headers,
+    );
   } catch (err) {
     console.error('[analyze-dream] Unexpected error:', err);
-    return errorResponse('An unexpected error occurred.', 500);
+    return jsonResponse({ error: 'An unexpected error occurred.' }, 500, headers);
   }
 });
