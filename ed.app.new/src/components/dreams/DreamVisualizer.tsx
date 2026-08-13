@@ -1,8 +1,8 @@
-import React, { useState, useCallback } from 'react';
-import { Sparkles, Download, RefreshCw, Wand2 } from 'lucide-react';
+import { useState, useCallback, useEffect } from 'react';
+import { RefreshCw, Share2, Sparkles } from 'lucide-react';
 import { generateDreamImage } from '../../modules/sleep/dreamAssetGenerator';
 import type { DreamAsset } from '../../modules/sleep/types';
-import { Button, Spinner, Card } from '../ui';
+import { recordTasteSignal } from '../../lib/imageTaste';
 
 interface DreamVisualizerProps {
   dreamId: string;
@@ -10,23 +10,11 @@ interface DreamVisualizerProps {
   dreamTitle?: string;
   existingImageUrl?: string;
   onImageGenerated?: (asset: DreamAsset) => void;
+  onShare?: () => void;
 }
 
 /**
- * DreamVisualizer — "Visualize Dream" button + image display.
- *
- * When clicked, calls generateDreamImage(dreamText) and shows the result.
- * Shows a loading spinner while generating.
- * Displays the generated image with a "Save/Download" button.
- * Works with Pollinations (free, no API key needed).
- *
- * @example
- * <DreamVisualizer
- *   dreamId={dream.id}
- *   dreamText={dream.content}
- *   dreamTitle={dream.title}
- *   onImageGenerated={(asset) => saveToDream(dream.id, asset.url)}
- * />
+ * Dream image at the top of a dream card, with share / regenerate actions.
  */
 export default function DreamVisualizer({
   dreamId,
@@ -34,6 +22,7 @@ export default function DreamVisualizer({
   dreamTitle,
   existingImageUrl,
   onImageGenerated,
+  onShare,
 }: DreamVisualizerProps) {
   const [asset, setAsset] = useState<DreamAsset | null>(
     existingImageUrl
@@ -51,7 +40,32 @@ export default function DreamVisualizer({
   const [error, setError] = useState<string | null>(null);
   const [imageLoaded, setImageLoaded] = useState(!!existingImageUrl);
 
+  useEffect(() => {
+    if (!existingImageUrl) return;
+    setAsset((current) => {
+      if (current?.url === existingImageUrl) return current;
+      return {
+        id: `${dreamId}-existing`,
+        prompt: dreamText,
+        url: existingImageUrl,
+        source: 'pollinations',
+        style: 'dreamlike',
+        generatedAt: new Date().toISOString(),
+      };
+    });
+    setImageLoaded(true);
+  }, [dreamId, dreamText, existingImageUrl]);
+
   const handleVisualize = useCallback(async () => {
+    if (asset?.url) {
+      recordTasteSignal('regenerate', {
+        dreamId,
+        prompt: asset.prompt || dreamText,
+        style: asset.style,
+        source: asset.source,
+      });
+    }
+
     setError(null);
     setIsGenerating(true);
     setImageLoaded(false);
@@ -66,168 +80,116 @@ export default function DreamVisualizer({
     } finally {
       setIsGenerating(false);
     }
-  }, [dreamText, onImageGenerated]);
+  }, [asset, dreamId, dreamText, onImageGenerated]);
 
-  const handleDownload = useCallback(() => {
-    if (!asset?.url) return;
-
-    // Create a download link
-    const a = document.createElement('a');
-    a.href = asset.url;
-    a.download = `dream-${dreamId}-${Date.now()}.jpg`;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  }, [asset, dreamId]);
+  const handleShare = useCallback(() => {
+    if (asset?.url) {
+      recordTasteSignal('share', {
+        dreamId,
+        prompt: asset.prompt || dreamText,
+        style: asset.style,
+        source: asset.source,
+      });
+    }
+    onShare?.();
+  }, [asset, dreamId, dreamText, onShare]);
 
   return (
-    <Card style={{ marginBottom: '24px' }} data-component="DreamVisualizer">
-      {/* Header */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: '16px',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Wand2 size={18} color="#9b8fd4" />
-          <h3 style={{
-            fontSize: '0.85rem',
-            fontWeight: 700,
-            color: '#9b8fd4',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-            margin: 0,
-          }}>
-            Dream Visualization
-          </h3>
-        </div>
-      </div>
-
-      {/* Generate Button */}
+    <div data-component="DreamVisualizer">
       {!asset && !isGenerating && (
-        <div style={{ textAlign: 'center', padding: '24px 0' }}>
-          <p style={{
-            fontSize: '0.8rem',
-            color: '#9b96b0',
-            marginBottom: '16px',
-            lineHeight: 1.6,
-          }}>
-            Generate an AI visualization of your dream. Powered by Pollinations — free, no API key needed.
+        <div className="px-5 sm:px-6 py-10 text-center border-b border-line bg-parchment/40">
+          <p className="text-sm text-muted mb-4 leading-relaxed">
+            Create an image of this dream, then share or try another take.
           </p>
-          <Button
-            variant="primary"
-            size="md"
+          <button
+            type="button"
             onClick={handleVisualize}
-            icon={<Sparkles size={16} />}
+            className="inline-flex items-center justify-center gap-2 bg-sage hover:bg-sageDark text-cream px-4 py-2.5 rounded-xl text-sm font-medium shadow-paper transition"
           >
-            Visualize Dream
-          </Button>
+            <Sparkles className="w-4 h-4" strokeWidth={1.75} />
+            Generate image
+          </button>
         </div>
       )}
 
-      {/* Loading State */}
       {isGenerating && (
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '48px 24px',
-          gap: '16px',
-        }}>
-          <Spinner size={40} color="#9b8fd4" />
-          <span style={{
-            fontSize: '0.85rem',
-            color: '#9b96b0',
-            textAlign: 'center',
-          }}>
-            Visualizing your dream...
-            <br />
-            <span style={{ fontSize: '0.75rem', opacity: 0.7 }}>
-              This may take 10-30 seconds
-            </span>
-          </span>
-        </div>
-      )}
-
-      {/* Error State */}
-      {error && (
-        <div style={{
-          padding: '16px',
-          background: 'rgba(232,143,160,0.1)',
-          border: '1px solid rgba(232,143,160,0.3)',
-          borderRadius: '12px',
-          textAlign: 'center',
-        }}>
-          <p style={{ fontSize: '0.8rem', color: '#e88fa0', marginBottom: '12px' }}>
-            {error}
+        <div className="flex flex-col items-center justify-center gap-3 py-16 px-6 border-b border-line bg-parchment/30">
+          <div
+            className="w-10 h-10 rounded-full border-2 border-dusk/30 border-t-duskDeep animate-spin"
+            aria-hidden
+          />
+          <p className="text-sm text-muted text-center">
+            Painting your dream…
+            <span className="block text-xs opacity-70 mt-1">Usually 10–30 seconds</span>
           </p>
-          <Button variant="ghost" size="sm" onClick={handleVisualize} icon={<RefreshCw size={14} />}>
-            Try Again
-          </Button>
         </div>
       )}
 
-      {/* Generated Image */}
+      {error && (
+        <div className="mx-5 sm:mx-6 mt-4 rounded-2xl border border-blush/60 bg-blush/20 px-4 py-3 text-center">
+          <p className="text-sm text-duskDeep mb-2">{error}</p>
+          <button
+            type="button"
+            onClick={handleVisualize}
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-ink hover:text-duskDeep"
+          >
+            <RefreshCw className="w-3.5 h-3.5" strokeWidth={1.75} />
+            Try again
+          </button>
+        </div>
+      )}
+
       {asset && !isGenerating && (
-        <div>
-          <div style={{ position: 'relative', borderRadius: '12px', overflow: 'hidden' }}>
-            {!imageLoaded && (
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                height: '300px',
-                background: 'rgba(168,237,220,0.08)',
-              }}>
-                <Spinner size={32} />
-              </div>
-            )}
-            <img
-              src={asset.url}
-              alt={`Dream visualization: ${dreamTitle || 'Your dream'}`}
-              onLoad={() => setImageLoaded(true)}
-              onError={() => setImageLoaded(true)}
-              style={{
-                width: '100%',
-                display: imageLoaded ? 'block' : 'none',
-                borderRadius: '12px',
-              }}
-            />
-          </div>
-
-          {/* Image Actions */}
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginTop: '12px',
-            paddingTop: '12px',
-            borderTop: '1px solid rgba(168,237,220,0.15)',
-          }}>
-            <span style={{
-              fontSize: '0.65rem',
-              color: '#9b96b0',
-              textTransform: 'uppercase',
-              letterSpacing: '0.1em',
-            }}>
-              {asset.metadata?.provider ? `✨ ${asset.metadata.provider}` : (asset.source === 'pollinations' ? '✨ Pollinations.ai' : asset.source === 'fallback' ? '📷 Stock Photo' : `✨ ${asset.source}`)}
-              {asset.metadata?.estimated_cost_usd ? ` (~$${asset.metadata.estimated_cost_usd})` : ''}
-            </span>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <Button variant="ghost" size="sm" onClick={handleDownload} icon={<Download size={14} />}>
-                Save
-              </Button>
-              <Button variant="ghost" size="sm" onClick={handleVisualize} icon={<RefreshCw size={14} />}>
-                Regenerate
-              </Button>
+        <div className="relative bg-ink/5">
+          {!imageLoaded && (
+            <div className="flex items-center justify-center h-64 bg-parchment/50">
+              <div
+                className="w-8 h-8 rounded-full border-2 border-dusk/30 border-t-duskDeep animate-spin"
+                aria-hidden
+              />
             </div>
-          </div>
+          )}
+          <img
+            src={asset.url}
+            alt={dreamTitle ? `Dream image: ${dreamTitle}` : 'Dream visualization'}
+            onLoad={() => setImageLoaded(true)}
+            onError={() => {
+              setImageLoaded(false);
+              setAsset(null);
+              setError('The image could not be displayed. Try generating again.');
+            }}
+            className={`w-full max-h-[28rem] object-cover ${imageLoaded ? 'block' : 'hidden'}`}
+          />
         </div>
       )}
-    </Card>
+
+      {(onShare || asset) && (
+        <div className="flex gap-2 px-5 sm:px-6 pt-4">
+          {onShare && (
+            <button
+              type="button"
+              onClick={handleShare}
+              className="flex-1 bg-sage hover:bg-sageDark text-cream py-2.5 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm shadow-paper"
+              aria-label="Share dream"
+            >
+              <Share2 className="w-4 h-4" strokeWidth={1.75} />
+              Share
+            </button>
+          )}
+          {asset && (
+            <button
+              type="button"
+              onClick={handleVisualize}
+              disabled={isGenerating}
+              className="flex-1 border border-line bg-parchment/70 hover:bg-parchment text-ink py-2.5 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm disabled:opacity-50"
+              aria-label="Regenerate dream image"
+            >
+              <RefreshCw className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} strokeWidth={1.75} />
+              Regenerate
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

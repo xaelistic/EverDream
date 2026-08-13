@@ -189,7 +189,12 @@ function parseModelJson(content: string): DreamAnalysis {
   const start = clean.indexOf('{');
   const end = clean.lastIndexOf('}');
   if (start < 0 || end <= start) throw new Error('Model returned no JSON object');
-  const parsed = JSON.parse(clean.slice(start, end + 1)) as Partial<DreamAnalysis>;
+  let parsed: Partial<DreamAnalysis>;
+  try {
+    parsed = JSON.parse(clean.slice(start, end + 1)) as Partial<DreamAnalysis>;
+  } catch {
+    throw new Error('Model returned incomplete JSON');
+  }
   const analysis = normalizeAnalysis(parsed);
   if (!analysis.narrative && !analysis.nugget && analysis.themes.length === 0) {
     throw new Error('Model JSON missing usable analysis fields');
@@ -221,6 +226,7 @@ async function analyzeWithOpenRouter(
       temperature: 0.4,
       max_tokens: 1800,
     }),
+    signal: AbortSignal.timeout(20_000),
   });
 
   const raw = await response.text();
@@ -235,15 +241,15 @@ async function analyzeWithOpenRouter(
   if (data.error?.message) throw new Error(data.error.message);
 
   const message = data.choices?.[0]?.message;
-  const analysis = parseModelJson(extractModelText(message));
+  const analysis = parseFromMessage(message);
   return { analysis, provider: 'openrouter', model };
 }
 
-function extractModelText(message?: {
+function collectMessageParts(message?: {
   content?: string | null;
   reasoning?: string;
   reasoning_details?: Array<string | { text?: string }>;
-}): string {
+}): string[] {
   const parts: string[] = [];
   if (message?.content) parts.push(message.content);
   if (message?.reasoning) parts.push(message.reasoning);
@@ -251,8 +257,24 @@ function extractModelText(message?: {
     if (typeof detail === 'string') parts.push(detail);
     else if (detail?.text) parts.push(detail.text);
   }
-  const withJson = parts.find((part) => part.includes('{') && part.includes('}'));
-  return withJson || parts.join('\n');
+  return parts;
+}
+
+function parseFromMessage(message?: {
+  content?: string | null;
+  reasoning?: string;
+  reasoning_details?: Array<string | { text?: string }>;
+}): DreamAnalysis {
+  const parts = collectMessageParts(message);
+  let lastError = 'Model returned no JSON object';
+  for (const part of parts) {
+    try {
+      return parseModelJson(part);
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+    }
+  }
+  throw new Error(lastError);
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {

@@ -43,7 +43,8 @@ export interface DreamAnalysis {
 
 // ── Constants ────────────────────────────────────────────────
 
-const ANALYSIS_TIMEOUT_MS = 45000;
+// Live analyze-dream can spend ~20s on GLM then ~25s on DeepSeek.
+const ANALYSIS_TIMEOUT_MS = 70000;
 
 const FALLBACK_ANALYSIS: DreamAnalysis = {
   category: 'uncategorized',
@@ -136,7 +137,13 @@ async function analyzeViaEdgeFunction(text: string): Promise<DreamAnalysis> {
       throw new Error('No response from analysis service');
     }
 
-    const responseData = data as { analysis?: DreamAnalysis; error?: string; fallback?: DreamAnalysis };
+    const responseData = data as {
+      analysis?: Partial<DreamAnalysis>;
+      error?: string;
+      fallback?: Partial<DreamAnalysis>;
+      provider?: string;
+      errors?: string[];
+    };
 
     if (responseData.error && responseData.fallback) {
       console.warn('[DreamAnalyzer] Step 5: Edge function returned fallback due to error:', responseData.error);
@@ -147,6 +154,10 @@ async function analyzeViaEdgeFunction(text: string): Promise<DreamAnalysis> {
       throw new Error(responseData.error);
     }
     if (responseData.analysis) {
+      if (!hasUsableAnalysis(responseData.analysis) || responseData.provider === 'none') {
+        const detail = responseData.errors?.join('; ') || 'empty analysis';
+        throw new Error(`Analysis service returned no result (${detail})`);
+      }
       console.log('[DreamAnalyzer] Step 6: Analysis successful, category:', responseData.analysis.category);
       return validateAndNormalizeAnalysis(responseData.analysis, text);
     }
@@ -161,6 +172,18 @@ async function analyzeViaEdgeFunction(text: string): Promise<DreamAnalysis> {
     }
     throw err;
   }
+}
+
+function hasUsableAnalysis(analysis?: Partial<DreamAnalysis> | null): boolean {
+  if (!analysis) return false;
+  const meaning = analysis.interpretation?.meaning;
+  return Boolean(
+    (Array.isArray(analysis.themes) && analysis.themes.length > 0) ||
+    (Array.isArray(analysis.symbols) && analysis.symbols.length > 0) ||
+    (typeof analysis.nugget === 'string' && analysis.nugget.trim()) ||
+    (typeof analysis.narrative === 'string' && analysis.narrative.trim()) ||
+    (typeof meaning === 'string' && meaning.trim() && meaning !== 'Analysis unavailable'),
+  );
 }
 
 // ── Main Analysis Function ────────────────────────────────────

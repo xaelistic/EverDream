@@ -1,10 +1,25 @@
-import { useEffect, useState, useRef } from 'react';
-import { ArrowLeft, Upload, Award, Shield, Eye, Camera, MessageCircle, Star } from 'lucide-react';
+import { useEffect, useMemo, useState, useRef } from 'react';
+import {
+  ArrowLeft,
+  Award,
+  Shield,
+  Eye,
+  Camera,
+  MessageCircle,
+  Star,
+  ChevronDown,
+  ChevronUp,
+  FileText,
+  Mic,
+  Play,
+} from 'lucide-react';
 import { FEATURE_NFT_UI_ENABLED } from '../config/features';
 import DreamVisualizer from '../components/dreams/DreamVisualizer';
 import type { EmotionCapture } from '../components/face/FacialEmotionDetector';
 import { mediaStorageManager } from '../lib/mediaStorage';
 import { useSubscription } from '../hooks/use-subscription';
+import { coerceNarrativeText } from '../lib/normalizeDreamAnalysis';
+import type { DreamAsset } from '../modules/sleep/types';
 
 interface DreamInterpretation {
   symbols: Record<string, string>;
@@ -33,6 +48,13 @@ interface GeneratedImage {
   source?: string;
 }
 
+interface AudioCapture {
+  url?: string;
+  capturedAt?: string;
+  duration?: number;
+  mediaId?: string;
+}
+
 interface Dream {
   id: string;
   date: string;
@@ -47,12 +69,15 @@ interface Dream {
   moodValence?: number;
   assetMetadata?: DreamAssetMetadata;
   context?: DreamContext;
-  generatedImage?: GeneratedImage;
+  generatedImage?: GeneratedImage | null;
   captureMode?: string;
   capturedEmotions?: EmotionCapture | null;
   isSample?: boolean;
   sourcePhotos?: string[];
   videoCapture?: { url: string; capturedAt: string; duration?: number; thumbnail?: string; mediaId?: string } | null;
+  audioCapture?: AudioCapture | null;
+  sourceAudio?: string | null;
+  audioFile?: string;
 }
 
 interface SimilarDream {
@@ -73,6 +98,17 @@ interface DreamDetailScreenProps {
   onToggleFavourite?: () => void;
 }
 
+function formatDuration(totalSeconds?: number): string | null {
+  if (!totalSeconds || totalSeconds <= 0) return null;
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = Math.floor(totalSeconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+function isPlaceholderTranscript(text: string): boolean {
+  return /processing your (audio |video )?dream/i.test(text.trim());
+}
+
 export function DreamDetailScreen({
   detailDream,
   navigate,
@@ -86,10 +122,25 @@ export function DreamDetailScreen({
   onToggleFavourite,
 }: DreamDetailScreenProps) {
   const { isAdmin } = useSubscription();
+  const [showTranscript, setShowTranscript] = useState(false);
   const [resolvedVideoUrl, setResolvedVideoUrl] = useState<string | null>(
     detailDream.videoCapture?.url ?? null,
   );
+  const [resolvedAudioUrl, setResolvedAudioUrl] = useState<string | null>(
+    detailDream.audioCapture?.url || detailDream.sourceAudio || detailDream.audioFile || null,
+  );
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  const summary = useMemo(
+    () => coerceNarrativeText(detailDream.nugget, ''),
+    [detailDream.nugget],
+  );
+  const analysisNarrative = useMemo(
+    () => coerceNarrativeText(detailDream.narrative, ''),
+    [detailDream.narrative],
+  );
+  const transcript = (detailDream.content || '').trim();
+  const canShowTranscript = transcript.length > 0 && !isPlaceholderTranscript(transcript);
 
   useEffect(() => {
     let objectUrl: string | null = null;
@@ -121,22 +172,58 @@ export function DreamDetailScreen({
     };
   }, [detailDream.id, detailDream.videoCapture?.mediaId, detailDream.videoCapture?.url]);
 
-  // Force autoplay for video journal in detail view (fixes autoplay policy + timing issues)
   useEffect(() => {
-    if (resolvedVideoUrl && videoRef.current) {
-      const v = videoRef.current;
-      const tryPlay = () => {
-        v.play().catch((e) => {
-          console.warn('[DreamDetail] Video autoplay prevented:', e);
-        });
-      };
-      if (v.readyState >= 2) {
-        tryPlay();
-      } else {
-        v.onloadeddata = tryPlay;
+    let objectUrl: string | null = null;
+
+    const resolveAudio = async () => {
+      const mediaId = detailDream.audioCapture?.mediaId;
+      const fallback =
+        detailDream.audioCapture?.url || detailDream.sourceAudio || detailDream.audioFile || null;
+      if (!mediaId) {
+        setResolvedAudioUrl(fallback);
+        return;
       }
-    }
-  }, [resolvedVideoUrl]);
+
+      try {
+        const media = await mediaStorageManager.getMedia(mediaId);
+        if (media) {
+          objectUrl = URL.createObjectURL(media.blob);
+          setResolvedAudioUrl(objectUrl);
+        } else {
+          setResolvedAudioUrl(fallback);
+        }
+      } catch {
+        setResolvedAudioUrl(fallback);
+      }
+    };
+
+    resolveAudio();
+
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [
+    detailDream.id,
+    detailDream.audioCapture?.mediaId,
+    detailDream.audioCapture?.url,
+    detailDream.sourceAudio,
+    detailDream.audioFile,
+  ]);
+
+  const hasVideo = Boolean(detailDream.videoCapture && (resolvedVideoUrl || detailDream.videoCapture.url));
+  const hasAudio = Boolean(resolvedAudioUrl) && !hasVideo;
+  const videoDuration = formatDuration(detailDream.videoCapture?.duration);
+  const audioDuration = formatDuration(detailDream.audioCapture?.duration);
+
+  const handleImageGenerated = (asset: DreamAsset) => {
+    onImageGenerated({
+      url: asset.url,
+      prompt: asset.prompt,
+      style: asset.style,
+      generatedAt: asset.generatedAt,
+      source: asset.source,
+    });
+  };
 
   return (
     <div className="space-y-5">
@@ -164,16 +251,51 @@ export function DreamDetailScreen({
           </button>
         )}
       </div>
+
       <div className="rounded-3xl border border-line bg-cream shadow-lift overflow-hidden">
-        <div className="space-y-4 p-5 sm:p-6">
-          {/* Dream Visualizer — "Visualize Dream" button + image display */}
-          <DreamVisualizer
-            dreamId={detailDream.id}
-            dreamText={detailDream.narrative || detailDream.content}
-            dreamTitle={detailDream.nugget}
-            existingImageUrl={detailDream.generatedImage?.url}
-            onImageGenerated={onImageGenerated}
-          />
+        <DreamVisualizer
+          dreamId={detailDream.id}
+          dreamText={detailDream.narrative || detailDream.content}
+          dreamTitle={detailDream.nugget}
+          existingImageUrl={detailDream.generatedImage?.url}
+          onImageGenerated={handleImageGenerated}
+          onShare={() => shareDream(detailDream)}
+        />
+
+        <div className="space-y-4 p-5 sm:p-6 pt-4">
+          {(hasVideo || hasAudio) && (
+            <section className="rounded-2xl border border-line bg-parchment/50 overflow-hidden">
+              <div className="flex items-center gap-2 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted">
+                {hasVideo ? (
+                  <Play className="w-3.5 h-3.5 text-duskDeep" strokeWidth={1.75} />
+                ) : (
+                  <Mic className="w-3.5 h-3.5 text-duskDeep" strokeWidth={1.75} />
+                )}
+                Replay
+                {(hasVideo ? videoDuration : audioDuration) && (
+                  <span className="font-medium normal-case tracking-normal">
+                    {hasVideo ? videoDuration : audioDuration}
+                  </span>
+                )}
+              </div>
+              {hasVideo && (
+                <video
+                  ref={videoRef}
+                  src={resolvedVideoUrl || detailDream.videoCapture?.url}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  className="w-full max-h-56 bg-ink"
+                  poster={detailDream.videoCapture?.thumbnail || detailDream.generatedImage?.url}
+                />
+              )}
+              {hasAudio && resolvedAudioUrl && (
+                <div className="px-3 pb-3">
+                  <audio src={resolvedAudioUrl} controls preload="metadata" className="w-full" />
+                </div>
+              )}
+            </section>
+          )}
 
           <div className="flex items-start justify-between">
             <div>
@@ -188,11 +310,10 @@ export function DreamDetailScreen({
                   weekday: 'long',
                   month: 'long',
                   day: 'numeric',
-                  year: 'numeric'
+                  year: 'numeric',
                 })}
               </div>
             </div>
-            {/* Valence Indicator */}
             {detailDream.moodValence !== undefined && (
               <div className="flex flex-col items-center gap-1 rounded-2xl border border-line bg-parchment px-3 py-2">
                 <span className="text-[10px] uppercase tracking-wide text-muted">Valence</span>
@@ -203,78 +324,127 @@ export function DreamDetailScreen({
                       style={{
                         width: `${((detailDream.moodValence + 1) / 2) * 100}%`,
                         background: detailDream.moodValence >= 0
-                          ? `linear-gradient(90deg, #5ec4a8, #4a9e86)`
-                          : `linear-gradient(90deg, #e88fa0, #c86070)`,
+                          ? 'linear-gradient(90deg, #5ec4a8, #4a9e86)'
+                          : 'linear-gradient(90deg, #e88fa0, #c86070)',
                       }}
                     />
                   </div>
                   <span className="text-xs font-semibold text-ink">
-                    {detailDream.moodValence >= 0 ? '+' : ''}{detailDream.moodValence.toFixed(1)}
+                    {detailDream.moodValence >= 0 ? '+' : ''}
+                    {detailDream.moodValence.toFixed(1)}
                   </span>
                 </div>
               </div>
             )}
           </div>
 
-          <div>
-            <p className="text-lg font-serif font-medium text-ink italic mb-3 leading-snug">
-              "{detailDream.nugget}"
-            </p>
-            <p className="text-sm leading-relaxed text-muted">{detailDream.narrative}</p>
-          </div>
+          <section>
+            <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted mb-2">
+              Summary
+            </h3>
+            {summary && (
+              <p className="text-lg font-serif font-medium text-ink italic mb-3 leading-snug">
+                “{summary}”
+              </p>
+            )}
+            {detailDream.themes?.length > 0 && (
+              <div className="flex gap-2 flex-wrap">
+                {detailDream.themes.slice(0, 6).map((theme) => (
+                  <span
+                    key={theme}
+                    className="text-[11px] text-muted bg-parchment border border-line px-2 py-0.5 rounded-full"
+                  >
+                    {theme}
+                  </span>
+                ))}
+              </div>
+            )}
+          </section>
 
-          {/* Source indicator */}
+          {(detailDream.interpretation || analysisNarrative) && (
+            <section className="rounded-2xl border border-line bg-parchment/60 p-4">
+              <h3 className="font-semibold mb-2 flex items-center gap-2 text-sm text-ink">
+                <Eye className="w-4 h-4 text-duskDeep" strokeWidth={1.75} />
+                Analysis
+              </h3>
+              {analysisNarrative && analysisNarrative !== summary && (
+                <p className="text-sm mb-3 text-muted leading-relaxed">{analysisNarrative}</p>
+              )}
+              {detailDream.interpretation?.meaning && (
+                <p className="text-sm mb-3 text-ink leading-relaxed">
+                  {detailDream.interpretation.meaning}
+                </p>
+              )}
+              {Object.keys(detailDream.interpretation?.symbols || {}).length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-muted">Symbols</div>
+                  {Object.entries(detailDream.interpretation.symbols).map(([symbol, meaning]) => (
+                    <div key={symbol} className="text-xs text-ink">
+                      <span className="font-semibold capitalize">{symbol}:</span>{' '}
+                      <span className="text-muted">{meaning}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {detailDream.interpretation?.commonPattern && (
+                <div className="mt-3 text-xs text-muted italic border-t border-line pt-3">
+                  {detailDream.interpretation.commonPattern}
+                </div>
+              )}
+            </section>
+          )}
+
+          {canShowTranscript && (
+            <section>
+              <button
+                type="button"
+                onClick={() => setShowTranscript((open) => !open)}
+                className="w-full flex items-center justify-between gap-2 rounded-2xl border border-line bg-cream hover:bg-parchment/60 px-4 py-3 text-sm font-medium text-ink transition"
+                aria-expanded={showTranscript}
+              >
+                <span className="inline-flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-duskDeep" strokeWidth={1.75} />
+                  Full transcript
+                </span>
+                {showTranscript ? (
+                  <ChevronUp className="w-4 h-4 text-muted" strokeWidth={1.75} />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-muted" strokeWidth={1.75} />
+                )}
+              </button>
+              {showTranscript && (
+                <p className="mt-3 text-sm leading-relaxed text-ink whitespace-pre-wrap px-1">
+                  {transcript}
+                </p>
+              )}
+            </section>
+          )}
+
           {detailDream.captureMode === 'photo' && (
             <div className="rounded-2xl border border-sage/20 bg-sage/5 px-4 py-2.5 flex items-center gap-2 text-sm text-sageDark">
               <Camera className="w-4 h-4" strokeWidth={1.75} />
-              <span>Imported from journal photo{detailDream.sourcePhotos && detailDream.sourcePhotos.length > 1 ? 's' : ''}</span>
+              <span>
+                Imported from journal photo
+                {detailDream.sourcePhotos && detailDream.sourcePhotos.length > 1 ? 's' : ''}
+              </span>
             </div>
           )}
 
-          {/* Video capture indicator */}
-          {detailDream.captureMode === 'video' && detailDream.videoCapture && (
-            <div className="space-y-3">
-              <div className="rounded-2xl border border-sage/20 bg-sage/5 px-4 py-2.5 flex items-center gap-2 text-sm text-sageDark">
-                <Camera className="w-4 h-4" strokeWidth={1.75} />
-                <span>Video journal entry</span>
-              </div>
-              <div className="rounded-2xl border border-line bg-black overflow-hidden">
-                <video
-                  ref={videoRef}
-                  src={resolvedVideoUrl || detailDream.videoCapture.url}
-                  controls
-                  autoPlay
-                  muted
-                  playsInline
-                  loop
-                  className="w-full"
-                  poster={detailDream.videoCapture.thumbnail || detailDream.generatedImage?.url}
-                />
-              </div>
-              {detailDream.videoCapture.duration && (
-                <div className="text-xs text-muted text-center">
-                  Duration: {Math.floor(detailDream.videoCapture.duration / 60)}:{(detailDream.videoCapture.duration % 60).toString().padStart(2, '0')}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Captured emotions indicator */}
           {detailDream.capturedEmotions && (
             <div className="rounded-2xl border border-dusk/20 bg-dusk/5 px-4 py-2.5 flex items-center gap-2 text-sm text-duskDeep">
               <span className="text-lg">
-                {detailDream.capturedEmotions.dominantEmotion === 'happy' ? '😊' :
-                 detailDream.capturedEmotions.dominantEmotion === 'sad' ? '😢' :
-                 detailDream.capturedEmotions.dominantEmotion === 'angry' ? '😠' :
-                 detailDream.capturedEmotions.dominantEmotion === 'surprised' ? '😲' :
-                 detailDream.capturedEmotions.dominantEmotion === 'fearful' ? '😰' :
-                 detailDream.capturedEmotions.dominantEmotion === 'disgusted' ? '🤢' : '😐'}
+                {detailDream.capturedEmotions.dominantEmotion === 'happy' ? '😊'
+                  : detailDream.capturedEmotions.dominantEmotion === 'sad' ? '😢'
+                    : detailDream.capturedEmotions.dominantEmotion === 'angry' ? '😠'
+                      : detailDream.capturedEmotions.dominantEmotion === 'surprised' ? '😲'
+                        : detailDream.capturedEmotions.dominantEmotion === 'fearful' ? '😰'
+                          : detailDream.capturedEmotions.dominantEmotion === 'disgusted' ? '🤢'
+                            : '😐'}
               </span>
               <span>Facial emotion: {detailDream.capturedEmotions.dominantEmotion}</span>
             </div>
           )}
-          
-          {/* MVP: hide reflection metadata (depth/uniqueness/value) for non-admin users */}
+
           {isAdmin && detailDream.assetMetadata && (
             <div className="rounded-2xl border border-line bg-parchment/80 p-4">
               <h3 className="font-semibold mb-3 flex items-center gap-2 text-sm text-ink">
@@ -302,51 +472,24 @@ export function DreamDetailScreen({
             </div>
           )}
 
-          {/* Symbol Interpretation */}
-          {detailDream.interpretation && (
-            <div className="rounded-2xl border border-line bg-parchment/60 p-4">
-              <h3 className="font-semibold mb-2 flex items-center gap-2 text-sm text-ink">
-                <Eye className="w-4 h-4 text-duskDeep" strokeWidth={1.75} />
-                Gentle interpretation
-              </h3>
-              <p className="text-sm mb-3 text-muted leading-relaxed">{detailDream.interpretation.meaning}</p>
-
-              {Object.keys(detailDream.interpretation.symbols || {}).length > 0 && (
-                <div className="space-y-2">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-muted">Symbols</div>
-                  {Object.entries(detailDream.interpretation.symbols).map(([symbol, meaning]) => (
-                    <div key={symbol} className="text-xs text-ink">
-                      <span className="font-semibold capitalize">{symbol}:</span>{' '}
-                      <span className="text-muted">{meaning}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {detailDream.interpretation.commonPattern && (
-                <div className="mt-3 text-xs text-muted italic border-t border-line pt-3">
-                  {detailDream.interpretation.commonPattern}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Context */}
           {detailDream.context && (detailDream.context.mood || detailDream.context.yesterdayEvents) && (
             <div className="rounded-2xl border border-line bg-parchment/60 p-4">
               <h3 className="font-semibold mb-2 text-sm text-ink">Evening context</h3>
               <div className="text-xs space-y-1 text-muted">
                 {detailDream.context.mood && (
-                  <div><span className="text-ink font-medium">Mood before bed:</span> {detailDream.context.mood}</div>
+                  <div>
+                    <span className="text-ink font-medium">Mood before bed:</span> {detailDream.context.mood}
+                  </div>
                 )}
                 {detailDream.context.yesterdayEvents && (
-                  <div><span className="text-ink font-medium">Yesterday:</span> {detailDream.context.yesterdayEvents}</div>
+                  <div>
+                    <span className="text-ink font-medium">Yesterday:</span> {detailDream.context.yesterdayEvents}
+                  </div>
                 )}
               </div>
             </div>
           )}
 
-          {/* Similar Dreams */}
           {!detailDream.isSample && findSimilarDreams(detailDream).length > 0 && (
             <div className="rounded-2xl border border-blush/80 bg-blush/25 p-4">
               <h3 className="font-semibold mb-2 text-sm flex items-center gap-2 text-ink">
@@ -360,38 +503,30 @@ export function DreamDetailScreen({
                     onClick={() => navigate('dream', dream.id)}
                     role="button"
                     tabIndex={0}
-                    onKeyDown={(e) => { if (e.key === 'Enter') navigate('dream', dream.id); }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') navigate('dream', dream.id);
+                    }}
                     className="text-xs p-3 rounded-xl bg-cream/90 border border-line cursor-pointer hover:border-dusk/40 transition"
                   >
-                    {new Date(dream.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}: {dream.nugget?.substring(0, 60)}...
+                    {new Date(dream.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}:{' '}
+                    {dream.nugget?.substring(0, 60)}...
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          <div className="flex gap-3 pt-1">
+          {FEATURE_NFT_UI_ENABLED ? (
             <button
               type="button"
-              onClick={() => shareDream(detailDream)}
-              className="flex-1 bg-sage hover:bg-sageDark text-cream py-3 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm shadow-paper"
-              aria-label="Share dream"
+              onClick={() => handleOpenMintModal(detailDream)}
+              className="w-full border-2 border-dusk/30 bg-dusk/5 hover:bg-dusk/10 text-duskDeep py-3 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm"
+              aria-label="Mint as NFT"
             >
-              <Upload className="w-4 h-4" strokeWidth={1.75} />
-              Share
+              <Award className="w-4 h-4" strokeWidth={1.75} />
+              Mint NFT
             </button>
-            {FEATURE_NFT_UI_ENABLED ? (
-              <button
-                type="button"
-                onClick={() => handleOpenMintModal(detailDream)}
-                className="flex-1 border-2 border-dusk/30 bg-dusk/5 hover:bg-dusk/10 text-duskDeep py-3 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm"
-                aria-label="Mint as NFT"
-              >
-                <Award className="w-4 h-4" strokeWidth={1.75} />
-                Mint NFT
-              </button>
-            ) : null}
-          </div>
+          ) : null}
         </div>
       </div>
     </div>

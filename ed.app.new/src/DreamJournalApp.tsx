@@ -79,8 +79,8 @@ import { useToast } from './components/ui/Toast';
 import { TermsModal } from './components/modal';
 import { ProfileHub } from './screens/ProfileHubScreen';
 import { getOrCreateWallet, createDreamNFT, mintNFT, saveNFT, type DreamNFT, type WalletIdentity } from './lib/nft';
-import DreamVisualizer from './components/dreams/DreamVisualizer';
 import DreamCapture from './components/dreams/DreamCapture';
+import { DreamDetailScreen } from './screens/DreamDetailScreen';
 import ShareModal from './components/dreams/ShareModal';
 import { VideoJournalScreen } from './screens/VideoJournalScreen';
 import { PrivacyScreen } from './screens/PrivacyScreen';
@@ -190,6 +190,7 @@ const DreamJournalApp = () => {
       potentialValue: string;
     };
     sourceAudio?: string | null;
+    audioCapture?: { url?: string; capturedAt?: string; duration?: number; mediaId?: string } | null;
     videoCapture?: { url: string; capturedAt: string; duration?: number; thumbnail?: string; mediaId?: string } | null;
     captureMode?: string;
     capturedEmotions?: EmotionCapture | null;
@@ -727,14 +728,12 @@ const DreamJournalApp = () => {
     }
   };
 
-  // Generate dream image using free AI image generation (Pollinations.ai)
   const generateDreamImageAsync = async (dreamData: any) => {
     setIsGeneratingImage(true);
-    const perfCall = startAPICall('image_gen', 'pollinations.ai', 'GET', route.screen);
+    const perfCall = startAPICall('image_gen', 'generate-image', 'POST', route.screen);
     try {
       let basePrompt = dreamData.narrative || dreamData.nugget || dreamData.content || 'a surreal dreamscape';
 
-      // Enrich using user profile (refers back - SPEC-16)
       try {
         const profile = await loadCurrentUserProfile();
         basePrompt = enrichImagePromptWithProfile(basePrompt, profile);
@@ -754,19 +753,11 @@ const DreamJournalApp = () => {
     } catch (error) {
       endAPICall(perfCall, 0, String(error));
       console.error('Image generation error:', error);
-      // Generate a placeholder SVG as fallback instead of broken Unsplash URL
-      const prompt = dreamData.nugget || dreamData.content || 'dream';
-      const hash = prompt.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      const hue1 = hash % 360;
-      const hue2 = (hue1 + 40) % 360;
-      const svg = encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><defs><linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:hsl(${hue1},70%,50%);stop-opacity:1"/><stop offset="100%" style="stop-color:hsl(${hue2},70%,30%);stop-opacity:1"/></linearGradient></defs><rect width="800" height="600" fill="url(#grad)"/><text x="50%" y="50%" text-anchor="middle" fill="white" font-size="24" font-family="sans-serif" opacity="0.8">Dream Image</text></svg>`);
-      return {
-        url: `data:image/svg+xml;charset=utf-8,${svg}`,
-        prompt: dreamData.nugget || 'dream',
-        style: 'dreamlike',
-        generatedAt: new Date().toISOString(),
-        source: 'fallback',
-      };
+      addToast({
+        type: 'warning',
+        message: 'Image generation failed. Open the dream and tap Generate to try again.',
+      });
+      return null;
     } finally {
       setIsGeneratingImage(false);
     }
@@ -2495,242 +2486,35 @@ const DreamJournalApp = () => {
 
       {/* Dream entry */}
       {route.screen === 'dream' && detailDream && (
-          <div className="space-y-5">
-            <div className="flex items-center justify-between gap-3">
-              <button
-                type="button"
-                onClick={() => navigate('journal')}
-                className="inline-flex items-center gap-2 text-sm font-medium text-muted hover:text-ink"
-              >
-                <ArrowLeft className="w-4 h-4" strokeWidth={1.75} /> Journal
-              </button>
-              <button
-                type="button"
-                onClick={() => handleToggleFavourite(detailDream.id)}
-                className="w-10 h-10 rounded-full border border-line bg-cream hover:bg-parchment shadow-paper flex items-center justify-center transition"
-                aria-label={
-                  favouriteIds.includes(detailDream.id)
-                    ? 'Remove from favourites'
-                    : 'Add to favourites'
-                }
-                aria-pressed={favouriteIds.includes(detailDream.id)}
-              >
-                <Star
-                  className={`w-5 h-5 ${
-                    favouriteIds.includes(detailDream.id)
-                      ? 'text-amber-500 fill-amber-400'
-                      : 'text-muted'
-                  }`}
-                  strokeWidth={1.75}
-                />
-              </button>
-            </div>
-          <div className="rounded-3xl border border-line bg-cream shadow-lift overflow-hidden">
-          <div className="space-y-4 p-5 sm:p-6">
-            {/* Dream Visualizer — "Visualize Dream" button + image display */}
-            <DreamVisualizer
-              dreamId={detailDream.id}
-              dreamText={detailDream.narrative || detailDream.content}
-              dreamTitle={detailDream.nugget}
-              existingImageUrl={detailDream.generatedImage?.url}
-              onImageGenerated={(asset) => {
-                // Update the dream's generatedImage in-place
-                if (!detailDream.generatedImage) {
-                  detailDream.generatedImage = { url: asset.url, prompt: asset.prompt, style: asset.style, generatedAt: asset.generatedAt, source: asset.source };
-                } else {
-                  detailDream.generatedImage.url = asset.url;
-                }
-              }}
-            />
-
-            <div className="flex items-start justify-between">
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <span className={`${getCategoryBadgeClass(detailDream.category)} px-3 py-1 rounded-full text-xs font-semibold`}>
-                    {detailDream.category}
-                  </span>
-                  <span className="text-2xl">{getEmotionEmoji(detailDream.emotion)}</span>
-                </div>
-                <div className="text-sm text-muted">
-                  {new Date(detailDream.date).toLocaleDateString('en-US', { 
-                    weekday: 'long', 
-                    month: 'long', 
-                    day: 'numeric',
-                    year: 'numeric' 
-                  })}
-                </div>
-              </div>
-              {/* Valence Indicator */}
-              {detailDream.moodValence !== undefined && (
-                <div className="flex flex-col items-center gap-1 rounded-2xl border border-line bg-parchment px-3 py-2">
-                  <span className="text-[10px] uppercase tracking-wide text-muted">Valence</span>
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-16 h-2 bg-line rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all"
-                        style={{
-                          width: `${((detailDream.moodValence + 1) / 2) * 100}%`,
-                          background: detailDream.moodValence >= 0
-                            ? `linear-gradient(90deg, #5ec4a8, #4a9e86)`
-                            : `linear-gradient(90deg, #e88fa0, #c86070)`,
-                        }}
-                      />
-                    </div>
-                    <span className="text-xs font-semibold text-ink">
-                      {detailDream.moodValence >= 0 ? '+' : ''}{detailDream.moodValence.toFixed(1)}
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div>
-              <p className="text-lg font-serif font-medium text-ink italic mb-3 leading-snug">
-                "{detailDream.nugget}"
-              </p>
-              <p className="text-sm leading-relaxed text-muted">
-                {coerceNarrativeText(detailDream.narrative, detailDream.content)}
-              </p>
-            </div>
-
-            {/* Source indicator */}
-            {(detailDream as any).captureMode === 'photo' && (
-              <div className="rounded-2xl border border-sage/20 bg-sage/5 px-4 py-2.5 flex items-center gap-2 text-sm text-sageDark">
-                <Camera className="w-4 h-4" strokeWidth={1.75} />
-                <span>Imported from journal photo{(detailDream as any).sourcePhotos?.length > 1 ? 's' : ''}</span>
-              </div>
-            )}
-
-            {/* Captured emotions indicator */}
-            {(detailDream as any).capturedEmotions && (
-              <div className="rounded-2xl border border-dusk/20 bg-dusk/5 px-4 py-2.5 flex items-center gap-2 text-sm text-duskDeep">
-                <span className="text-lg">
-                  {(detailDream as any).capturedEmotions.dominantEmotion === 'happy' ? '😊' :
-                   (detailDream as any).capturedEmotions.dominantEmotion === 'sad' ? '😢' :
-                   (detailDream as any).capturedEmotions.dominantEmotion === 'angry' ? '😠' :
-                   (detailDream as any).capturedEmotions.dominantEmotion === 'surprised' ? '😲' :
-                   (detailDream as any).capturedEmotions.dominantEmotion === 'fearful' ? '😰' :
-                   (detailDream as any).capturedEmotions.dominantEmotion === 'disgusted' ? '🤢' : '😐'}
-                </span>
-                <span>Facial emotion: {(detailDream as any).capturedEmotions.dominantEmotion}</span>
-              </div>
-            )}
-            {/* MVP: hide reflection metadata (depth/uniqueness/value) for non-admin users */}
-            {isAdmin && detailDream.assetMetadata && (
-              <div className="rounded-2xl border border-line bg-parchment/80 p-4">
-                <h3 className="font-semibold mb-3 flex items-center gap-2 text-sm text-ink">
-                  <Shield className="w-4 h-4 text-sage" strokeWidth={1.75} />
-                  Reflection metadata
-                </h3>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <div className="text-xs uppercase tracking-wide text-muted">Pattern depth</div>
-                    <div className="font-semibold text-ink">{detailDream.assetMetadata.rarityScore}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs uppercase tracking-wide text-muted">Uniqueness</div>
-                    <div className="font-semibold text-ink">{detailDream.assetMetadata.uniquenessScore}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs uppercase tracking-wide text-muted">Potential value</div>
-                    <div className="font-semibold capitalize text-ink">{detailDream.assetMetadata.potentialValue}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs uppercase tracking-wide text-muted">Watermark</div>
-                    <div className="font-semibold text-sageDark">Verified</div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Symbol Interpretation */}
-            {detailDream.interpretation && (
-              <div className="rounded-2xl border border-line bg-parchment/60 p-4">
-                <h3 className="font-semibold mb-2 flex items-center gap-2 text-sm">
-                  <Eye className="w-4 h-4 text-duskDeep" strokeWidth={1.75} />
-                  Gentle interpretation
-                </h3>
-                <p className="text-sm mb-3 text-muted leading-relaxed">{detailDream.interpretation.meaning}</p>
-                
-                {Object.keys(detailDream.interpretation.symbols || {}).length > 0 && (
-                  <div className="space-y-2">
-                    <div className="text-xs font-semibold uppercase tracking-wide text-muted">Symbols</div>
-                    {Object.entries(detailDream.interpretation.symbols).map(([symbol, meaning]) => (
-                      <div key={symbol} className="text-xs text-ink">
-                        <span className="font-semibold capitalize">{symbol}:</span>{' '}
-                        <span className="text-muted">{meaning}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {detailDream.interpretation.commonPattern && (
-                  <div className="mt-3 text-xs text-muted italic border-t border-line pt-3">
-                    {detailDream.interpretation.commonPattern}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Context */}
-            {detailDream.context && (detailDream.context.mood || detailDream.context.yesterdayEvents) && (
-              <div className="rounded-2xl border border-line bg-parchment/60 p-4">
-                <h3 className="font-semibold mb-2 text-sm">Evening context</h3>
-                <div className="text-xs space-y-1 text-muted">
-                  {detailDream.context.mood && (
-                    <div><span className="text-ink font-medium">Mood before bed:</span> {detailDream.context.mood}</div>
-                  )}
-                  {detailDream.context.yesterdayEvents && (
-                    <div><span className="text-ink font-medium">Yesterday:</span> {detailDream.context.yesterdayEvents}</div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Similar Dreams */}
-            {!detailDream.isSample && findSimilarDreams(detailDream).length > 0 && (
-              <div className="rounded-2xl border border-blush/80 bg-blush/25 p-4">
-                <h3 className="font-semibold mb-2 text-sm flex items-center gap-2">
-                  <MessageCircle className="w-4 h-4 text-duskDeep" strokeWidth={1.75} />
-                  Related entries
-                </h3>
-                <div className="space-y-2">
-                  {findSimilarDreams(detailDream).map(({ dream }) => (
-                    <div 
-                      key={dream.id}
-                      onClick={() => navigate('dream', dream.id)}
-                      className="text-xs p-3 rounded-xl bg-cream/90 border border-line cursor-pointer hover:border-dusk/40 transition"
-                    >
-                      {new Date(dream.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}: {dream.nugget?.substring(0, 60)}...
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="flex gap-3 pt-1">
-              <button
-                type="button"
-                onClick={() => shareDream(detailDream)}
-                className="w-full bg-sage hover:bg-sageDark text-cream py-3 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm shadow-paper"
-              >
-                <Upload className="w-4 h-4" strokeWidth={1.75} />
-                Share
-              </button>
-              {FEATURE_NFT_UI_ENABLED ? (
-                <button
-                  type="button"
-                  onClick={() => handleOpenMintModal(detailDream)}
-                  className="flex-1 border-2 border-dusk/30 bg-dusk/5 hover:bg-dusk/10 text-duskDeep py-3 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm"
-                >
-                  <Award className="w-4 h-4" strokeWidth={1.75} />
-                  Mint NFT
-                </button>
-              ) : null}
-            </div>
-          </div>
-          </div>
-          </div>
+        <DreamDetailScreen
+          key={detailDream.id}
+          detailDream={detailDream}
+          navigate={navigate}
+          shareDream={shareDream}
+          handleOpenMintModal={handleOpenMintModal}
+          findSimilarDreams={findSimilarDreams}
+          getCategoryBadgeClass={getCategoryBadgeClass}
+          getEmotionEmoji={getEmotionEmoji}
+          isFavourite={favouriteIds.includes(detailDream.id)}
+          onToggleFavourite={() => handleToggleFavourite(detailDream.id)}
+          onImageGenerated={(asset) => {
+            const generatedImage = {
+              url: asset.url,
+              prompt: asset.prompt,
+              style: asset.style,
+              generatedAt: asset.generatedAt,
+              source: asset.source,
+            };
+            setDreams((prev) => {
+              const next = prev.map((d) =>
+                d.id === detailDream.id ? { ...d, generatedImage } : d,
+              );
+              saveDreamsToStorage(next).catch(console.error);
+              return next;
+            });
+            syncDreamToSupabase({ ...detailDream, generatedImage }).catch(console.error);
+          }}
+        />
       )}
 
       {route.screen === 'dream' && route.dreamId && !detailDream && (

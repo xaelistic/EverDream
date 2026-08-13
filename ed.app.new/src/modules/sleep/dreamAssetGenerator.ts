@@ -18,60 +18,74 @@ function getSupabase(): SupabaseClient | null {
 // Helpers (ensure they exist for the reliable path)
 function makeId() { return 'asset-' + Date.now() + '-' + Math.random().toString(36).slice(2, 9); }
 function buildDreamPrompt(base: string) { return `${base}, surreal dreamlike visualization, cinematic lighting, ethereal atmosphere, high detail`; }
-async function validateImageUrl(url: string) { const res = await fetch(url, { method: 'HEAD' }); if (!res.ok) throw new Error('Invalid image url'); }
 
-// Provider selection (per SPEC-14: OpenRouter priority for cost, but stubbed without real AI call for now)
-// In full intelligence layer, this will call OpenRouter / Fal etc. with real keys.
-const IMAGE_PROVIDER = (import.meta as any).env?.VITE_IMAGE_PROVIDER || 'pollinations'; // 'openrouter' | 'fal' | 'pollinations' | 'hf'
+function isUsableImageUrl(url: unknown): url is string {
+  return typeof url === 'string' && (
+    url.startsWith('data:image/') ||
+    url.startsWith('https://') ||
+    url.startsWith('blob:')
+  );
+}
 
-async function generateWithOpenRouterStub(prompt: string, style = 'dreamlike'): Promise<DreamAsset> {
-  console.log('[AssetGen] OpenRouter path (stub - no real AI call yet per instructions). Falling back to reliable free.');
-  // TODO in intelligence layer: real call with cost tracking
-  // Mock cost for now
-  const mockCost = 0.012;
-  const enhanced = buildDreamPrompt(prompt);
-  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhanced)}?width=1024&height=1024&seed=${Date.now()}&nologo=true&safe=true`;
-  return { 
-    id: makeId(), 
-    prompt: enhanced, 
-    url, 
-    source: 'openrouter-stub', 
-    style, 
-    generatedAt: new Date().toISOString(), 
-    metadata: { provider: 'openrouter-stub-flux', estimated_cost_usd: mockCost, note: 'stub until intelligence layer' } 
+interface EdgeImageResponse {
+  imageUrl?: string;
+  source?: string;
+  model?: string | null;
+  cost_usd?: number | null;
+  prompt?: string;
+  error?: string;
+}
+
+function assetFromEdge(data: EdgeImageResponse, prompt: string, style: string): DreamAsset {
+  if (!isUsableImageUrl(data.imageUrl)) {
+    throw new Error(data.error || 'Image service returned no image');
+  }
+  const source = data.source === 'openrouter' ? 'openrouter' : 'edge-function';
+  return {
+    id: makeId(),
+    prompt: data.prompt || prompt,
+    url: data.imageUrl,
+    source,
+    style,
+    generatedAt: new Date().toISOString(),
+    metadata: {
+      provider: data.model || data.source || 'generate-image',
+      model: data.model || undefined,
+      estimated_cost_usd: typeof data.cost_usd === 'number' ? data.cost_usd : undefined,
+    },
   };
 }
 
-async function generateWithReliableFree(prompt: string, style = 'dreamlike'): Promise<DreamAsset> {
-  console.log('[AssetGen] Trying reliable FREE path (Edge > Direct Pollinations)...');
+async function generateViaEdgeFunction(prompt: string, style: string): Promise<DreamAsset> {
   const supabase = getSupabase();
-  
-  // 1. Try Edge Function first (best for CORS + reliability)
+  const body = { prompt, style, width: 1024, height: 1024, format: 'json' as const };
+
   if (supabase) {
-    try {
-      const { data, error } = await supabase.functions.invoke('generate-image', {
-        body: { prompt, style, width: 1024, height: 1024, format: 'json' },
-      });
-      if (!error && data?.imageUrl) {
-        await validateImageUrl(data.imageUrl);
-        return { id: makeId(), prompt, url: data.imageUrl, source: 'edge-function', style, generatedAt: new Date().toISOString(), metadata: { provider: 'supabase-edge-pollinations' } };
-      }
-    } catch (e) { console.warn('[AssetGen] Edge failed, trying direct Pollinations', e); }
+    const { data, error } = await supabase.functions.invoke('generate-image', { body });
+    if (!error && data) {
+      return assetFromEdge(data as EdgeImageResponse, prompt, style);
+    }
+    console.warn('[AssetGen] functions.invoke failed:', error?.message || data);
   }
 
-  // 2. Direct Pollinations (very reliable free Flux model, no key)
-  try {
-    const enhanced = buildDreamPrompt(prompt);
-    const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhanced)}?width=1024&height=1024&seed=${Date.now()}&nologo=true&safe=true`;
-    await validateImageUrl(url);
-    return { id: makeId(), prompt: enhanced, url, source: 'image-service', style, generatedAt: new Date().toISOString(), metadata: { provider: 'pollinations-flux' } };
-  } catch (e) { console.warn('[AssetGen] Direct Pollinations failed', e); }
+  const url = (import.meta as any).env?.VITE_SUPABASE_URL || '';
+  const key = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
+  if (!url || !key) throw new Error('Supabase is not configured for image generation');
 
-  // 3. Final reliable image fallback (proper image, no SVG)
-  console.warn('[AssetGen] Using direct Pollinations fallback for proper image');
-  const enhanced = buildDreamPrompt(prompt);
-  const fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhanced)}?width=1024&height=1024&seed=${Date.now()}&nologo=true&safe=true`;
-  return { id: makeId(), prompt: enhanced, url: fallbackUrl, source: 'image-service', style, generatedAt: new Date().toISOString(), metadata: { provider: 'pollinations-fallback' } };
+  const response = await fetch(`${url.replace(/\/$/, '')}/functions/v1/generate-image`, {
+    method: 'POST',
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json().catch(() => ({})) as EdgeImageResponse;
+  if (!response.ok) {
+    throw new Error(payload.error || `Image generation failed (${response.status})`);
+  }
+  return assetFromEdge(payload, prompt, style);
 }
 
 // Ollama NWE integration (Brief 1 - primary provider when configured)
@@ -146,38 +160,24 @@ async function generateWithOllama(prompt: string, style: string = 'dreamlike'): 
   };
 }
 
-// Main exported function - simplified and robust
-// Ollama NWE is tried FIRST when VITE_OLLAMA_URL is set (Brief 1 requirement)
 export async function generateDreamImage(prompt: string, style = 'dreamlike'): Promise<DreamAsset> {
-  console.log('[AssetGen] Starting image generation for dream... Provider preference:', IMAGE_PROVIDER);
-
-  // SPEC-14: Respect IMAGE_PROVIDER (stub for openrouter until intelligence layer)
-  if (IMAGE_PROVIDER === 'openrouter') {
-    try {
-      return await generateWithOpenRouterStub(prompt, style);
-    } catch (error) {
-      console.warn('[AssetGen] OpenRouter stub failed, falling back:', error);
-    }
+  const text = (prompt || '').trim();
+  if (text.length < 3) {
+    throw new Error('Need a bit more dream text before an image can be generated.');
   }
 
-  // Phase 4: Try Ollama NWE as #1 provider when enabled
-  const ollamaEnabled = import.meta.env.VITE_OLLAMA_ENABLED !== 'false' && !!import.meta.env.VITE_OLLAMA_URL;
+  console.log('[AssetGen] Starting image generation via generate-image edge function');
+
+  const ollamaEnabled = import.meta.env.VITE_OLLAMA_ENABLED === 'true' && !!import.meta.env.VITE_OLLAMA_URL;
   if (ollamaEnabled) {
     try {
-      return await generateWithOllama(prompt, style);
+      return await generateWithOllama(text, style);
     } catch (error) {
-      console.warn('[AssetGen] Ollama NWE failed, falling back to reliable free providers:', error);
+      console.warn('[AssetGen] Ollama failed, using OpenRouter edge function:', error);
     }
   }
 
-  try {
-    return await generateWithReliableFree(prompt, style);
-  } catch (error) {
-    console.error('[AssetGen] All methods failed, using reliable image fallback:', error);
-    const enhanced = buildDreamPrompt(prompt);
-    const fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhanced)}?width=1024&height=1024&seed=${Date.now()}&nologo=true&safe=true`;
-    return { id: makeId(), prompt: enhanced, url: fallbackUrl, source: 'image-service', style, generatedAt: new Date().toISOString(), metadata: { provider: 'pollinations-fallback' } };
-  }
+  return generateViaEdgeFunction(text, style);
 }
 
 export async function generateDreamAssets(prompt: string, count = 2): Promise<DreamAsset[]> {

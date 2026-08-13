@@ -121,7 +121,16 @@ export interface DreamAsset {
   dreamText?: string;
   prompt: string;
   url: string;
-  source: 'pollinations' | 'replicate' | 'puter' | 'huggingface' | 'fallback';
+  source:
+    | 'openrouter'
+    | 'edge-function'
+    | 'image-service'
+    | 'pollinations'
+    | 'replicate'
+    | 'puter'
+    | 'huggingface'
+    | 'ollama-nwe'
+    | 'fallback';
   style: string;
   generatedAt: string;
   metadata?: {
@@ -130,6 +139,7 @@ export interface DreamAsset {
     model?: string;
     note?: string;
     generatedAt?: number;
+    estimated_cost_usd?: number;
   };
 }
 

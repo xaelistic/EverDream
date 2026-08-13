@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Badge, Button, Spinner, Modal } from '../ui';
 import { Card } from '../ui/Card';
-import { ArrowLeft, Share2, Download, Sparkles, Brain, Eye, Image, Copy, Check } from 'lucide-react';
+import { ArrowLeft, Sparkles, Brain, Eye, Copy } from 'lucide-react';
 import { getEmotionEmoji } from '../../utils/dreamPresentation';
 import type { Dream } from './DreamList';
 import DreamVisualizer from './DreamVisualizer';
@@ -45,7 +45,6 @@ export default function DreamDetail({
   onDownloadImage,
   loading = false,
 }: DreamDetailProps) {
-  const [imageLoaded, setImageLoaded] = useState(false);
   const [copied, setCopied] = useState(false);
 
   // If used as modal
@@ -58,8 +57,6 @@ export default function DreamDetail({
           onShare={onShare}
           onDownloadImage={onDownloadImage}
           loading={loading}
-          imageLoaded={imageLoaded}
-          setImageLoaded={setImageLoaded}
           copied={copied}
           setCopied={setCopied}
         />}
@@ -85,8 +82,6 @@ export default function DreamDetail({
         onShare={onShare}
         onDownloadImage={onDownloadImage}
         loading={loading}
-        imageLoaded={imageLoaded}
-        setImageLoaded={setImageLoaded}
         copied={copied}
         setCopied={setCopied}
       />
@@ -102,8 +97,6 @@ interface DetailContentProps {
   onShare?: (dream: Dream) => void;
   onDownloadImage?: (dream: Dream) => void;
   loading: boolean;
-  imageLoaded: boolean;
-  setImageLoaded: (v: boolean) => void;
   copied: boolean;
   setCopied: (v: boolean) => void;
 }
@@ -112,13 +105,11 @@ function DreamDetailContent({
   dream,
   onBack,
   onShare,
-  onDownloadImage,
   loading,
-  imageLoaded,
-  setImageLoaded,
   copied,
   setCopied,
 }: DetailContentProps) {
+  const [showTranscript, setShowTranscript] = useState(false);
   const categoryVariant = getCategoryVariant(dream.category);
 
   const handleCopyText = async () => {
@@ -169,7 +160,7 @@ function DreamDetailContent({
       )}
 
       {/* Header */}
-      <div style={{ marginBottom: '32px' }}>
+      <div style={{ marginBottom: '20px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
           {dream.mood && (
             <span style={{ fontSize: '1.5rem' }}>{getEmotionEmoji(dream.mood)}</span>
@@ -190,96 +181,16 @@ function DreamDetailContent({
         </h1>
       </div>
 
-      {/* Dream Content */}
-      <Card style={{ marginBottom: '24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <h3 style={{
-            fontSize: '0.75rem', fontWeight: 600, color: '#4a4860',
-            textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0,
-          }}>
-            Dream Narrative
-          </h3>
-          <button
-            onClick={handleCopyText}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '4px',
-              background: 'none', border: 'none', cursor: 'pointer',
-              color: copied ? '#5ec4a8' : '#9b96b0',
-              fontSize: '0.7rem', fontWeight: 600,
-              transition: 'color 180ms ease-out',
-            }}
-          >
-            {copied ? <Check size={14} /> : <Copy size={14} />}
-            {copied ? 'Copied!' : 'Copy'}
-          </button>
-        </div>
-        <p style={{
-          fontSize: '0.9rem',
-          color: '#4a4860',
-          lineHeight: 1.9,
-          margin: 0,
-          whiteSpace: 'pre-wrap',
-        }}>
-          {dream.content}
-        </p>
-      </Card>
-
-      {/* Dream Visualizer — NEW */}
       <DreamVisualizer
         dreamId={dream.id}
         dreamText={dream.content}
         dreamTitle={dream.title}
         existingImageUrl={dream.imageUrl}
         onImageGenerated={(asset) => {
-          // Update the dream's imageUrl in-place
           dream.imageUrl = asset.url;
         }}
+        onShare={onShare ? () => onShare(dream) : undefined}
       />
-
-      {/* Legacy Generated Image (for backwards compat) */}
-      {dream.imageUrl && !dream.aiAnalysis && (
-        <Card style={{ marginBottom: '24px', overflow: 'hidden', padding: 0 }}>
-          <div style={{ position: 'relative' }}>
-            {!imageLoaded && (
-              <div style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                height: '300px', background: 'rgba(168,237,220,0.08)',
-              }}>
-                <Spinner size={32} />
-              </div>
-            )}
-            <img
-              src={dream.imageUrl}
-              alt={`Dream visualization: ${dream.title}`}
-              onLoad={() => setImageLoaded(true)}
-              style={{
-                width: '100%',
-                display: imageLoaded ? 'block' : 'none',
-                borderRadius: '16px 16px 0 0',
-              }}
-            />
-          </div>
-          <div style={{
-            padding: '16px 24px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Image size={16} color="#9b8fd4" />
-              <span style={{ fontSize: '0.75rem', color: '#9b8fd4', fontWeight: 600 }}>
-                AI-Generated Visualization
-              </span>
-            </div>
-            {onDownloadImage && (
-              <Button variant="ghost" size="sm" onClick={() => onDownloadImage(dream)}>
-                <Download size={14} />
-                Download
-              </Button>
-            )}
-          </div>
-        </Card>
-      )}
 
       {/* AI Analysis Section */}
       {dream.aiAnalysis && (
@@ -472,15 +383,51 @@ function DreamDetailContent({
         </Card>
       )}
 
-      {/* Action Buttons */}
-      <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '32px', flexWrap: 'wrap' }}>
-        {onShare && (
-          <Button variant="primary" size="md" onClick={() => onShare(dream)}>
-            <Share2 size={16} />
-            Share Dream
-          </Button>
-        )}
-      </div>
+      {dream.content && (
+        <Card style={{ marginBottom: '24px' }}>
+          <button
+            type="button"
+            onClick={() => setShowTranscript((open) => !open)}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              width: '100%', background: 'none', border: 'none', cursor: 'pointer',
+              padding: 0, color: '#4a4860',
+            }}
+            aria-expanded={showTranscript}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', fontWeight: 600 }}>
+              <Copy size={14} />
+              Full transcript
+            </span>
+            <span style={{ fontSize: '0.7rem', color: '#9b96b0', fontWeight: 600 }}>
+              {showTranscript ? 'Hide' : 'Show'}
+            </span>
+          </button>
+          {showTranscript && (
+            <>
+              <p style={{
+                fontSize: '0.9rem',
+                color: '#4a4860',
+                lineHeight: 1.9,
+                margin: '12px 0 0',
+                whiteSpace: 'pre-wrap',
+              }}>
+                {dream.content}
+              </p>
+              <button
+                type="button"
+                onClick={handleCopyText}
+                style={{
+                  marginTop: '10px', background: 'none', border: 'none', cursor: 'pointer',
+                  color: copied ? '#5ec4a8' : '#9b96b0', fontSize: '0.7rem', fontWeight: 600, padding: 0,
+                }}
+              >
+                {copied ? 'Copied!' : 'Copy transcript'}
+              </button>
+            </>
+          )}
+        </Card>
+      )}
     </>
   );
 }
