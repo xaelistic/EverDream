@@ -10,10 +10,10 @@ import {
 } from '../lib/profileService';
 import {
   hydrateSignalsFromLinkedAccounts,
-  linkSocialProviderForProfile,
   unlinkSocialProviderSignals,
   type SocialInterestSource,
 } from '../lib/social/profileSignals';
+import { signInWithSocialProvider, startSpotifyOAuth } from '../lib/auth/socialAuth';
 import { goalIdsFromLabels } from '../lib/onboarding/model';
 import { useAuth } from './use-auth';
 
@@ -154,19 +154,25 @@ export function useProfile() {
     [profile, persist],
   );
 
-  /** Link Spotify/Meta and pull tastes onto the profile (Tinder-style). */
+  /** Start real OAuth. Interests are imported on the callback return. */
   const connectSocialAndImport = useCallback(
     async (provider: SocialInterestSource) => {
-      if (!profile) return [];
-      const signals = linkSocialProviderForProfile(provider);
-      let next = profile;
-      for (const s of signals) {
-        next = addInterestToProfile(next, s.label, s.source);
+      if (provider === 'spotify') {
+        const result = await startSpotifyOAuth('link');
+        if (!result.ok || !result.url) {
+          throw new Error(result.message || 'Could not start Spotify login.');
+        }
+        window.location.href = result.url;
+        return [];
       }
-      await persist(next);
-      return signals;
+
+      const result = await signInWithSocialProvider('meta', 'link');
+      if (!result.ok) {
+        throw new Error(result.message || 'Could not start Meta login.');
+      }
+      return [];
     },
-    [profile, persist],
+    [],
   );
 
   const disconnectSocial = useCallback(

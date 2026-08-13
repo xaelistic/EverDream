@@ -14,6 +14,11 @@ import {
   setProviderLinked,
   type SocialProviderId,
 } from '../socialShare';
+import {
+  addInterestToProfile,
+  loadUserProfile,
+  saveUserProfile,
+} from '../profileService';
 
 export type SocialInterestSource = 'spotify' | 'meta';
 
@@ -290,6 +295,22 @@ export async function hydrateSignalsFromLinkedAccounts(): Promise<SocialInterest
 
   if (changed) saveSocialSignals(existing);
   return deriveInterestSignals(existing);
+}
+
+/** After Spotify/Meta OAuth returns, copy linked tastes onto the user profile. */
+export async function importLinkedSocialInterestsIntoProfile(): Promise<SocialInterestSignal[]> {
+  const signals = await hydrateSignalsFromLinkedAccounts();
+  if (signals.length === 0) return [];
+
+  const profile = await loadUserProfile();
+  let next = profile;
+  for (const signal of signals) {
+    next = addInterestToProfile(next, signal.label, signal.source);
+  }
+  if (next !== profile) {
+    await saveUserProfile(next);
+  }
+  return signals;
 }
 
 export function socialSourceLabel(source: SocialInterestSource): string {

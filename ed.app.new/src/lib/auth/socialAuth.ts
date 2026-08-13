@@ -7,7 +7,7 @@ import {
   urlIndicatesPasswordRecovery,
 } from './urlCleanup';
 
-export type SocialAuthProvider = 'google' | 'facebook' | 'apple' | 'meta' | 'tiktok';
+export type SocialAuthProvider = 'google' | 'facebook' | 'apple' | 'meta' | 'tiktok' | 'spotify';
 
 export type SocialAuthIntent = 'login' | 'link';
 
@@ -83,6 +83,21 @@ export async function signInWithSocialProvider(
   return { ok: true };
 }
 
+export async function startSpotifyOAuth(intent: SocialAuthIntent = 'link'): Promise<{ ok: boolean; url?: string; message?: string }> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) {
+    return { ok: false, message: 'Sign in first to connect Spotify.' };
+  }
+
+  const { data, error } = await supabase.functions.invoke('social-oauth-spotify', {
+    body: { action: 'start', intent },
+  });
+
+  if (error) return { ok: false, message: error.message };
+  if (!data?.authUrl) return { ok: false, message: data?.error || 'Spotify OAuth URL not returned.' };
+  return { ok: true, url: data.authUrl };
+}
+
 export async function startTikTokOAuth(intent: SocialAuthIntent = 'link'): Promise<{ ok: boolean; url?: string; message?: string }> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.access_token) {
@@ -137,6 +152,12 @@ export function isSocialOAuthCallback(): boolean {
  * Always prefer this over leaving implicit-flow fragments around.
  */
 export function clearSocialOAuthParams(): void {
+  if (typeof window !== 'undefined') {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('social');
+    url.searchParams.delete('auth');
+    window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+  }
   stripAuthParamsFromUrl({
     preserveRecovery: urlIndicatesPasswordRecovery(),
     fallbackHash: '#/',

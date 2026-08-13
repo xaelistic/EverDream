@@ -102,7 +102,7 @@ const WEARABLE_PROVIDERS = [
 const SOCIAL_PROVIDERS = [
   { id: 'meta', name: 'Meta (Facebook)', icon: 'f', color: '#1877F2', oauth: true },
   { id: 'tiktok', name: 'TikTok', icon: '♪', color: '#000000', oauth: true },
-  { id: 'spotify', name: 'Spotify', icon: '♫', color: '#1DB954', oauth: false },
+  { id: 'spotify', name: 'Spotify', icon: '♫', color: '#1DB954', oauth: true },
   { id: 'google', name: 'Google', icon: 'G', color: '#DB4437', oauth: true },
   { id: 'apple', name: 'Apple', icon: '', color: '#000000', oauth: true },
 ] as const;
@@ -332,6 +332,7 @@ export default function ProfileAndSettings({ user, onClose }: ProfileAndSettings
       const result = await connectSocialProvider(providerId as SocialProviderId);
       if (!result.ok) {
         console.error('Failed to link social account:', result.message);
+        window.alert(result.message || 'Could not start social login.');
         return;
       }
       await refreshAccounts();

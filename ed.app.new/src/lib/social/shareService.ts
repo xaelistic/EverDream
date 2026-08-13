@@ -1,7 +1,7 @@
 import { Capacitor } from '@capacitor/core';
 import { Share } from '@capacitor/share';
 import { supabase } from '../supabase/client';
-import { signInWithSocialProvider, startTikTokOAuth } from '../auth/socialAuth';
+import { signInWithSocialProvider, startSpotifyOAuth, startTikTokOAuth } from '../auth/socialAuth';
 import { fetchLinkedSocialAccounts, isProviderLinkedInDb } from './socialAccounts';
 import type { SocialProviderId } from '../socialShare';
 
@@ -228,6 +228,13 @@ export async function connectSocialProvider(
 ): Promise<{ ok: boolean; message?: string }> {
   if (providerId === 'tiktok') {
     const result = await startTikTokOAuth('link');
+    if (!result.ok || !result.url) return { ok: false, message: result.message };
+    window.location.href = result.url;
+    return { ok: true };
+  }
+
+  if (providerId === 'spotify') {
+    const result = await startSpotifyOAuth('link');
     if (!result.ok || !result.url) return { ok: false, message: result.message };
     window.location.href = result.url;
     return { ok: true };

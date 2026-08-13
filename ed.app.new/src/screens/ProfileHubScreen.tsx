@@ -105,8 +105,11 @@ export function ProfileHub({ onClose, navigate, onFriendAdded }: ProfileHubProps
           message: `Linked ${provider === 'spotify' ? 'Spotify' : 'Meta'} — added ${signals.length} interest${signals.length === 1 ? '' : 's'} from your tastes.`,
         });
       }
-    } catch {
-      addToast({ type: 'error', message: 'Could not update social connection.' });
+    } catch (err) {
+      addToast({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Could not update social connection.',
+      });
     } finally {
       setSocialBusy(null);
     }
@@ -352,7 +355,7 @@ export function ProfileHub({ onClose, navigate, onFriendAdded }: ProfileHubProps
           Social tastes
         </label>
         <p className="text-[11px] text-muted mt-1 mb-3">
-          Connect accounts to pull genres and categories onto your profile — like Spotify interests on Tinder.
+          Connect Spotify to pull your real listening tastes onto your profile.
         </p>
         <div className="space-y-2">
           {PROFILE_SOCIAL_PROVIDERS.map((p) => {
