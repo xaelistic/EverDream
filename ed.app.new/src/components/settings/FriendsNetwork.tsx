@@ -19,6 +19,7 @@ import {
   respondToFriendRequest,
   searchDreamers,
   sendFriendRequest,
+  connectByFriendCode,
   type DreamerHit,
   type FriendRow,
   type InviteChannel,
@@ -41,6 +42,8 @@ export function FriendsNetwork({
 }: FriendsNetworkProps) {
   const { addToast } = useToast();
   const [query, setQuery] = useState('');
+  const [code, setCode] = useState('');
+  const [codeBusy, setCodeBusy] = useState(false);
   const [hits, setHits] = useState<DreamerHit[]>([]);
   const [searching, setSearching] = useState(false);
   const [addingId, setAddingId] = useState<string | null>(null);
@@ -89,6 +92,25 @@ export function FriendsNetwork({
       window.clearTimeout(timer);
     };
   }, [query, addToast]);
+
+  const handleConnectCode = async () => {
+    if (!code.trim()) {
+      addToast({ type: 'warning', message: 'Paste a friend code like DREAM-AB12CD.' });
+      return;
+    }
+    setCodeBusy(true);
+    try {
+      const friend = await connectByFriendCode(code);
+      addToast({ type: 'success', message: `${friend.displayName} is now in your friends list.` });
+      onFriendAdded?.();
+      setCode('');
+      await refresh();
+    } catch (err) {
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Could not add that code.' });
+    } finally {
+      setCodeBusy(false);
+    }
+  };
 
   const handleAdd = async (hit: DreamerHit) => {
     setAddingId(hit.id);
@@ -157,6 +179,30 @@ export function FriendsNetwork({
 
   return (
     <div className="space-y-4">
+      <div className={`rounded-2xl border p-4 ${card}`}>
+        <h4 className="font-medium text-ink mb-1">Add with a friend code</h4>
+        <p className="text-xs text-muted mb-3">This connects you immediately — they already shared their code with you.</p>
+        <div className="flex gap-2">
+          <input
+            value={code}
+            onChange={(e) => setCode(e.target.value.toUpperCase())}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void handleConnectCode();
+            }}
+            placeholder="DREAM-AB12CD"
+            className={`flex-1 px-3 py-2 rounded-xl text-sm font-mono border outline-none ${field}`}
+          />
+          <button
+            type="button"
+            disabled={codeBusy}
+            onClick={() => void handleConnectCode()}
+            className={`px-3 py-2 rounded-xl text-sm font-medium ${primary} disabled:opacity-50`}
+          >
+            {codeBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Connect'}
+          </button>
+        </div>
+      </div>
+
       <div className={`rounded-2xl border p-4 ${card}`}>
         <h4 className="font-medium text-ink mb-1">Find by username</h4>
         <p className="text-xs text-muted mb-3">Search @handle, display name, or a friend code.</p>
@@ -281,31 +327,41 @@ export function FriendsNetwork({
         {loadingList ? (
           <p className="text-sm text-muted">Loading…</p>
         ) : (
-          <div className="space-y-3">
-            {incoming.map((row) => (
-              <div key={row.id} className="flex items-center gap-3">
-                <UserPlus className="w-5 h-5 text-duskDeep" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-ink truncate">{row.name}</p>
-                  <p className="text-xs text-muted">Wants to connect</p>
-                </div>
-                <button type="button" onClick={() => void handleRespond(row, true)} className={`px-2.5 py-1 rounded-lg text-xs ${primary}`}>
-                  Accept
-                </button>
-                <button type="button" onClick={() => void handleRespond(row, false)} className="px-2.5 py-1 rounded-lg text-xs border border-line">
-                  Decline
-                </button>
+          <div className="space-y-4">
+            {incoming.length > 0 && (
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-muted mb-2">Requests</p>
+                {incoming.map((row) => (
+                  <div key={row.id} className="flex items-center gap-3">
+                    <UserPlus className="w-5 h-5 text-duskDeep" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-ink truncate">{row.name}</p>
+                      <p className="text-xs text-muted">Wants to connect</p>
+                    </div>
+                    <button type="button" onClick={() => void handleRespond(row, true)} className={`px-2.5 py-1 rounded-lg text-xs ${primary}`}>
+                      Accept
+                    </button>
+                    <button type="button" onClick={() => void handleRespond(row, false)} className="px-2.5 py-1 rounded-lg text-xs border border-line">
+                      Decline
+                    </button>
+                  </div>
+                ))}
               </div>
-            ))}
-            {outgoing.map((row) => (
-              <div key={row.id} className="flex items-center gap-3 opacity-80">
-                <Plus className="w-5 h-5 text-muted" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-ink truncate">{row.name}</p>
-                  <p className="text-xs text-muted">Request sent</p>
-                </div>
+            )}
+            {outgoing.length > 0 && (
+              <div>
+                <p className="text-[11px] uppercase tracking-wide text-muted mb-2">Waiting</p>
+                {outgoing.map((row) => (
+                  <div key={row.id} className="flex items-center gap-3 opacity-80">
+                    <Plus className="w-5 h-5 text-muted" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-ink truncate">{row.name}</p>
+                      <p className="text-xs text-muted">Request sent — they still need to accept</p>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
             {accepted.map((row) => (
               <div key={row.id} className="flex items-center gap-3">
                 {row.avatarUrl ? (

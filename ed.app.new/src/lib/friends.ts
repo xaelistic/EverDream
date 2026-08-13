@@ -27,9 +27,12 @@ function slugQuery(value: string): string {
   return value.trim().replace(/^@/, '');
 }
 
+function profileIdFromRow(row: Record<string, unknown> | null): string | null {
+  return typeof row?.id === 'string' && row.id ? row.id : null;
+}
+
 async function myProfileId(): Promise<string | null> {
-  const row = await getProfile();
-  return row?.id ?? null;
+  return profileIdFromRow(await getProfile());
 }
 
 export async function searchDreamers(raw: string): Promise<DreamerHit[]> {
@@ -84,20 +87,36 @@ export async function respondToFriendRequest(friendshipId: string, accept: boole
   if (error) throw new Error(error.message);
 }
 
+export async function connectByFriendCode(code: string): Promise<DreamerHit> {
+  const cleaned = code.trim();
+  if (cleaned.length < 4) throw new Error('Enter a full friend code.');
+  const { data, error } = await supabase.rpc('connect_by_friend_code', { code: cleaned });
+  if (error) throw new Error(error.message.replace(/^.*ERROR:\s*/i, ''));
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row?.id) throw new Error('No one has that friend code.');
+  return {
+    id: row.id,
+    handle: row.handle || null,
+    displayName: row.display_name || row.handle || 'Dreamer',
+    avatarUrl: row.avatar_url || null,
+    friendCode: cleaned,
+  };
+}
+
 export async function listFriendships(): Promise<FriendRow[]> {
-  const me = await getProfile();
-  if (!me?.id) return [];
+  const meId = profileIdFromRow(await getProfile());
+  if (!meId) return [];
 
   const { data, error } = await supabase
     .from('friendships')
     .select('id, requester_id, addressee_id, status')
-    .or(`requester_id.eq.${me.id},addressee_id.eq.${me.id}`)
+    .or(`requester_id.eq.${meId},addressee_id.eq.${meId}`)
     .order('created_at', { ascending: false });
   if (error) throw new Error(error.message);
 
   const otherIds = Array.from(
     new Set(
-      (data || []).map((row) => (row.requester_id === me.id ? row.addressee_id : row.requester_id)),
+      (data || []).map((row) => (row.requester_id === meId ? row.addressee_id : row.requester_id)),
     ),
   );
   if (otherIds.length === 0) return [];
@@ -116,7 +135,7 @@ export async function listFriendships(): Promise<FriendRow[]> {
   );
 
   return (data || []).map((row) => {
-    const otherId = row.requester_id === me.id ? row.addressee_id : row.requester_id;
+    const otherId = row.requester_id === meId ? row.addressee_id : row.requester_id;
     const person = byId.get(otherId);
     return {
       id: row.id,
@@ -125,7 +144,7 @@ export async function listFriendships(): Promise<FriendRow[]> {
       handle: person?.handle || null,
       avatarUrl: person?.avatarUrl || null,
       status: row.status,
-      incoming: row.addressee_id === me.id,
+      incoming: row.addressee_id === meId,
     };
   });
 }
