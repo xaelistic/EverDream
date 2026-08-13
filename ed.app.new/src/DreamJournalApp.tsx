@@ -207,6 +207,8 @@ const DreamJournalApp = () => {
     moodValence?: number;
     sourcePhotos?: string[];
     audioFile?: string;
+    scenes?: { id: string; title: string; summary: string; prompt: string }[];
+    storyboardImages?: { url: string; title: string; prompt: string }[];
   };
 
   const [dreams, setDreams] = useState<Dream[]>([]);
@@ -2274,7 +2276,7 @@ const DreamJournalApp = () => {
 
               (async () => {
                 try {
-                  const { analysis, generatedImage } = await processTextJournal(sourceText);
+                  const { analysis, generatedImage, scenes } = await processTextJournal(sourceText);
                   let image = generatedImage;
                   if (image?.url?.startsWith('data:')) {
                     try {
@@ -2293,6 +2295,7 @@ const DreamJournalApp = () => {
                     ...analysis,
                     content: sourceText,
                     generatedImage: image,
+                    scenes,
                   };
                   setDreams((prev) => {
                     const next = prev.map((d) => (d.id === dreamId ? finalDream : d));
@@ -2598,6 +2601,16 @@ const DreamJournalApp = () => {
               return next;
             });
             syncDreamToSupabase({ ...detailDream, generatedImage }).catch(console.error);
+          }}
+          onUpdateDream={(patch) => {
+            setDreams((prev) => {
+              const next = prev.map((d) =>
+                d.id === detailDream.id ? { ...d, ...patch } : d,
+              );
+              saveDreamsToStorage(next).catch(console.error);
+              return next;
+            });
+            syncDreamToSupabase({ ...detailDream, ...patch }).catch(console.error);
           }}
         />
       )}

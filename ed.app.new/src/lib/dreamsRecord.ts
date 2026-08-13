@@ -137,6 +137,8 @@ export function toDreamsUpsertRow(dream: JournalDreamLike, profileId: string): R
       source_audio: dream.audioFile || dream.sourceAudio || null,
       context: dream.context || null,
       sleep_data: dream.sleepData || null,
+      scenes: (dream as { scenes?: unknown }).scenes || null,
+      storyboard: (dream as { storyboardImages?: unknown }).storyboardImages || null,
       has_inline_image: Boolean(dream.generatedImage?.url?.startsWith('data:')),
     },
   };

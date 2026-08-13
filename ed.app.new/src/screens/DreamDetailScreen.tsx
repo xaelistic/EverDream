@@ -17,10 +17,21 @@ import { FEATURE_NFT_UI_ENABLED } from '../config/features';
 import DreamVisualizer from '../components/dreams/DreamVisualizer';
 import type { EmotionCapture } from '../components/face/FacialEmotionDetector';
 import { mediaStorageManager } from '../lib/mediaStorage';
-import { signedMediaUrl } from '../lib/mediaPersist';
+import { persistUserMedia, signedMediaUrl } from '../lib/mediaPersist';
 import { useSubscription } from '../hooks/use-subscription';
 import { coerceNarrativeText } from '../lib/normalizeDreamAnalysis';
+import { analyzeDream } from '../lib/dream-analyzer';
+import { generateDreamImage } from '../modules/sleep/dreamAssetGenerator';
+import { generateParallaxVideo } from '../lib/assets/pipeline';
+import {
+  analysisLooksPending,
+  detectDreamScenes,
+  formatTranscriptParagraphs,
+  type DreamScene,
+} from '../lib/dreamScenes';
+import { canGenerateImage, recordImageGeneration } from '../lib/subscriptions/usageLimits';
 import type { DreamAsset } from '../modules/sleep/types';
+import { useToast } from '../components/ui/Toast';
 
 interface DreamInterpretation {
   symbols: Record<string, string>;
@@ -79,6 +90,9 @@ interface Dream {
   audioCapture?: AudioCapture | null;
   sourceAudio?: string | null;
   audioFile?: string;
+  scenes?: DreamScene[];
+  storyboardImages?: { url: string; title: string; prompt: string }[];
+  parallaxVideoUrl?: string | null;
 }
 
 interface SimilarDream {
@@ -95,6 +109,7 @@ interface DreamDetailScreenProps {
   getCategoryBadgeClass: (category: string) => string;
   getEmotionEmoji: (emotion: string) => string;
   onImageGenerated: (asset: GeneratedImage) => void;
+  onUpdateDream?: (patch: Partial<Dream>) => void;
   isFavourite?: boolean;
   onToggleFavourite?: () => void;
 }
@@ -119,11 +134,18 @@ export function DreamDetailScreen({
   getCategoryBadgeClass,
   getEmotionEmoji,
   onImageGenerated,
+  onUpdateDream,
   isFavourite = false,
   onToggleFavourite,
 }: DreamDetailScreenProps) {
-  const { isAdmin } = useSubscription();
+  const { isAdmin, tier, hasFeature } = useSubscription();
+  const { addToast } = useToast();
   const [showTranscript, setShowTranscript] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [storyboardBusy, setStoryboardBusy] = useState(false);
+  const [videoBusy, setVideoBusy] = useState(false);
+  const [storyboardError, setStoryboardError] = useState<string | null>(null);
+  const [videoError, setVideoError] = useState<string | null>(null);
   const [resolvedVideoUrl, setResolvedVideoUrl] = useState<string | null>(
     detailDream.videoCapture?.url ?? null,
   );
@@ -142,6 +164,128 @@ export function DreamDetailScreen({
   );
   const transcript = (detailDream.content || '').trim();
   const canShowTranscript = transcript.length > 0 && !isPlaceholderTranscript(transcript);
+  const transcriptParagraphs = useMemo(() => formatTranscriptParagraphs(transcript), [transcript]);
+  const analysisPending = analysisLooksPending(
+    detailDream.interpretation?.meaning,
+    detailDream.category,
+    detailDream.themes,
+  );
+  const scenes = useMemo(
+    () => (detailDream.scenes?.length ? detailDream.scenes : detectDreamScenes(transcript || analysisNarrative)),
+    [detailDream.scenes, transcript, analysisNarrative],
+  );
+  const isPremium = isAdmin || hasFeature('image_generation_unlimited');
+  const storyboardCost = Math.max(2, scenes.length);
+  const videoCost = 3;
+
+  const spendCredits = (count: number): boolean => {
+    if (isPremium) return true;
+    const check = canGenerateImage(tier);
+    if (check.remaining < count) {
+      addToast({
+        type: 'warning',
+        message: `Need ${count} image credits (${check.remaining} left this month). Plus includes storyboard and video.`,
+      });
+      return false;
+    }
+    for (let i = 0; i < count; i++) recordImageGeneration();
+    return true;
+  };
+
+  const runAnalysis = async () => {
+    if (analyzing) return;
+    setAnalyzing(true);
+    try {
+      const analysis = await analyzeDream(transcript || analysisNarrative);
+      const nextScenes = detectDreamScenes(transcript || analysis.narrative || analysisNarrative);
+      onUpdateDream?.({
+        category: analysis.category,
+        themes: analysis.themes,
+        emotion: analysis.emotion,
+        symbols: analysis.symbols,
+        narrative: analysis.narrative,
+        nugget: analysis.nugget,
+        interpretation: analysis.interpretation,
+        moodValence: analysis.valence,
+        scenes: nextScenes,
+      });
+      addToast({ type: 'success', message: 'Analysis is ready.' });
+    } catch (err) {
+      addToast({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Analysis failed. Try again in a moment.',
+      });
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  useEffect(() => {
+    if (analysisPending && (transcript || analysisNarrative).length >= 10) {
+      void runAnalysis();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot when opening a pending dream
+  }, [detailDream.id]);
+
+  const runStoryboard = async () => {
+    if (storyboardBusy || scenes.length < 2) return;
+    if (!spendCredits(storyboardCost)) return;
+    setStoryboardBusy(true);
+    setStoryboardError(null);
+    try {
+      const frames: { url: string; title: string; prompt: string }[] = [];
+      for (const scene of scenes) {
+        const asset = await generateDreamImage(
+          `${scene.prompt}, sequential storyboard panel, consistent dream characters, cinematic still`,
+          'cinematic',
+        );
+        frames.push({ url: asset.url, title: scene.title, prompt: scene.prompt });
+      }
+      onUpdateDream?.({ scenes, storyboardImages: frames });
+      addToast({ type: 'success', message: `Storyboard ready — ${frames.length} scenes.` });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Storyboard generation failed.';
+      setStoryboardError(message);
+      addToast({ type: 'error', message });
+    } finally {
+      setStoryboardBusy(false);
+    }
+  };
+
+  const runVideo = async () => {
+    const still = detailDream.generatedImage?.url;
+    if (!still) {
+      addToast({ type: 'warning', message: 'Generate the summary image first, then we can animate it.' });
+      return;
+    }
+    if (!spendCredits(videoCost)) return;
+    setVideoBusy(true);
+    setVideoError(null);
+    try {
+      const blobUrl = await generateParallaxVideo(still, still, {
+        duration: 6,
+        fps: 24,
+        amplitude: 0.1,
+        direction: 'circular',
+      });
+      let url = blobUrl;
+      try {
+        const blob = await fetch(blobUrl).then((r) => r.blob());
+        const stored = await persistUserMedia({ blob, kind: 'video', dreamId: detailDream.id });
+        if (stored?.url) url = stored.url;
+      } catch {
+        /* keep blob url for this session */
+      }
+      onUpdateDream?.({ parallaxVideoUrl: url });
+      addToast({ type: 'success', message: 'Motion clip is ready.' });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Video generation failed.';
+      setVideoError(message);
+      addToast({ type: 'error', message });
+    } finally {
+      setVideoBusy(false);
+    }
+  };
 
   useEffect(() => {
     let objectUrl: string | null = null;
@@ -371,38 +515,54 @@ export function DreamDetailScreen({
             )}
           </section>
 
-          {(detailDream.interpretation || analysisNarrative) && (
-            <section className="rounded-2xl border border-line bg-parchment/60 p-4">
-              <h3 className="font-semibold mb-2 flex items-center gap-2 text-sm text-ink">
+          <section className="rounded-2xl border border-line bg-parchment/60 p-4">
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <h3 className="font-semibold flex items-center gap-2 text-sm text-ink">
                 <Eye className="w-4 h-4 text-duskDeep" strokeWidth={1.75} />
                 Analysis
               </h3>
-              {analysisNarrative && analysisNarrative !== summary && (
-                <p className="text-sm mb-3 text-muted leading-relaxed">{analysisNarrative}</p>
-              )}
-              {detailDream.interpretation?.meaning && (
-                <p className="text-sm mb-3 text-ink leading-relaxed">
-                  {detailDream.interpretation.meaning}
-                </p>
-              )}
-              {Object.keys(detailDream.interpretation?.symbols || {}).length > 0 && (
-                <div className="space-y-2">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-muted">Symbols</div>
-                  {Object.entries(detailDream.interpretation.symbols).map(([symbol, meaning]) => (
-                    <div key={symbol} className="text-xs text-ink">
-                      <span className="font-semibold capitalize">{symbol}:</span>{' '}
-                      <span className="text-muted">{meaning}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {detailDream.interpretation?.commonPattern && (
-                <div className="mt-3 text-xs text-muted italic border-t border-line pt-3">
-                  {detailDream.interpretation.commonPattern}
-                </div>
-              )}
-            </section>
-          )}
+              <button
+                type="button"
+                onClick={() => void runAnalysis()}
+                disabled={analyzing}
+                className="text-xs font-medium text-sageDark hover:text-ink disabled:opacity-50"
+              >
+                {analyzing ? 'Analysing…' : analysisPending ? 'Run analysis' : 'Refresh'}
+              </button>
+            </div>
+            {analyzing && (
+              <p className="text-sm text-muted">Reading the dream — this can take up to a minute.</p>
+            )}
+            {!analyzing && analysisPending && (
+              <p className="text-sm text-muted">
+                No analysis yet. Tap Run analysis to generate symbols, meaning, and scenes.
+              </p>
+            )}
+            {!analyzing && !analysisPending && analysisNarrative && analysisNarrative !== summary && (
+              <p className="text-sm mb-3 text-muted leading-relaxed whitespace-pre-wrap">{analysisNarrative}</p>
+            )}
+            {!analyzing && !analysisPending && detailDream.interpretation?.meaning && (
+              <p className="text-sm mb-3 text-ink leading-relaxed">
+                {detailDream.interpretation.meaning}
+              </p>
+            )}
+            {Object.keys(detailDream.interpretation?.symbols || {}).length > 0 && (
+              <div className="space-y-2">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted">Symbols</div>
+                {Object.entries(detailDream.interpretation.symbols).map(([symbol, meaning]) => (
+                  <div key={symbol} className="text-xs text-ink">
+                    <span className="font-semibold capitalize">{symbol}:</span>{' '}
+                    <span className="text-muted">{meaning}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {detailDream.interpretation?.commonPattern && !analysisPending && (
+              <div className="mt-3 text-xs text-muted italic border-t border-line pt-3">
+                {detailDream.interpretation.commonPattern}
+              </div>
+            )}
+          </section>
 
           {canShowTranscript && (
             <section>
@@ -423,12 +583,74 @@ export function DreamDetailScreen({
                 )}
               </button>
               {showTranscript && (
-                <p className="mt-3 text-sm leading-relaxed text-ink whitespace-pre-wrap px-1">
-                  {transcript}
-                </p>
+                <div className="mt-3 space-y-3 px-1">
+                  {transcriptParagraphs.split(/\n\n/).map((para, i) => (
+                    <p key={i} className="text-sm leading-relaxed text-ink">
+                      {para}
+                    </p>
+                  ))}
+                </div>
               )}
             </section>
           )}
+
+          {scenes.length >= 2 && (
+            <section className="rounded-2xl border border-line bg-cream p-4">
+              <h3 className="font-semibold text-sm text-ink mb-1">Storyboard</h3>
+              <p className="text-[11px] text-muted mb-3">
+                This dream looks like {scenes.length} scenes. Generate a comic-style sequence
+                {isPremium ? ' — included with your plan.' : ` — ${storyboardCost} image credits.`}
+              </p>
+              {detailDream.storyboardImages?.length ? (
+                <div className="grid grid-cols-2 gap-2">
+                  {detailDream.storyboardImages.map((frame) => (
+                    <figure key={frame.url} className="rounded-xl overflow-hidden border border-line bg-parchment">
+                      <img src={frame.url} alt={frame.title} className="w-full h-32 object-cover" />
+                      <figcaption className="px-2 py-1.5 text-[11px] text-ink font-medium">{frame.title}</figcaption>
+                    </figure>
+                  ))}
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void runStoryboard()}
+                  disabled={storyboardBusy}
+                  className="w-full bg-parchment hover:bg-sage/15 border border-line text-ink py-2.5 rounded-xl text-sm font-medium disabled:opacity-50"
+                >
+                  {storyboardBusy ? 'Painting scenes…' : 'Generate storyboard'}
+                </button>
+              )}
+              {storyboardError && <p className="mt-2 text-xs text-duskDeep">{storyboardError}</p>}
+            </section>
+          )}
+
+          <section className="rounded-2xl border border-line bg-cream p-4">
+            <h3 className="font-semibold text-sm text-ink mb-1">Dream video</h3>
+            <p className="text-[11px] text-muted mb-3">
+              Animate the summary image into a short motion clip
+              {isPremium ? ' — included with your plan.' : ` — ${videoCost} image credits.`}
+            </p>
+            {detailDream.parallaxVideoUrl ? (
+              <video
+                src={detailDream.parallaxVideoUrl}
+                controls
+                playsInline
+                loop
+                className="w-full rounded-xl bg-ink max-h-64"
+                poster={detailDream.generatedImage?.url}
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={() => void runVideo()}
+                disabled={videoBusy || !detailDream.generatedImage?.url}
+                className="w-full bg-parchment hover:bg-sage/15 border border-line text-ink py-2.5 rounded-xl text-sm font-medium disabled:opacity-50"
+              >
+                {videoBusy ? 'Rendering clip…' : 'Generate video'}
+              </button>
+            )}
+            {videoError && <p className="mt-2 text-xs text-duskDeep">{videoError}</p>}
+          </section>
 
           {detailDream.captureMode === 'photo' && (
             <div className="rounded-2xl border border-sage/20 bg-sage/5 px-4 py-2.5 flex items-center gap-2 text-sm text-sageDark">

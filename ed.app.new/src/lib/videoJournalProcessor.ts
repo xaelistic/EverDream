@@ -10,6 +10,7 @@
 
 import { transcribeAudio as transcribeWithWhisper } from './transcriptionWhisper';
 import { analyzeDream, type DreamAnalysis } from './dream-analyzer';
+import { detectDreamScenes, type DreamScene } from './dreamScenes';
 import { generateDreamImage } from '../modules/sleep/dreamAssetGenerator';
 import { 
   loadCurrentUserProfile, 
@@ -611,9 +612,11 @@ export async function processAudioJournal(
 export async function processTextJournal(text: string): Promise<{
   analysis: DreamAnalysis;
   generatedImage: VideoJournalDream['generatedImage'];
+  scenes: DreamScene[];
 }> {
   const trimmed = text.trim();
   const analysis = await analyzeDream(trimmed);
+  const scenes = detectDreamScenes(trimmed || analysis.narrative);
   let generatedImage: VideoJournalDream['generatedImage'] = null;
   try {
     const p3 = await loadCurrentUserProfile();
@@ -629,5 +632,5 @@ export async function processTextJournal(text: string): Promise<{
   } catch (error) {
     console.warn('[text_journal] image gen failed:', error);
   }
-  return { analysis, generatedImage };
+  return { analysis, generatedImage, scenes };
 }

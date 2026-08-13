@@ -155,7 +155,7 @@ export async function runAudioProcessing(
 }
 
 export async function runTextProcessing(text: string): Promise<Partial<ProcessingDreamStub>> {
-  const { analysis, generatedImage } = await processTextJournal(text.trim());
+  const { analysis, generatedImage, scenes } = await processTextJournal(text.trim());
   return {
     content: text.trim(),
     category: analysis.category,
@@ -167,6 +167,7 @@ export async function runTextProcessing(text: string): Promise<Partial<Processin
     interpretation: analysis.interpretation,
     moodValence: analysis.valence,
     generatedImage,
+    scenes,
     processingStatus: 'complete',
   };
 }
