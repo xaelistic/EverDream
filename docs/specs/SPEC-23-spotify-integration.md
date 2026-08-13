@@ -1,6 +1,7 @@
 # SPEC-23: Spotify Taste Link (Profile Connect)
 
-**Status:** Draft — 2026-08-13  
+**Status:** Draft — 2026-08-13 (operator checklist)  
+**Full research spec:** [SPEC-24-spotify-oauth-profile-data.md](./SPEC-24-spotify-oauth-profile-data.md)  
 **Canonical app:** `ed.app.new/` + `supabase/functions/social-oauth-spotify/`  
 **Related:** SPEC-18 (interests), `supabase/SOCIAL_INTEGRATIONS_SPEC.md`, `src/lib/social/profileSignals.ts`  
 **Priority:** High — Profile **Connect** is visible and currently does nothing useful in production
