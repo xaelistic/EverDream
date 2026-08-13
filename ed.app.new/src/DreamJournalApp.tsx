@@ -101,6 +101,7 @@ import {
 import LoadingScreen from './components/loading-screen';
 import type { DreamAsset } from './modules/sleep/types';
 import { initDreamService, syncFromSupabase } from './lib/dreamService';
+import { generateDreamId, toDreamsUpsertRow } from './lib/dreamsRecord';
 import { 
   updateUserProfileFromDream, 
   enrichAnalysisWithProfile, 
@@ -565,10 +566,9 @@ const DreamJournalApp = () => {
     initDreamService().then((supabaseReady) => {
       if (supabaseReady) {
         console.log('[App] Supabase initialized — syncing from cloud');
-        syncFromSupabase().then((merged) => {
+        syncFromSupabase().then(async (merged) => {
           if (merged > 0) {
             console.log(`[App] Merged ${merged} dreams from Supabase`);
-            // Reload from local storage (now updated by syncFromSupabase)
             try {
               const raw = localStorage.getItem('everdream_dreams');
               if (raw) {
@@ -578,6 +578,17 @@ const DreamJournalApp = () => {
                 setDreams(mergedDreams);
               }
             } catch { /* ignore */ }
+          }
+          try {
+            const stored = await window.storage?.get('dreams');
+            const local = stored?.value
+              ? (JSON.parse(stored.value) as Dream[]).filter((d) => !d.isSample)
+              : [];
+            for (const dream of local) {
+              await syncDreamToSupabase(dream);
+            }
+          } catch (err) {
+            console.warn('[App] Local dream backfill failed:', err);
           }
         });
       } else {
@@ -679,40 +690,13 @@ const DreamJournalApp = () => {
         return;
       }
 
-      const record = {
-        id: dream.id,
-        user_id: userId,
-        content: dream.content,
-        category: dream.category || 'uncategorized',
-        themes: dream.themes || [],
-        emotion: dream.emotion || 'neutral',
-        symbols: dream.symbols || [],
-        narrative: dream.narrative || null,
-        nugget: dream.nugget || null,
-        interpretation: dream.interpretation || null,
-        mood_valence: dream.moodValence ?? null,
-        capture_mode: dream.captureMode || 'text',
-        generated_image_url: dream.generatedImage?.url || null,
-        generated_image_prompt: dream.generatedImage?.prompt || null,
-        generated_image_style: dream.generatedImage?.style || null,
-        generated_image_source: dream.generatedImage?.source || null,
-        visibility: 'private',
-        is_sample: dream.isSample || false,
-        is_deleted: false,
-        local_created_at: dream.date,
-        local_updated_at: new Date().toISOString(),
-        video_capture: dream.videoCapture || null,
-        source_audio: dream.audioFile || null,
-        context: dream.context || null,
-        sleep_data: dream.sleepData || null,
-      };
-
+      const record = toDreamsUpsertRow(dream, userId);
       const { error } = await supabaseClient.from('dreams').upsert(record);
       if (error) {
         console.error('[Supabase] upsert error:', error);
-      } else {
-        console.log('[Supabase] Dream synced:', dream.id);
+        throw new Error(error.message);
       }
+      console.log('[Supabase] Dream synced:', dream.id, 'as', record.id);
     } catch (err) {
       console.error('[Supabase] sync error:', err);
       throw err;
@@ -1228,31 +1212,9 @@ const DreamJournalApp = () => {
     const analysis = await runDreamAnalysis(captureText);
     console.log('[SaveDream] Analysis complete, themes:', analysis.themes?.length);
 
-    // Step 2: Generate Image (if enabled) — FREE via Pollinations
-    let generatedImage = null;
-    if (settings.imageGeneration) {
-      console.log('[SaveDream] Generating dream image...');
-      generatedImage = await generateDreamImageAsync(analysis);
-      console.log('[SaveDream] Image generated:', generatedImage?.url ? 'success' : 'failed');
-    }
-
-    // Step 3: Generate Parallax Video (if image available) — FREE client-side
-    let parallaxVideoUrl = null;
-    if (generatedImage?.url) {
-      try {
-        console.log('[SaveDream] Generating parallax video...');
-        parallaxVideoUrl = await generateParallaxVideo(
-          generatedImage.url,
-          generatedImage.url,
-          { duration: 5, fps: 24, amplitude: 0.1, direction: 'circular' }
-        );
-        console.log('[SaveDream] Parallax video:', parallaxVideoUrl ? 'success' : 'failed');
-      } catch (err) {
-        console.warn('[SaveDream] Parallax video generation failed:', err);
-      }
-    }
-
-    const dreamId = Date.now().toString();
+    // Persist the journal entry before optional image work so a slow/failed
+    // render cannot drop the dream.
+    const dreamId = generateDreamId();
     const userId = 'user_' + Math.random().toString(36).substr(2, 9);
 
     // Step 4: Create watermark
@@ -1268,8 +1230,8 @@ const DreamJournalApp = () => {
       content: currentEntry,
       ...analysis,
       sleepData,
-      generatedImage,
-      parallaxVideoUrl,
+      generatedImage: null,
+      parallaxVideoUrl: null,
       watermark,
       assetMetadata: calculateAssetMetadata(analysis),
       sourceAudio: pendingTranscription?.audioFile || null,
@@ -1298,10 +1260,36 @@ const DreamJournalApp = () => {
     await saveDreamsToStorage(updatedDreams);
     console.log('[SaveDream] Storage save complete');
 
-    // Sync to Supabase (non-blocking)
     syncDreamToSupabase(newDream).catch((err: unknown) => {
       console.warn('[SaveDream] Supabase sync error:', err);
+      addToast({ type: 'warning', message: 'Saved on this device, but cloud sync failed.' });
     });
+
+    if (settings.imageGeneration) {
+      generateDreamImageAsync(analysis).then(async (generatedImage) => {
+        let parallaxVideoUrl = null;
+        if (generatedImage?.url && !generatedImage.url.startsWith('data:')) {
+          try {
+            parallaxVideoUrl = await generateParallaxVideo(
+              generatedImage.url,
+              generatedImage.url,
+              { duration: 5, fps: 24, amplitude: 0.1, direction: 'circular' },
+            );
+          } catch (err) {
+            console.warn('[SaveDream] Parallax video generation failed:', err);
+          }
+        }
+        const withImage = { ...newDream, generatedImage, parallaxVideoUrl };
+        setDreams((prev) => {
+          const next = prev.map((d) => (d.id === dreamId ? withImage : d));
+          saveDreamsToStorage(next).catch(console.error);
+          return next;
+        });
+        syncDreamToSupabase(withImage).catch(console.error);
+      }).catch((err) => {
+        console.warn('[SaveDream] Background image failed:', err);
+      });
+    }
 
     // Update iterative profile (client-side merge, no AI yet)
     try {
@@ -1344,7 +1332,7 @@ const DreamJournalApp = () => {
     const newDreams: typeof currentDreams = [];
 
     for (const entry of entries) {
-      const dreamId = Date.now().toString() + Math.random().toString(36).slice(2, 6);
+      const dreamId = generateDreamId();
       const userId = 'user_' + Math.random().toString(36).substr(2, 9);
       const sleepData = generateMockSleepData();
       const analysis = entry.analysis;
@@ -1961,7 +1949,7 @@ const DreamJournalApp = () => {
             onOpenEducation={() => navigate('education')}
             onLogDream={(dateKey) => {
               // Actually log a dream for this tracker date (fixes non-working + symbol / log from tracker)
-              const dreamId = `dream-tracker-${dateKey}-${Date.now()}`;
+              const dreamId = generateDreamId();
               const newDream: any = {
                 id: dreamId,
                 date: dateKey,
@@ -2214,7 +2202,7 @@ const DreamJournalApp = () => {
               try {
                 const { analysis, generatedImage } = await processTextJournal(text.trim());
                 newDream = {
-                  id: `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                  id: generateDreamId(),
                   date: new Date().toISOString(),
                   content: text.trim(),
                   category: analysis.category,
@@ -2234,7 +2222,7 @@ const DreamJournalApp = () => {
               }
             } else if (result.videoUrl || result.videoBlob) {
               stopCaptureMedia();
-              const dreamId = `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+              const dreamId = generateDreamId();
               const videoUrl = result.videoUrl || URL.createObjectURL(result.videoBlob);
               newDream = {
                 id: dreamId,
@@ -2325,7 +2313,7 @@ const DreamJournalApp = () => {
             } else if (result.audioBlob || result.audioUrl) {
               stopCaptureMedia();
               const audioDuration = result.duration || 0;
-              const dreamId = `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+              const dreamId = generateDreamId();
               newDream = {
                 id: dreamId,
                 date: new Date().toISOString(),
@@ -2389,7 +2377,7 @@ const DreamJournalApp = () => {
               const imageAsset = result.image;
 
               newDream = {
-                id: `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                id: generateDreamId(),
                 date: new Date().toISOString(),
                 content: text,
                 category: analysis.category || 'uncategorized',

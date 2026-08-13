@@ -13,6 +13,7 @@
 
 import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
 import { coerceNarrativeText, sanitizeDreamForUI } from './normalizeDreamAnalysis';
+import { toDreamsUpsertRow } from './dreamsRecord';
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -131,27 +132,30 @@ async function getProfileId(supabase: SupabaseClient, userId: string): Promise<s
 // ── Dream Data ↔ DB Record Conversion ───────────────────────
 
 function dreamToRecord(dream: DreamData, userId: string) {
-  return {
+  return toDreamsUpsertRow({
     id: dream.id,
-    user_id: userId,
+    date: dream.createdAt,
     content: dream.content,
-    category: dream.category || 'normal',
-    themes: dream.themes || [],
-    emotion: dream.emotion || 'neutral',
-    symbols: dream.symbols || [],
-    narrative: dream.narrative || null,
-    nugget: dream.nugget || null,
-    interpretation: dream.interpretation || null,
-    generated_image_url: dream.imageUrl || null,
-    generated_image_prompt: dream.imagePrompt || null,
-    generated_image_style: dream.imageStyle || 'dreamlike',
-    generated_image_source: dream.imageSource || null,
-    capture_mode: dream.captureMode || 'text',
-    context: dream.context || null,
-    is_sample: dream.isSample || false,
-    local_created_at: dream.createdAt,
-    local_updated_at: dream.updatedAt,
-  };
+    category: dream.category,
+    themes: dream.themes,
+    emotion: dream.emotion,
+    symbols: dream.symbols,
+    narrative: dream.narrative,
+    nugget: dream.nugget,
+    interpretation: dream.interpretation,
+    captureMode: dream.captureMode,
+    generatedImage: dream.imageUrl
+      ? {
+          url: dream.imageUrl,
+          prompt: dream.imagePrompt,
+          style: dream.imageStyle,
+          source: dream.imageSource,
+        }
+      : null,
+    context: dream.context,
+    sleepData: dream.sleepData,
+    isSample: dream.isSample,
+  }, userId);
 }
 
 function recordToDream(record: Record<string, unknown>): DreamData {
@@ -162,8 +166,9 @@ function recordToDream(record: Record<string, unknown>): DreamData {
       ? record.nugget
       : narrative?.substring(0, 100);
 
+  const meta = (record.ai_metadata || {}) as { local_id?: string };
   return {
-    id: record.id as string,
+    id: (meta.local_id as string) || (record.id as string),
     content,
     title: nugget || undefined,
     category: (record.category as string) || 'normal',

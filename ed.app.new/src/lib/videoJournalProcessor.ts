@@ -428,7 +428,7 @@ export async function processVideoJournal(
   const { url: persistentVideoUrl, mediaId } = await resolveVideoUrl(input);
 
   const dream: VideoJournalDream = {
-    id: `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    id: crypto.randomUUID?.() || `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     date: new Date().toISOString(),
     content: transcriptText,
     category: analysis.category,
@@ -569,7 +569,7 @@ export async function processAudioJournal(
   if (!audioUrl) audioUrl = URL.createObjectURL(input.audioBlob);
 
   const dream: AudioJournalDream = {
-    id: `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    id: crypto.randomUUID?.() || `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     date: new Date().toISOString(),
     content: transcriptText,
     category: finalAnalysis.category,
