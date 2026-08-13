@@ -496,7 +496,7 @@ export function DebugPanel({ onClose, dreams, onDreamsChange }: DebugPanelProps)
                 <div className="space-y-3">
                   <GenerationCard
                     title="Image Generation"
-                    description="Pollinations.ai (free) → HuggingFace → Unsplash fallback"
+                    description="OpenRouter image models via generate-image"
                     icon={Image}
                     status={generationStatus}
                     onTest={() => setGenerationStatus('Image generation tested via saveDream flow')}

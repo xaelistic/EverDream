@@ -114,13 +114,15 @@ Deno.serve(async (req: Request): Promise<Response> => {
         }
         const format = contentType.includes('wav')
           ? 'wav'
-          : contentType.includes('mp4') || contentType.includes('m4a')
+          : contentType.includes('mp4') || contentType.includes('m4a') || contentType.includes('aac')
             ? 'm4a'
             : contentType.includes('mpeg') || contentType.includes('mp3')
               ? 'mp3'
-              : contentType.includes('ogg')
+              : contentType.includes('ogg') || contentType.includes('opus')
                 ? 'ogg'
-                : 'webm';
+                : contentType.includes('flac')
+                  ? 'flac'
+                  : 'webm';
         const orResponse = await fetch('https://openrouter.ai/api/v1/audio/transcriptions', {
           method: 'POST',
           headers: {

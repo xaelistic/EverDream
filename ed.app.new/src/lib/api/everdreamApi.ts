@@ -215,7 +215,7 @@ export async function generateImage(
 
       return {
         imageUrl: response.imageUrl,
-        source: response.source || 'pollinations',
+        source: response.source || 'openrouter',
         prompt: response.prompt || prompt,
       };
     });

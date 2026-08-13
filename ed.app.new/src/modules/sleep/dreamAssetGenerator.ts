@@ -1,4 +1,4 @@
-// Improved version with stronger free Pollinations priority, better logging, and robust fallbacks
+// Image generation via the generate-image edge function (OpenRouter primary).
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { DreamAsset } from './types';

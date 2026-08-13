@@ -7,6 +7,7 @@ export function getCategoryBadgeClass(category: string): string {
     prophetic: 'bg-amber-50 text-amber-900 border border-amber-200/90',
     anxiety: 'bg-orange-50 text-orange-900 border border-orange-200/90',
     adventure: 'bg-teal-50 text-teal-900 border border-teal-200/90',
+    processing: 'bg-dusk/10 text-duskDeep border border-dusk/25',
     uncategorized: 'bg-stone-100 text-stone-700 border border-stone-200/90',
   };
   return colors[category] || colors.uncategorized;
@@ -15,15 +16,23 @@ export function getCategoryBadgeClass(category: string): string {
 export function getEmotionEmoji(emotion: string | undefined): string {
   const emojis: Record<string, string> = {
     joy: '😊',
+    happy: '😊',
     fear: '😰',
+    fearful: '😰',
     sadness: '😢',
+    sad: '😢',
     anger: '😠',
+    angry: '😠',
     surprise: '😲',
+    surprised: '😲',
     neutral: '😐',
     excitement: '🤩',
     peace: '😌',
+    peaceful: '😌',
+    calm: '😌',
     anxiety: '😟',
+    anxious: '😟',
     wonder: '✨',
   };
-  return emojis[emotion?.toLowerCase() ?? ''] || '💭';
+  return emojis[emotion?.toLowerCase() ?? ''] || '✨';
 }

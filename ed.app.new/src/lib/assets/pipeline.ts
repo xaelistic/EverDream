@@ -19,6 +19,8 @@
  *   VITE_RUNWAY_API_KEY         // Runway ML (image-to-video)
  */
 
+import { generateDreamImage } from '../../modules/sleep/dreamAssetGenerator';
+
 // ============================================================
 // TYPES
 // ============================================================
@@ -516,9 +518,8 @@ export async function generateMultiViewImages(
   for (let i = 0; i < views.length; i++) {
     const view = views[i];
     const prompt = `${dreamText}, ${view}, ${stylePrompt}`;
-    const encoded = encodeURIComponent(prompt);
-    const url = `https://image.pollinations.ai/prompt/${encoded}?width=768&height=768&nologo=true&seed=${Date.now() % 1000000 + i}`;
-    urls.push(url);
+    const asset = await generateDreamImage(prompt, 'cinematic');
+    urls.push(asset.url);
     onProgress?.(i + 1, views.length);
   }
 

@@ -66,12 +66,12 @@ const SAMPLE_DREAM = {
 
 describe('EverDream E2E Pipeline', () => {
   describe('Image Generation', () => {
-    it('should generate a dream image via Pollinations (free, no API key)', async () => {
+    it('should generate a dream image via OpenRouter', async () => {
       const asset = await generateDreamImage(SAMPLE_DREAM.content, 'dreamlike');
       expect(asset).toBeDefined();
       expect(asset.url).toBeDefined();
       expect(asset.url.length).toBeGreaterThan(0);
-      expect(asset.source).toBe('pollinations');
+      expect(['openrouter', 'edge-function', 'fal', 'huggingface']).toContain(asset.source);
       expect(asset.style).toBe('dreamlike');
       expect(asset.id).toBeDefined();
       expect(asset.generatedAt).toBeDefined();

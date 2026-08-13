@@ -15,6 +15,17 @@ interface RecordScreenProps {
   onCancel: () => void;
 }
 
+function guessAudioMime(name: string): string {
+  const lower = name.toLowerCase();
+  if (lower.endsWith('.m4a') || lower.endsWith('.aac')) return 'audio/mp4';
+  if (lower.endsWith('.mp3')) return 'audio/mpeg';
+  if (lower.endsWith('.wav')) return 'audio/wav';
+  if (lower.endsWith('.ogg') || lower.endsWith('.opus')) return 'audio/ogg';
+  if (lower.endsWith('.webm')) return 'audio/webm';
+  if (lower.endsWith('.flac')) return 'audio/flac';
+  return 'audio/webm';
+}
+
 function readTextFile(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -274,25 +285,37 @@ function UploadCapturePanel({
     setIsProcessing(true);
     setError(null);
     try {
+      if (file.size === 0) {
+        setError('That audio file is empty. Try another recording.');
+        return;
+      }
+      if (file.size > 25 * 1024 * 1024) {
+        setError('Audio is too large (max 25 MB). Try a shorter clip.');
+        return;
+      }
+
+      const mimeType = file.type || guessAudioMime(file.name);
+      const audioBlob = mimeType && mimeType !== file.type ? new Blob([file], { type: mimeType }) : file;
+
       let mediaId: string | null = null;
       try {
-        mediaId = await mediaStorageManager.saveMedia(file, {
+        mediaId = await mediaStorageManager.saveMedia(audioBlob, {
           type: 'audio',
-          mimeType: file.type,
-          size: file.size,
+          mimeType,
+          size: audioBlob.size,
           duration: 0,
           recordedAt: new Date().toISOString(),
           backedUp: false,
           cloudProviders: [],
           tags: ['audio-upload'],
         });
-      } catch { /* continue */ }
+      } catch { /* continue — IndexedDB is optional */ }
 
-      const audioUrl = URL.createObjectURL(file);
-      await onComplete({ audioBlob: file, audioUrl, duration: 0, mediaId }, '');
+      const audioUrl = URL.createObjectURL(audioBlob);
+      await onComplete({ audioBlob, audioUrl, duration: 0, mediaId, fileName: file.name }, '');
     } catch (err) {
       console.error('[Upload] Audio pipeline failed:', err);
-      setError('Could not process audio file. Try a shorter clip or different format.');
+      setError('Could not process that audio. Try .m4a, .mp3, .ogg, or .wav.');
     } finally {
       setIsProcessing(false);
     }
@@ -397,6 +420,7 @@ export function RecordScreen({ onComplete, onCancel }: RecordScreenProps) {
               timestamp: data.timestamp,
               hasAudio: data.hasAudio,
               mediaId: data.mediaId,
+              capturedEmotion: data.capturedEmotion,
             }, '');
           }}
           onCancel={onCancel}

@@ -20,6 +20,7 @@ import { mediaStorageManager } from '../lib/mediaStorage';
 import { persistUserMedia, signedMediaUrl } from '../lib/mediaPersist';
 import { useSubscription } from '../hooks/use-subscription';
 import { coerceNarrativeText } from '../lib/normalizeDreamAnalysis';
+import { deriveDreamTitle, presentDream } from '../lib/dreamClassify';
 import { analyzeDream } from '../lib/dream-analyzer';
 import { generateDreamImage } from '../modules/sleep/dreamAssetGenerator';
 import { generateParallaxVideo } from '../lib/assets/pipeline';
@@ -93,6 +94,9 @@ interface Dream {
   scenes?: DreamScene[];
   storyboardImages?: { url: string; title: string; prompt: string }[];
   parallaxVideoUrl?: string | null;
+  title?: string;
+  processingStatus?: 'processing' | 'complete' | 'failed';
+  processingStep?: 'transcribe' | 'analyse' | 'image' | 'complete';
 }
 
 interface SimilarDream {
@@ -205,9 +209,11 @@ export function DreamDetailScreen({
         symbols: analysis.symbols,
         narrative: analysis.narrative,
         nugget: analysis.nugget,
+        title: deriveDreamTitle(analysis.nugget, analysis.narrative || transcript),
         interpretation: analysis.interpretation,
         moodValence: analysis.valence,
         scenes: nextScenes,
+        processingStatus: 'complete',
       });
       addToast({ type: 'success', message: 'Analysis is ready.' });
     } catch (err) {
@@ -368,6 +374,7 @@ export function DreamDetailScreen({
   const hasAudio = Boolean(resolvedAudioUrl) && !hasVideo;
   const videoDuration = formatDuration(detailDream.videoCapture?.duration);
   const audioDuration = formatDuration(detailDream.audioCapture?.duration);
+  const presented = presentDream(detailDream);
 
   const handleImageGenerated = (asset: DreamAsset) => {
     onImageGenerated({
@@ -410,8 +417,10 @@ export function DreamDetailScreen({
         <DreamVisualizer
           dreamId={detailDream.id}
           dreamText={detailDream.narrative || detailDream.content}
-          dreamTitle={detailDream.nugget}
+          dreamTitle={presented.title}
           existingImageUrl={detailDream.generatedImage?.url}
+          processingStatus={detailDream.processingStatus}
+          processingStep={detailDream.processingStep}
           onImageGenerated={handleImageGenerated}
           onShare={() => shareDream(detailDream)}
         />
@@ -454,18 +463,19 @@ export function DreamDetailScreen({
           <div className="flex items-start justify-between">
             <div>
               <div className="flex items-center gap-2 mb-2">
-                <span className={`${getCategoryBadgeClass(detailDream.category)} px-3 py-1 rounded-full text-xs font-semibold`}>
-                  {detailDream.category}
+                <span className={`${getCategoryBadgeClass(presented.category)} px-3 py-1 rounded-full text-xs font-semibold`}>
+                  {presented.category}
                 </span>
-                <span className="text-2xl">{getEmotionEmoji(detailDream.emotion)}</span>
+                <span
+                  className="inline-flex items-center gap-1.5 text-sm text-ink"
+                  title={`Mood from the dream${detailDream.capturedEmotions ? ', face, and voice' : ''}`}
+                >
+                  <span className="text-2xl" aria-hidden>{getEmotionEmoji(presented.emotion)}</span>
+                  <span className="text-xs text-muted">{presented.emotionName}</span>
+                </span>
               </div>
               <div className="text-sm text-muted">
-                {new Date(detailDream.date).toLocaleDateString('en-US', {
-                  weekday: 'long',
-                  month: 'long',
-                  day: 'numeric',
-                  year: 'numeric',
-                })}
+                {presented.when.primary}{presented.when.secondary ? ` · ${presented.when.secondary}` : ''}
               </div>
             </div>
             {detailDream.moodValence !== undefined && (

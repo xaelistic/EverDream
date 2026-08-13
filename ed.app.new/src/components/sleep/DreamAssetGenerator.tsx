@@ -166,7 +166,7 @@ export const DreamAssetGenerator: React.FC<DreamAssetGeneratorProps> = ({ onClos
                   </div>
                   <div className="p-4 space-y-3 text-slate-200">
                     <div className="flex items-center justify-between gap-2 text-xs uppercase tracking-[0.2em] text-slate-500">
-                      <span>{asset.source === 'pollinations' ? 'Pollinations.ai' : asset.source === 'replicate' ? 'HuggingFace' : asset.source === 'fallback' ? 'Fallback' : asset.source}</span>
+                      <span>{asset.source === 'openrouter' ? 'EverDream' : asset.source === 'replicate' ? 'HuggingFace' : asset.source === 'fallback' ? 'Fallback' : asset.source}</span>
                       <span>{new Date(asset.generatedAt).toLocaleTimeString()}</span>
                     </div>
                     <p className="text-sm leading-6 text-slate-300">{asset.prompt}</p>

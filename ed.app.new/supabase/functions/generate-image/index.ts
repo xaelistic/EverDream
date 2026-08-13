@@ -5,10 +5,9 @@
  * (SPEC-14). Returns JSON by default so the client can show source + cost.
  *
  * Provider priority:
- *   1. OpenRouter (primary — Flux / Gemini image models)
+ *   1. OpenRouter (primary — Flux image models)
  *   2. Fal AI (paid fallback)
  *   3. Hugging Face Inference (free-tier fallback)
- *   4. Pollinations (emergency / loyalty fallback only)
  *
  * Secrets (`supabase secrets set`):
  *   OPENROUTER_API_KEY              required for the primary path
@@ -59,7 +58,6 @@ const HF_API_URL =
   'https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0';
 const FAL_API_URL = 'https://fal.ai/api/fal-ai/fast-sdxl';
 const OPENROUTER_IMAGES_URL = 'https://openrouter.ai/api/v1/images';
-const POLLINATIONS_BASE = 'https://image.pollinations.ai/prompt';
 
 // Cheapest production-quality OpenRouter image model as of 2026-08-13.
 // Do not silently upgrade this — personalization happens in the prompt, not the model.
@@ -534,41 +532,6 @@ async function generateWithFalAI(
   };
 }
 
-// ── Provider: Pollinations (emergency only) ──────────────────
-
-async function generateWithPollinations(
-  prompt: string,
-  style: string,
-  width: number,
-  height: number,
-): Promise<GenerationResult> {
-  const enhancedPrompt = buildEnhancedPrompt(prompt, style);
-  const url =
-    `${POLLINATIONS_BASE}/${encodeURIComponent(enhancedPrompt)}` +
-    `?width=${width}&height=${height}&nologo=true&safe=true&seed=${Date.now()}`;
-
-  console.warn('[generate-image] Using Pollinations loyalty fallback');
-
-  const response = await fetchWithTimeout(url, { method: 'GET' });
-  if (!response.ok) {
-    throw new Error(`Pollinations failed: ${response.status}`);
-  }
-
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  const contentType = response.headers.get('content-type') || 'image/jpeg';
-
-  return {
-    imageUrl: toDataUrl(bytes, contentType),
-    contentType,
-    bytes,
-    source: 'pollinations',
-    model: 'pollinations-flux',
-    prompt: enhancedPrompt,
-    width,
-    height,
-  };
-}
-
 // ── Handler ──────────────────────────────────────────────────
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -681,17 +644,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
           errors.push(`huggingface-retry: ${retryMsg}`);
         }
       }
-    }
-
-    // 4. Pollinations — emergency / loyalty only
-    try {
-      const result = await generateWithPollinations(prompt, style, w, h);
-      console.log('[generate-image] Pollinations loyalty fallback succeeded');
-      return successResponse(result, outputFormat, headers);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.warn('[generate-image] Pollinations failed:', msg);
-      errors.push(`pollinations: ${msg}`);
     }
 
     console.error('[generate-image] All providers failed:', errors);

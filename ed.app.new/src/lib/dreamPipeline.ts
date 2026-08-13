@@ -4,10 +4,9 @@
  * Complete pipeline: Audio → Transcription → AI Analysis → Image → Parallax Video
  *
  * All AI analysis goes through the Supabase Edge Function "analyze-dream"
- * which handles provider fallback automatically:
- *   OpenRouter (free) → Pollinations (free) → Gemini (free tier) → OpenAI (cheap) → Claude (last resort)
+ * (GLM 4.7 Flash → DeepSeek V4 Flash).
  *
- * Image generation: Pollinations.ai (free, unlimited) → HF SDXL fallback
+ * Image generation: generate-image edge function (OpenRouter → Fal → HF).
  *
  * Environment variables:
  *   VITE_SUPABASE_URL       — Supabase project URL
@@ -178,7 +177,7 @@ export async function runDreamPipeline(
     });
   }
 
-  // ── Step 3: Image Generation (FREE — Pollinations) ──────────
+  // ── Step 3: Image Generation (OpenRouter) ──────────
   if (!options.skipImage && analysis) {
     report(STEP_NAMES.image, 'running', 'Generating dream image...');
 

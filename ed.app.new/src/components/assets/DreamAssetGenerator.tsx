@@ -10,8 +10,7 @@
  * - Progress tracking for async generation
  * - Preview generated assets
  * - "Enter VR" button to view in WebXR viewer
- * - Works without API keys (uses free Pollinations for images,
- *   canvas-based parallax for video)
+ * - Images via generate-image (OpenRouter); canvas-based parallax for video
  *
  * API keys (optional, for enhanced quality):
  *   VITE_HF_INFERENCE_API_KEY — Depth Anything v2

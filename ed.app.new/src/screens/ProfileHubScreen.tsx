@@ -106,9 +106,13 @@ export function ProfileHub({ onClose, navigate, onFriendAdded }: ProfileHubProps
         });
       }
     } catch (err) {
+      const raw = err instanceof Error ? err.message : 'Could not update social connection.';
+      const configured = /not configured|503|SPOTIFY_CLIENT/i.test(raw);
       addToast({
         type: 'error',
-        message: err instanceof Error ? err.message : 'Could not update social connection.',
+        message: configured
+          ? 'Spotify is not connected on this server yet. The integration spec is in docs/specs/SPEC-23-spotify-integration.md.'
+          : raw,
       });
     } finally {
       setSocialBusy(null);

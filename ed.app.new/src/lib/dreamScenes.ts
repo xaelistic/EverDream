@@ -73,5 +73,8 @@ export function analysisLooksPending(meaning?: string, category?: string, themes
   if (/analysing your uploaded|analyzing your uploaded|analysis unavailable|processing your/i.test(text)) {
     return true;
   }
+  if (/^(uncategorized|video-journal|audio-journal|processing)$/i.test(category || '')) {
+    return true;
+  }
   return category === 'uncategorized' && (themes?.length ?? 0) <= 1 && /imported/i.test(themes?.[0] || '');
 }

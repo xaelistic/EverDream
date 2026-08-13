@@ -7,3 +7,21 @@
     @apply bg-paper;
   }
 }
+
+@keyframes dream-process-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.dream-process-shimmer {
+  background: linear-gradient(
+    110deg,
+    rgba(94, 196, 168, 0.08) 0%,
+    rgba(232, 214, 176, 0.28) 40%,
+    rgba(94, 196, 168, 0.12) 70%,
+    rgba(74, 92, 126, 0.22) 100%
+  );
+  background-size: 220% 220%;
+  animation: dream-process-shift 2.8s ease-in-out infinite;
+}

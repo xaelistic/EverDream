@@ -3,12 +3,15 @@ import { RefreshCw, Share2, Sparkles } from 'lucide-react';
 import { generateDreamImage } from '../../modules/sleep/dreamAssetGenerator';
 import type { DreamAsset } from '../../modules/sleep/types';
 import { recordTasteSignal } from '../../lib/imageTaste';
+import { DreamProcessingOverlay } from './DreamProcessingOverlay';
 
 interface DreamVisualizerProps {
   dreamId: string;
   dreamText: string;
   dreamTitle?: string;
   existingImageUrl?: string;
+  processingStatus?: 'processing' | 'complete' | 'failed';
+  processingStep?: 'transcribe' | 'analyse' | 'image' | 'complete';
   onImageGenerated?: (asset: DreamAsset) => void;
   onShare?: () => void;
 }
@@ -21,6 +24,8 @@ export default function DreamVisualizer({
   dreamText,
   dreamTitle,
   existingImageUrl,
+  processingStatus,
+  processingStep,
   onImageGenerated,
   onShare,
 }: DreamVisualizerProps) {
@@ -30,7 +35,7 @@ export default function DreamVisualizer({
           id: `${dreamId}-existing`,
           prompt: dreamText,
           url: existingImageUrl,
-          source: 'pollinations',
+          source: 'openrouter',
           style: 'dreamlike',
           generatedAt: new Date().toISOString(),
         }
@@ -48,7 +53,7 @@ export default function DreamVisualizer({
         id: `${dreamId}-existing`,
         prompt: dreamText,
         url: existingImageUrl,
-        source: 'pollinations',
+        source: 'openrouter',
         style: 'dreamlike',
         generatedAt: new Date().toISOString(),
       };
@@ -96,7 +101,7 @@ export default function DreamVisualizer({
 
   return (
     <div data-component="DreamVisualizer">
-      {!asset && !isGenerating && (
+      {!asset && !isGenerating && processingStatus !== 'processing' && (
         <div className="px-5 sm:px-6 py-10 text-center border-b border-line bg-parchment/40">
           <p className="text-sm text-muted mb-4 leading-relaxed">
             Create an image of this dream, then share or try another take.
@@ -151,7 +156,7 @@ export default function DreamVisualizer({
           )}
           <img
             src={asset.url}
-            alt={dreamTitle ? `Dream image: ${dreamTitle}` : 'Dream visualization'}
+            alt={dreamTitle ? `Dream image: ${dreamTitle}` : 'Dream image'}
             onLoad={() => setImageLoaded(true)}
             onError={() => {
               setImageLoaded(false);
@@ -160,10 +165,24 @@ export default function DreamVisualizer({
             }}
             className={`w-full max-h-[28rem] object-cover ${imageLoaded ? 'block' : 'hidden'}`}
           />
+          {dreamTitle && imageLoaded && processingStatus !== 'processing' && (
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-ink/80 to-transparent px-5 py-4">
+              <h2 className="font-serif text-xl sm:text-2xl text-cream leading-snug">{dreamTitle}</h2>
+            </div>
+          )}
+          {processingStatus === 'processing' && (
+            <DreamProcessingOverlay step={processingStep} />
+          )}
         </div>
       )}
 
-      {(onShare || asset) && (
+      {processingStatus === 'processing' && !asset && (
+        <div className="relative min-h-[14rem] border-b border-line bg-parchment/40 overflow-hidden">
+          <DreamProcessingOverlay step={processingStep} />
+        </div>
+      )}
+
+      {processingStatus !== 'processing' && (onShare || asset) && (
         <div className="flex gap-2 px-5 sm:px-6 pt-4">
           {onShare && (
             <button

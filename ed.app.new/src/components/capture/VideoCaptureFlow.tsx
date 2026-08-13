@@ -28,6 +28,12 @@ import {
 } from 'lucide-react';
 import { mediaStorageManager } from '../../lib/mediaStorage';
 import { stopCaptureMedia } from '../../lib/stopCaptureMedia';
+import {
+  detectEmotionFromVideo,
+  ensureFaceModels,
+  pickDominantEmotion,
+  type EmotionCapture,
+} from '../face/FacialEmotionDetector';
 
 export interface VideoCaptureData {
   /** Blob of recorded video */
@@ -42,6 +48,8 @@ export interface VideoCaptureData {
   hasAudio: boolean;
   /** IndexedDB media ID for persistent playback after refresh */
   mediaId?: string;
+  /** Face-api mood sampled from the recording preview */
+  capturedEmotion?: EmotionCapture | null;
 }
 
 export interface VideoCaptureFlowProps {
@@ -128,6 +136,8 @@ export function VideoCaptureFlow({
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<number | null>(null);
   const durationRef = useRef(0); // reliable current duration (avoids stale closure in onstop)
+  const emotionSamplesRef = useRef<EmotionCapture[]>([]);
+  const emotionPollRef = useRef<number | null>(null);
   
   const [isRecording, setIsRecording] = useState(false);
   const [duration, setDuration] = useState(0);
@@ -138,6 +148,7 @@ export function VideoCaptureFlow({
   const [isSaving, setIsSaving] = useState(false);
   const [currentEmotion, setCurrentEmotion] = useState<string | null>(null);
   const [savedMediaId, setSavedMediaId] = useState<string | null>(null);
+  const [faceMood, setFaceMood] = useState<EmotionCapture | null>(null);
 
   /** Pick a mime type that includes an audio codec so Whisper can transcribe speech */
   const pickVideoMimeType = useCallback((): string => {
@@ -184,6 +195,7 @@ export function VideoCaptureFlow({
       }
       
       setPermissionGranted(true);
+      void ensureFaceModels();
     } catch (err) {
       console.error('Camera access error:', err);
       setError('Camera access denied. Please allow camera permissions to record your dream.');
@@ -195,6 +207,10 @@ export function VideoCaptureFlow({
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
+    }
+    if (emotionPollRef.current) {
+      clearInterval(emotionPollRef.current);
+      emotionPollRef.current = null;
     }
 
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
@@ -279,8 +295,8 @@ export function VideoCaptureFlow({
           size: videoBlob.size,
           duration: finalDuration,
           recordedAt: new Date().toISOString(),
-          emotion: currentEmotion || undefined,
-          emotionConfidence: 0.75,
+          emotion: faceMood?.dominantEmotion || currentEmotion || undefined,
+          emotionConfidence: faceMood?.confidence || 0.75,
           thumbnail,
           backedUp: false,
           cloudProviders: [],
@@ -299,6 +315,7 @@ export function VideoCaptureFlow({
         timestamp: new Date().toISOString(),
         hasAudio: audioEnabled,
         mediaId: mediaId || undefined,
+        capturedEmotion: pickDominantEmotion(emotionSamplesRef.current) || faceMood,
       };
       
       console.log('[VideoCapture] Calling onComplete with video data:', {
@@ -346,13 +363,23 @@ export function VideoCaptureFlow({
       navigator.vibrate(50);
     }
     
-    // Simulate emotion detection (integrate with FacialEmotionDetector if needed)
-    if (onEmotionDetected) {
-      const emotions = ['neutral', 'sleepy', 'calm', 'anxious', 'excited'];
-      const randomEmotion = emotions[Math.floor(Math.random() * emotions.length)];
-      setCurrentEmotion(randomEmotion);
-      onEmotionDetected(randomEmotion, 0.75);
-    }
+    emotionSamplesRef.current = [];
+    void (async () => {
+      const ready = await ensureFaceModels();
+      if (!ready) return;
+      emotionPollRef.current = window.setInterval(async () => {
+        if (!videoRef.current) return;
+        const sample = await detectEmotionFromVideo(videoRef.current);
+        if (!sample) return;
+        emotionSamplesRef.current.push(sample);
+        if (emotionSamplesRef.current.length > 24) {
+          emotionSamplesRef.current = emotionSamplesRef.current.slice(-24);
+        }
+        setCurrentEmotion(sample.dominantEmotion);
+        setFaceMood(sample);
+        onEmotionDetected?.(sample.dominantEmotion, sample.confidence);
+      }, 700);
+    })();
   }, [audioEnabled, duration, maxDuration, onComplete, onEmotionDetected, pickVideoMimeType, stopAll]);
 
   const stopRecording = useCallback(() => {

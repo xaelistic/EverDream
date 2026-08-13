@@ -23,6 +23,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { addToBacklog } from './taskBacklog';
 import { ServiceOverloadedError, isOverloadError } from './api/errorHandling';
 import { coerceNarrativeText, normalizeDreamAnalysis } from './normalizeDreamAnalysis';
+import { normalizeCategory, normalizeEmotion } from './dreamClassify';
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -209,11 +210,11 @@ function validateAndNormalizeAnalysis(
   );
 
   const normalized: DreamAnalysis = {
-    category: converted.category || FALLBACK_ANALYSIS.category,
+    category: normalizeCategory(converted.category, sourceText, converted.valence),
     themes: Array.isArray(converted.themes) && converted.themes.length > 0
       ? converted.themes
       : FALLBACK_ANALYSIS.themes,
-    emotion: converted.emotion || FALLBACK_ANALYSIS.emotion,
+    emotion: normalizeEmotion(converted.emotion, { text: sourceText, valence: converted.valence }),
     symbols: Array.isArray(converted.symbols) && converted.symbols.length > 0
       ? converted.symbols
       : [],

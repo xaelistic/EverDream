@@ -77,7 +77,7 @@ Return ONLY valid JSON (no markdown) with this exact shape:
 {
   "category": "nightmare|lucid|recurring|peaceful|prophetic|anxiety|adventure",
   "themes": ["3-5 short themes"],
-  "emotion": "one primary emotion word",
+  "emotion": "joy|fear|sadness|anger|surprise|peace|anxiety|wonder|excitement",
   "symbols": ["2-6 concrete symbols from the dream"],
   "narrative": "120-180 words, first person present tense, vivid but not purple prose",
   "nugget": "one concrete sentence, 12-20 words",
@@ -136,8 +136,101 @@ function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));
 }
 
-function normalizeAnalysis(raw: Partial<DreamAnalysis>): DreamAnalysis {
-  const category = String(raw.category || 'uncategorized').toLowerCase();
+const CATEGORY_ALIASES: Record<string, string> = {
+  nightmare: 'nightmare',
+  horror: 'nightmare',
+  terror: 'nightmare',
+  fear: 'nightmare',
+  scary: 'nightmare',
+  lucid: 'lucid',
+  awareness: 'lucid',
+  recurring: 'recurring',
+  repeating: 'recurring',
+  loop: 'recurring',
+  peaceful: 'peaceful',
+  calm: 'peaceful',
+  serene: 'peaceful',
+  healing: 'peaceful',
+  joy: 'peaceful',
+  prophetic: 'prophetic',
+  precognitive: 'prophetic',
+  omen: 'prophetic',
+  anxiety: 'anxiety',
+  anxious: 'anxiety',
+  stress: 'anxiety',
+  worry: 'anxiety',
+  panic: 'anxiety',
+  adventure: 'adventure',
+  flying: 'adventure',
+  chase: 'adventure',
+  journey: 'adventure',
+  quest: 'adventure',
+};
+
+const EMOTION_ALIASES: Record<string, string> = {
+  joy: 'joy',
+  happy: 'joy',
+  happiness: 'joy',
+  positive: 'joy',
+  fear: 'fear',
+  fearful: 'fear',
+  scared: 'fear',
+  terrified: 'fear',
+  sadness: 'sadness',
+  sad: 'sadness',
+  grief: 'sadness',
+  anger: 'anger',
+  angry: 'anger',
+  rage: 'anger',
+  surprise: 'surprise',
+  surprised: 'surprise',
+  calm: 'peace',
+  peace: 'peace',
+  peaceful: 'peace',
+  excitement: 'excitement',
+  excited: 'excitement',
+  anxiety: 'anxiety',
+  anxious: 'anxiety',
+  worried: 'anxiety',
+  wonder: 'wonder',
+  awe: 'wonder',
+};
+
+function classifyCategory(raw: string, text = '', valence = 0): string {
+  const key = raw.toLowerCase().trim();
+  if ((CATEGORIES as readonly string[]).includes(key)) return key;
+  if (CATEGORY_ALIASES[key]) return CATEGORY_ALIASES[key];
+  const blob = text.toLowerCase();
+  if (/\b(chase|monster|falling|attack|scream)\b/.test(blob)) return 'nightmare';
+  if (/\b(lucid|i knew i was dreaming)\b/.test(blob)) return 'lucid';
+  if (/\b(again|same dream|recurring)\b/.test(blob)) return 'recurring';
+  if (/\b(future|warning|omen)\b/.test(blob)) return 'prophetic';
+  if (/\b(late|exam|worried|can't find)\b/.test(blob)) return 'anxiety';
+  if (/\b(flying|ocean|journey|explore)\b/.test(blob)) return 'adventure';
+  if (valence <= -0.35) return 'anxiety';
+  if (valence >= 0.35) return 'peaceful';
+  return 'adventure';
+}
+
+function classifyEmotion(raw: string, text = '', valence = 0): string {
+  const mapped = EMOTION_ALIASES[raw.toLowerCase().trim()];
+  if (mapped) return mapped;
+  const blob = text.toLowerCase();
+  if (/\b(terrified|afraid|scared|panic)\b/.test(blob)) return 'fear';
+  if (/\b(sad|crying|grief)\b/.test(blob)) return 'sadness';
+  if (/\b(angry|furious|rage)\b/.test(blob)) return 'anger';
+  if (/\b(wonder|awe|beautiful|magical)\b/.test(blob)) return 'wonder';
+  if (/\b(joy|laugh|happy)\b/.test(blob)) return 'joy';
+  if (/\b(anxious|worried|uneasy)\b/.test(blob)) return 'anxiety';
+  if (valence <= -0.4) return 'fear';
+  if (valence >= 0.4) return 'joy';
+  return 'wonder';
+}
+
+function normalizeAnalysis(raw: Partial<DreamAnalysis>, sourceText = ''): DreamAnalysis {
+  const valence = parseValence(raw.valence);
+  const category = classifyCategory(String(raw.category || ''), sourceText, valence);
+  const emotion = classifyEmotion(String(raw.emotion || ''), sourceText, valence);
   const themes = Array.isArray(raw.themes)
     ? raw.themes.map(String).filter(Boolean).slice(0, 6)
     : [];
@@ -157,15 +250,13 @@ function normalizeAnalysis(raw: Partial<DreamAnalysis>): DreamAnalysis {
   }
 
   return {
-    category: (CATEGORIES as readonly string[]).includes(category)
-      ? category
-      : 'uncategorized',
+    category,
     themes,
-    emotion: String(raw.emotion || 'neutral').slice(0, 40),
+    emotion,
     symbols,
     narrative: String(raw.narrative || '').slice(0, 2500),
     nugget: String(raw.nugget || '').slice(0, 240),
-    valence: parseValence(raw.valence),
+    valence,
     interpretation: {
       symbols: symbolMap,
       meaning: String(interp.meaning || '').slice(0, 1500),
@@ -184,7 +275,7 @@ function parseValence(value: unknown): number {
   return clamp(Number.isFinite(n) ? n : 0, -1, 1);
 }
 
-function parseModelJson(content: string): DreamAnalysis {
+function parseModelJson(content: string, sourceText = ''): DreamAnalysis {
   const clean = content.replace(/```json|```/g, '').trim();
   const start = clean.indexOf('{');
   const end = clean.lastIndexOf('}');
@@ -195,7 +286,7 @@ function parseModelJson(content: string): DreamAnalysis {
   } catch {
     throw new Error('Model returned incomplete JSON');
   }
-  const analysis = normalizeAnalysis(parsed);
+  const analysis = normalizeAnalysis(parsed, sourceText);
   if (!analysis.narrative && !analysis.nugget && analysis.themes.length === 0) {
     throw new Error('Model JSON missing usable analysis fields');
   }
@@ -241,7 +332,7 @@ async function analyzeWithOpenRouter(
   if (data.error?.message) throw new Error(data.error.message);
 
   const message = data.choices?.[0]?.message;
-  const analysis = parseFromMessage(message);
+  const analysis = parseFromMessage(message, text);
   return { analysis, provider: 'openrouter', model };
 }
 
@@ -264,12 +355,12 @@ function parseFromMessage(message?: {
   content?: string | null;
   reasoning?: string;
   reasoning_details?: Array<string | { text?: string }>;
-}): DreamAnalysis {
+}, sourceText = ''): DreamAnalysis {
   const parts = collectMessageParts(message);
   let lastError = 'Model returned no JSON object';
   for (const part of parts) {
     try {
-      return parseModelJson(part);
+      return parseModelJson(part, sourceText);
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err);
     }

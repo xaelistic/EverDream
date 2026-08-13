@@ -35,11 +35,11 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [
           {
-            urlPattern: /^https:\/\/image\.pollinations\.ai\/.*/i,
+            urlPattern: /^https:\/\/supabase\.n1g3\.com\/storage\/v1\/object\/public\/public-assets\/.*/i,
             handler: 'CacheFirst',
             options: {
-              cacheName: 'pollinations-images',
-              expiration: { maxEntries: 50, maxAgeSeconds: 7 * 24 * 60 * 60 },
+              cacheName: 'everdream-images',
+              expiration: { maxEntries: 80, maxAgeSeconds: 7 * 24 * 60 * 60 },
               cacheableResponse: { statuses: [0, 200] },
             },
           },

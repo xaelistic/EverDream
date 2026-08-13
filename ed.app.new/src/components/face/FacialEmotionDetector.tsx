@@ -43,6 +43,67 @@ async function loadModels(): Promise<boolean> {
   }
 }
 
+let modelsReady = false;
+
+export async function ensureFaceModels(): Promise<boolean> {
+  if (modelsReady) return true;
+  modelsReady = await loadModels();
+  return modelsReady;
+}
+
+export async function detectEmotionFromVideo(video: HTMLVideoElement): Promise<EmotionCapture | null> {
+  if (video.readyState < 2) return null;
+  try {
+    const detection = await faceapi
+      .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+      .withFaceExpressions();
+    if (!detection) return null;
+
+    const expressions = detection.expressions as unknown as {
+      asSortedArray?: () => Array<{ expression: string; probability: number }>;
+    };
+    const ranked =
+      typeof expressions.asSortedArray === 'function'
+        ? expressions.asSortedArray()
+        : Object.entries(detection.expressions as unknown as Record<string, number>)
+            .filter(([, probability]) => typeof probability === 'number')
+            .map(([expression, probability]) => ({ expression, probability }))
+            .sort((a, b) => b.probability - a.probability);
+
+    if (ranked.length === 0) return null;
+    const emotionMap: Record<string, number> = {};
+    for (const item of ranked) {
+      emotionMap[item.expression] = Math.round(item.probability * 100) / 100;
+    }
+
+    return {
+      dominantEmotion: ranked[0].expression,
+      emotions: emotionMap,
+      confidence: Math.round(detection.detection.score * 100) / 100,
+      timestamp: new Date().toISOString(),
+      faceDetected: true,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function pickDominantEmotion(samples: EmotionCapture[]): EmotionCapture | null {
+  if (samples.length === 0) return null;
+  const counts = new Map<string, { count: number; sample: EmotionCapture }>();
+  for (const sample of samples) {
+    const key = sample.dominantEmotion;
+    const existing = counts.get(key);
+    if (existing) existing.count += 1;
+    else counts.set(key, { count: 1, sample });
+  }
+  const nonNeutral = [...counts.entries()]
+    .filter(([emotion]) => emotion !== 'neutral')
+    .sort((a, b) => b[1].count - a[1].count);
+  if (nonNeutral[0] && nonNeutral[0][1].count >= 2) return nonNeutral[0][1].sample;
+  return samples[samples.length - 1];
+}
+
 export function FacialEmotionDetector({
   onEmotionsCaptured,
   isActive,
@@ -64,7 +125,7 @@ export function FacialEmotionDetector({
   useEffect(() => {
     if (isActive && !modelsLoaded) {
       setLoading(true);
-      loadModels()
+      ensureFaceModels()
         .then((success) => {
           setModelsLoaded(success);
           if (!success) {

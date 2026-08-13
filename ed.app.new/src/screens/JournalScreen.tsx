@@ -1,6 +1,8 @@
 import { Calendar, Shield, Star } from 'lucide-react';
 import type { ErrorBannerProps, LoadingOverlayProps } from '../components/ui';
 import { useSubscription } from '../hooks/use-subscription';
+import { presentDream } from '../lib/dreamClassify';
+import { DreamProcessingOverlay } from '../components/dreams/DreamProcessingOverlay';
 
 interface Dream {
   id: string;
@@ -10,9 +12,15 @@ interface Dream {
   themes: string[];
   emotion: string;
   nugget: string;
+  title?: string;
+  narrative?: string;
+  moodValence?: number;
+  processingStatus?: 'processing' | 'complete' | 'failed';
+  processingStep?: 'transcribe' | 'analyse' | 'image' | 'complete';
   generatedImage?: {
     url: string;
   };
+  capturedEmotions?: { dominantEmotion?: string } | null;
   assetMetadata?: {
     rarityScore: number;
   };
@@ -161,6 +169,8 @@ function DreamCard({
 }: DreamCardProps) {
   // MVP: depth / worth metrics only for admin
   const { isAdmin } = useSubscription();
+  const presented = presentDream(dream);
+  const processing = dream.processingStatus === 'processing';
 
   return (
     <div
@@ -189,36 +199,43 @@ function DreamCard({
         />
       </button>
 
-      {dream.generatedImage && (
-        <img
-          src={dream.generatedImage.url}
-          alt="Dream visualization"
-          className="w-full h-44 object-cover"
-        />
+      {(dream.generatedImage || processing) && (
+        <div className="relative">
+          {dream.generatedImage ? (
+            <img
+              src={dream.generatedImage.url}
+              alt={presented.title}
+              className="w-full h-44 object-cover"
+            />
+          ) : (
+            <div className="w-full h-44 bg-parchment/80" />
+          )}
+          {processing && <DreamProcessingOverlay step={dream.processingStep} compact />}
+        </div>
       )}
       <div className="p-4">
         <div className="flex items-start justify-between mb-3 pr-10">
           <div className="flex items-center gap-2">
-            <div className="text-xs text-muted uppercase tracking-wide">
-              {new Date(dream.date).toLocaleDateString('en-US', {
-                weekday: 'short',
-                month: 'short',
-                day: 'numeric',
-              })}
+            <div className="text-xs text-muted">
+              {presented.when.primary}
+              {presented.when.secondary ? ` · ${presented.when.secondary}` : ''}
             </div>
-            <span className="text-xl">{getEmotionEmoji(dream.emotion)}</span>
+            <span className="inline-flex items-center gap-1 text-xs text-muted" title={`Mood: ${presented.emotionName}`}>
+              <span className="text-xl leading-none" aria-hidden>{getEmotionEmoji(presented.emotion)}</span>
+              {presented.emotionName}
+            </span>
           </div>
           <span
-            className={`${getCategoryBadgeClass(dream.category)} px-2.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide`}
+            className={`${getCategoryBadgeClass(presented.category)} px-2.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide`}
           >
-            {dream.category}
+            {presented.category}
           </span>
         </div>
 
         <div className="mb-3">
-          <p className="text-sm font-serif font-medium text-ink mb-2 italic leading-snug">
-            "{dream.nugget}"
-          </p>
+          <h3 className="font-serif text-lg font-medium text-ink leading-snug">
+            {presented.title}
+          </h3>
         </div>
 
         <div className="flex gap-2 flex-wrap mb-2">

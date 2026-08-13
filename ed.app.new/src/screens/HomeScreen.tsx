@@ -1,5 +1,6 @@
 import { Moon, Sparkles, BookOpen, ChevronRight, BedDouble, PenLine, Check } from 'lucide-react';
 import { coerceNarrativeText } from '../lib/normalizeDreamAnalysis';
+import { presentDream } from '../lib/dreamClassify';
 import { ENERGY_LEVELS, type EnergyLevel } from '../lib/dailyCheckin';
 import type { WearableSleepRecord } from '../lib/wearables';
 import type { DailyQuote } from '../lib/dailyContent';
@@ -12,7 +13,11 @@ interface Dream {
   category: string;
   emotion: string;
   nugget: string;
+  title?: string;
   narrative?: string;
+  moodValence?: number;
+  processingStatus?: string;
+  capturedEmotions?: { dominantEmotion?: string } | null;
   generatedImage?: { url: string } | null;
   assetMetadata?: { rarityScore: number };
   isSample?: boolean;
@@ -185,11 +190,16 @@ export function HomeScreen({
                 />
               )}
               <p className="text-sm text-ink line-clamp-2 leading-relaxed group-hover:text-sageDark transition">
-                {lastDream.nugget || coerceNarrativeText(lastDream.narrative, lastDream.content) || lastDream.content}
+                {presentDream(lastDream).title || lastDream.nugget || coerceNarrativeText(lastDream.narrative, lastDream.content) || lastDream.content}
               </p>
               <p className="text-xs text-muted mt-1 flex items-center gap-1">
-                <span>{getEmotionEmoji(lastDream.emotion)}</span>
-                <span>{formatDreamDate(lastDream.date)}</span>
+                <span>{getEmotionEmoji(presentDream(lastDream).emotion)}</span>
+                <span>{presentDream(lastDream).emotionName}</span>
+                <span>·</span>
+                <span>
+                  {presentDream(lastDream).when.primary}
+                  {presentDream(lastDream).when.secondary ? ` ${presentDream(lastDream).when.secondary}` : ''}
+                </span>
               </p>
             </button>
           ) : (
@@ -266,9 +276,10 @@ export function HomeScreen({
                 className="w-full text-left rounded-2xl border border-line bg-parchment/60 hover:bg-parchment p-3 transition"
               >
                 <p className="text-[10px] uppercase tracking-wider text-muted mb-0.5">
-                  {formatDreamDate(dream.date)}
+                  {presentDream(dream).when.primary}
+                  {presentDream(dream).when.secondary ? ` · ${presentDream(dream).when.secondary}` : ''}
                 </p>
-                <p className="text-sm text-ink line-clamp-1">{dream.nugget || dream.content}</p>
+                <p className="text-sm text-ink line-clamp-1">{presentDream(dream).title || dream.nugget || dream.content}</p>
               </button>
             ))}
           </div>
@@ -278,8 +289,3 @@ export function HomeScreen({
   );
 }
 
-function formatDreamDate(dateString: string) {
-  return new Date(dateString).toLocaleDateString('en-GB', {
-    weekday: 'short', day: 'numeric', month: 'short',
-  });
-}

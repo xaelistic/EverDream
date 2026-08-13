@@ -286,7 +286,7 @@ function classifyNativeError(error: Error): ApiError {
   }
 
   // Image generation errors
-  if (message.includes('image') || message.includes('pollinations') || message.includes('stable diffusion')) {
+  if (message.includes('image') || message.includes('openrouter') || message.includes('stable diffusion')) {
     return createApiError(ErrorCodes.IMAGE_GENERATION_FAILED, error);
   }
 
