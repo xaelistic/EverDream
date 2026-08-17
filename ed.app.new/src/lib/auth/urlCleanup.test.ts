@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
+  consumeOAuthCallbackError,
+  persistOAuthCallbackError,
   stripAuthParamsFromUrl,
   urlHasAuthArtifacts,
   urlIndicatesPasswordRecovery,
@@ -68,5 +70,11 @@ describe('urlCleanup', () => {
     stripAuthParamsFromUrl();
     expect(window.location.search).toBe('');
     expect(window.location.hash).toBe('#/');
+  });
+
+  it('round-trips a persisted OAuth callback error', () => {
+    persistOAuthCallbackError('Google sign-in did not complete.');
+    expect(consumeOAuthCallbackError()).toBe('Google sign-in did not complete.');
+    expect(consumeOAuthCallbackError()).toBeNull();
   });
 });

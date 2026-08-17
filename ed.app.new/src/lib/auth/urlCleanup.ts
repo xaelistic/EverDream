@@ -1,3 +1,5 @@
+import { parseAuthCallbackError } from './parseAuthHashError';
+
 /**
  * Auth URL cleanup
  *
@@ -33,6 +35,28 @@ const AUTH_QUERY_KEYS = [
   'error_description',
   'sb',
 ] as const;
+
+const OAUTH_CALLBACK_ERROR_KEY = 'everdream.oauthCallbackError';
+
+export function persistOAuthCallbackError(message: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(OAUTH_CALLBACK_ERROR_KEY, message);
+  } catch {
+    // private mode / quota — LoginScreen will still parse the URL when possible
+  }
+}
+
+export function consumeOAuthCallbackError(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const value = window.sessionStorage.getItem(OAUTH_CALLBACK_ERROR_KEY);
+    if (value) window.sessionStorage.removeItem(OAUTH_CALLBACK_ERROR_KEY);
+    return value;
+  } catch {
+    return null;
+  }
+}
 
 /** True if the current URL carries auth tokens or OAuth codes. */
 export function urlHasAuthArtifacts(): boolean {
@@ -109,25 +133,33 @@ export function stripAuthParamsFromUrl(opts?: {
  */
 export async function consumeAuthRedirectAndCleanUrl(
   getSession: () => Promise<unknown>,
-): Promise<{ wasRecovery: boolean; hadArtifacts: boolean }> {
+): Promise<{ wasRecovery: boolean; hadArtifacts: boolean; error?: string }> {
   if (typeof window === 'undefined') {
     return { wasRecovery: false, hadArtifacts: false };
   }
 
   const hadArtifacts = urlHasAuthArtifacts();
   const wasRecovery = urlIndicatesPasswordRecovery();
+  let error: string | undefined;
 
   if (hadArtifacts) {
+    const urlError = parseAuthCallbackError(window.location.search, window.location.hash);
+    if (urlError) {
+      error = urlError.description;
+      persistOAuthCallbackError(urlError.description);
+    }
     try {
       // Triggers @supabase/gotrue-js detectSessionInUrl / PKCE exchange
       await getSession();
     } catch (err) {
+      error = err instanceof Error ? err.message : 'OAuth sign-in failed.';
       console.warn('[auth] Failed to consume session from URL:', err);
+      persistOAuthCallbackError(error);
     } finally {
       // Always scrub — even if exchange failed — so secrets leave the bar
       stripAuthParamsFromUrl({ preserveRecovery: wasRecovery });
     }
   }
 
-  return { wasRecovery, hadArtifacts };
+  return { wasRecovery, hadArtifacts, error };
 }

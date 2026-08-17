@@ -131,6 +131,34 @@ VITE_REQUIRE_AUTH=true
 4. SMTP for real email confirm when leaving `ENABLE_EMAIL_AUTOCONFIRM`
 
 ---
+
+## Kong anon-key mismatch (2026-08-17)
+
+Google OAuth *start* worked (`/auth/v1/authorize?provider=google` → 302 to accounts.google.com)
+but the PKCE token exchange on return always died with Kong `401 Unauthorized`.
+
+Kong `key-auth` does not validate JWT signatures. It matches the `apikey` header against
+consumers in `kong.yml`. That file is generated from `$SUPABASE_ANON_KEY`.
+
+The Kong compose service had a **hardcoded Supabase Cloud anon JWT**
+(`ref: olwviffbwcjbcyyleorp`) while the app + `ANON_KEY` used the self-hosted JWT
+signed with the Coolify `JWT_SECRET` / `SERVICE_PASSWORD_JWT`.
+
+Authorize/callback routes are public, so Google consent appeared to work.
+`/auth/v1/token` (PKCE) and `/auth/v1/settings` require the consumer key — 401.
+
+**Fix applied on host** (`supabase-everdream-live`):
+- Coolify `SUPABASE_ANON_KEY` = self-hosted `ANON_KEY`
+- `docker-compose.yml` Kong service `SUPABASE_ANON_KEY: '${SERVICE_SUPABASEANON_KEY}'`
+- Recreated `supabase-kong` so `kong.yml` consumer `anon` matches the app key
+
+Verified after recreate:
+- `GET /auth/v1/health` + apikey → 200
+- `GET /auth/v1/settings` → `"google": true`
+- `GET /rest/v1/profiles` → 200
+- Authorize still 302s to Google with `redirect_uri=https://supabase.n1g3.com/auth/v1/callback`
+
+---
 *Generated 2026-07-21 during login investigation.*
 
 ---

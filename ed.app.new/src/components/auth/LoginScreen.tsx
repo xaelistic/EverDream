@@ -4,7 +4,8 @@ import { useAuth } from '../../hooks/use-auth';
 import { Button } from '../ui';
 import { Card } from '../ui/Card';
 import { signInWithSocialProvider } from '../../lib/auth/socialAuth';
-import { clearAuthHashError, formatAuthErrorMessage, parseAuthHashError } from '../../lib/auth/parseAuthHashError';
+import { consumeOAuthCallbackError } from '../../lib/auth/urlCleanup';
+import { clearAuthHashError, formatAuthErrorMessage, parseAuthCallbackError } from '../../lib/auth/parseAuthHashError';
 
 /**
  * LoginScreen — Updated to spec
@@ -31,11 +32,15 @@ export default function LoginScreen() {
   const [backendUnreachable, setBackendUnreachable] = useState(false);
 
   useEffect(() => {
-    const hashError = parseAuthHashError(window.location.hash);
-    if (hashError) {
-      setError(formatAuthErrorMessage(hashError.description));
+    const callbackError = parseAuthCallbackError(window.location.search, window.location.hash);
+    const persistedError = consumeOAuthCallbackError();
+    if (callbackError) {
+      setError(formatAuthErrorMessage(callbackError.description));
       setOauthLoading(null);
       clearAuthHashError();
+    } else if (persistedError) {
+      setError(formatAuthErrorMessage(persistedError));
+      setOauthLoading(null);
     }
 
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;

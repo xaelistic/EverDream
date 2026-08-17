@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatAuthErrorMessage, parseAuthHashError } from './parseAuthHashError';
+import { formatAuthErrorMessage, parseAuthCallbackError, parseAuthHashError, parseAuthSearchError } from './parseAuthHashError';
 
 describe('parseAuthHashError', () => {
   it('parses Supabase OAuth failure hash', () => {
@@ -14,6 +14,22 @@ describe('parseAuthHashError', () => {
   it('returns null when hash has no error', () => {
     expect(parseAuthHashError('#/')).toBeNull();
   });
+
+  it('parses PKCE query errors', () => {
+    const result = parseAuthSearchError(
+      '?error=access_denied&error_code=bad_oauth_callback&error_description=Unable+to+exchange+external+code',
+    );
+    expect(result?.error).toBe('access_denied');
+    expect(result?.description).toBe('Unable to exchange external code');
+  });
+
+  it('prefers query errors over hash', () => {
+    const result = parseAuthCallbackError(
+      '?error=server_error&error_description=provider+is+not+enabled',
+      '#error=access_denied&error_description=ignored',
+    );
+    expect(result?.description).toBe('provider is not enabled');
+  });
 });
 
 describe('formatAuthErrorMessage', () => {
@@ -23,5 +39,9 @@ describe('formatAuthErrorMessage', () => {
 
   it('highlights unregistered users on sign-in', () => {
     expect(formatAuthErrorMessage('Invalid login credentials', 'signin')).toContain('No account found');
+  });
+
+  it('maps interrupted Google PKCE exchanges', () => {
+    expect(formatAuthErrorMessage('Unable to exchange external code')).toContain('Continue with Google');
   });
 });

@@ -4,12 +4,7 @@ export interface AuthHashError {
   description: string;
 }
 
-/** Parse Supabase GoTrue error params from the URL hash after a failed OAuth redirect. */
-export function parseAuthHashError(hash: string): AuthHashError | null {
-  if (!hash || !hash.includes('error=')) return null;
-
-  const raw = hash.startsWith('#') ? hash.slice(1) : hash;
-  const params = new URLSearchParams(raw);
+function parseAuthErrorParams(params: URLSearchParams): AuthHashError | null {
   const error = params.get('error');
   if (!error) return null;
 
@@ -19,6 +14,28 @@ export function parseAuthHashError(hash: string): AuthHashError | null {
     errorCode: params.get('error_code') || undefined,
     description,
   };
+}
+
+/** Parse Supabase GoTrue error params from the URL hash after a failed OAuth redirect. */
+export function parseAuthHashError(hash: string): AuthHashError | null {
+  if (!hash || !hash.includes('error=')) return null;
+
+  const raw = hash.startsWith('#') ? hash.slice(1) : hash;
+  return parseAuthErrorParams(new URLSearchParams(raw));
+}
+
+/** PKCE / query-string errors after Google (or other) OAuth returns to the app. */
+export function parseAuthSearchError(search: string): AuthHashError | null {
+  if (!search || !search.includes('error=')) return null;
+  return parseAuthErrorParams(new URLSearchParams(search.startsWith('?') ? search : `?${search}`));
+}
+
+/** Prefer query errors (PKCE) then hash errors (implicit / recovery). */
+export function parseAuthCallbackError(
+  search = typeof window === 'undefined' ? '' : window.location.search,
+  hash = typeof window === 'undefined' ? '' : window.location.hash,
+): AuthHashError | null {
+  return parseAuthSearchError(search) || parseAuthHashError(hash);
 }
 
 /** Map raw Supabase auth errors to user-facing copy. */
@@ -46,6 +63,27 @@ export function formatAuthErrorMessage(message: string, mode: 'signin' | 'signup
 
   if (lower.includes('user already registered')) {
     return 'An account with this email already exists. Sign in instead, or use Google if you registered that way.';
+  }
+
+  if (
+    lower.includes('unable to exchange')
+    || lower.includes('code verifier')
+    || lower.includes('invalid flow state')
+    || lower.includes('pkce')
+  ) {
+    return 'Google sign-in was interrupted before it could finish. Please tap Continue with Google again.';
+  }
+
+  if (lower.includes('provider is not enabled') || lower.includes('unsupported provider')) {
+    return 'Google sign-in is not enabled on the server yet. Please use email, or try again shortly.';
+  }
+
+  if (
+    lower.includes('no api key')
+    || lower.includes('invalid api key')
+    || (lower.includes('unauthorized') && (lower.includes('kong') || lower.includes('apikey')))
+  ) {
+    return 'Sign-in service rejected this app key. Please try again in a moment.';
   }
 
   return message;

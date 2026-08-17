@@ -37,10 +37,18 @@ export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKe
  * Consume OAuth / magic-link tokens from the URL and strip them from history.
  * Resolves before React mounts so the address bar never keeps secrets.
  */
-export const authRedirectReady: Promise<{ wasRecovery: boolean; hadArtifacts: boolean }> =
+export const authRedirectReady: Promise<{ wasRecovery: boolean; hadArtifacts: boolean; error?: string }> =
   typeof window !== 'undefined'
     ? consumeAuthRedirectAndCleanUrl(async () => {
-        await supabase.auth.getSession();
+        const params = new URLSearchParams(window.location.search);
+        const code = params.get('code');
+        const { data, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        // PKCE return: GoTrue exchanged at supabase.n1g3.com then sent ?code= here.
+        // If Kong/auth rejected the exchange, there is a code but no session.
+        if (code && !data.session) {
+          throw new Error('Google sign-in did not complete. Please try Continue with Google again.');
+        }
       })
     : Promise.resolve({ wasRecovery: false, hadArtifacts: false });
 
