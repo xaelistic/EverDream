@@ -3,7 +3,7 @@ import { TIER_RANK } from './types';
 
 export const TIER_LIMITS = {
   free: {
-    aiImagesPerMonth: 5,
+    aiImagesPerMonth: 0,
     cloudSync: false,
     wearables: false,
     vrSimulacra: false,
@@ -11,7 +11,7 @@ export const TIER_LIMITS = {
     exportPdf: false,
   },
   plus: {
-    aiImagesPerMonth: Infinity,
+    aiImagesPerMonth: 40,
     cloudSync: true,
     wearables: true,
     vrSimulacra: false,
@@ -19,7 +19,7 @@ export const TIER_LIMITS = {
     exportPdf: true,
   },
   pro: {
-    aiImagesPerMonth: Infinity,
+    aiImagesPerMonth: 120,
     cloudSync: true,
     wearables: true,
     vrSimulacra: true,

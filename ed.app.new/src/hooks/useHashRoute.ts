@@ -20,7 +20,9 @@ export type RouteScreen =
   | 'import-photos'
   | 'admin'
   | 'video-journal'
-  | 'education';
+  | 'education'
+  | 'billing'
+  | 'settings';
 
 export type AppRoute = {
   screen: RouteScreen;
@@ -32,7 +34,8 @@ function parseHash(): AppRoute {
   const raw = window.location.hash.replace(/^#\/?/, '').trim();
   if (!raw) return { screen: 'home', dreamId: null, shareSlug: null };
 
-  const parts = raw.split('/').filter(Boolean);
+  const pathOnly = raw.split('?')[0];
+  const parts = pathOnly.split('/').filter(Boolean);
   if (parts[0] === 'dream' && parts[1]) {
     return { screen: 'dream', dreamId: decodeURIComponent(parts[1]), shareSlug: null };
   }
@@ -60,11 +63,16 @@ function parseHash(): AppRoute {
     'admin',
     'video-journal',
     'education',
+    'billing',
+    'settings',
   ];
   if (screen === 'reflection') {
     return { screen: 'home', dreamId: null, shareSlug: null };
   }
 
+  if (screen === 'settings') {
+    return { screen: 'billing', dreamId: null, shareSlug: null };
+  }
   if (allowed.includes(screen)) {
     return { screen, dreamId: null, shareSlug: null };
   }

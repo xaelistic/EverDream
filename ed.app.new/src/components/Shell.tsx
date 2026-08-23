@@ -42,7 +42,7 @@ function isNavActive(active: RouteScreen, screen: RouteScreen): boolean {
     return active === 'home' || active === 'reflection';
   }
   if (screen === 'more') {
-    return ['more', 'wearables', 'privacy', 'achievements', 'assets', 'import-photos', 'admin', 'settings', 'favourites'].includes(active);
+    return ['more', 'wearables', 'privacy', 'achievements', 'assets', 'import-photos', 'admin', 'settings', 'favourites', 'billing'].includes(active);
   }
   return active === screen;
 }
@@ -116,7 +116,12 @@ export default function Shell({ active, onNavigate, onOpenProfile, processingDre
     <div className={`min-h-screen flex flex-col font-sans ${isThemed ? 'text-[var(--text-primary)]' : 'text-ink'}`}>
       <header className={`sticky top-0 z-40 border-b backdrop-blur-xl ${isThemed ? 'border-[var(--glass-border)] bg-[var(--header-bg)]' : 'border-line bg-white/98'}`}>
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 min-w-0">
+          <button
+            type="button"
+            onClick={() => onNavigate('home')}
+            aria-label="Go to home"
+            className="flex items-center gap-2 min-w-0 text-left rounded-xl hover:opacity-80 transition"
+          >
             <div className={`w-9 h-9 rounded-full border flex items-center justify-center shadow-paper shrink-0 ${isThemed ? 'bg-[var(--glass-bg)] border-[var(--glass-border)]' : 'bg-parchment border-line'}`}>
               <Moon className="w-4 h-4 text-duskDeep" strokeWidth={1.75} />
             </div>
@@ -141,7 +146,7 @@ export default function Shell({ active, onNavigate, onOpenProfile, processingDre
                 </>
               )}
             </div>
-          </div>
+          </button>
           <div className="flex items-center gap-2 shrink-0">
             {processingDreamCount > 0 && (
               <div

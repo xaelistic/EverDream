@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Palette, Brain, Camera, Watch, Award, Eye, ChevronRight, Star } from 'lucide-react';
+import { Palette, Brain, Camera, Watch, Award, Eye, ChevronRight, Star, CreditCard } from 'lucide-react';
 import { FEATURE_NFT_UI_ENABLED, FEATURE_SKINS_UI_ENABLED } from '../config/features';
 import type { SkinId } from '../contexts/SkinContext';
 import { getSkinMeta } from '../lib/skins';
@@ -78,6 +78,7 @@ export function MoreScreen({ skin, isThemed, navigate }: MoreScreenProps) {
             { label: 'Favourites', sub: 'Dreams you have starred', screen: 'favourites', icon: Star },
             { label: 'Insights', sub: 'Patterns & correlations', screen: 'dashboard', icon: Brain },
             { label: 'Import journal photos', sub: 'OCR from pictures', screen: 'import-photos', icon: Camera },
+            { label: 'Plan & credits', sub: 'Tiers, remaining credits, buy more', screen: 'billing', icon: CreditCard },
             { label: 'Sleep & wearables', sub: 'Sessions and sync', screen: 'wearables', icon: Watch },
             // Keepsakes hidden for now — not needed in current product surface
             ...(FEATURE_NFT_UI_ENABLED

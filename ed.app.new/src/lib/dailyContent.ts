@@ -61,8 +61,19 @@ function dayIndex(): number {
   return Math.floor(Date.now() / 86_400_000);
 }
 
+export function getDailyQuoteCard(): EducationModule {
+  const quotes = SLEEP_EDUCATION_CONTENT.filter((m) => m.kind === 'quote');
+  if (!quotes.length) return SLEEP_EDUCATION_CONTENT[0];
+  return quotes[dayIndex() % quotes.length];
+}
+
 export function getDailyQuote(): DailyQuote {
-  return DAILY_QUOTES[dayIndex() % DAILY_QUOTES.length];
+  const card = getDailyQuoteCard();
+  return {
+    text: card.quote || card.content,
+    source: card.source || '',
+    prompt: card.tips[0] || '',
+  };
 }
 
 /** Calendar rotation (no personalization). */

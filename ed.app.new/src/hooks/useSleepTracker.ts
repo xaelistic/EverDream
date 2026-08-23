@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   attachDreamToSummary,
-  buildDemoSleepSummaries,
   buildMonthlySleepReport,
   mapDreamSleepToSummary,
   mapLegacySleepDataToSummary,
@@ -14,8 +13,7 @@ import {
   type WearableSleepLike,
 } from '../modules/sleep';
 import type { SleepData } from '../modules/sleep/types';
-
-const SLEEP_SESSIONS_KEY = 'sleep_completed_sessions';
+import { loadPhoneSleepSessions, SLEEP_UPDATED_EVENT } from '../lib/nightSleep';
 
 export type TrackerDay = {
   dateKey: string;
@@ -39,6 +37,7 @@ type UseSleepTrackerResult = {
   selectedSummary: NightlySleepSummary | null;
   monthlyReport: MonthlySleepReport;
   currentMonth: Date;
+  reloadSessions: () => void;
 };
 
 export function useSleepTracker({
@@ -50,9 +49,20 @@ export function useSleepTracker({
   const [selectedDate, setSelectedDate] = useState('');
   const [hasUserSelectedDate, setHasUserSelectedDate] = useState(false);
 
-  useEffect(() => {
-    setStoredSessions(loadStoredSleepSessions());
+  const reloadSessions = useCallback(() => {
+    setStoredSessions(loadPhoneSleepSessions());
   }, []);
+
+  useEffect(() => {
+    reloadSessions();
+    const onUpdate = () => reloadSessions();
+    window.addEventListener(SLEEP_UPDATED_EVENT, onUpdate);
+    window.addEventListener('storage', onUpdate);
+    return () => {
+      window.removeEventListener(SLEEP_UPDATED_EVENT, onUpdate);
+      window.removeEventListener('storage', onUpdate);
+    };
+  }, [reloadSessions]);
 
   const summaries = useMemo(() => {
     const mappedStored = storedSessions
@@ -64,11 +74,7 @@ export function useSleepTracker({
     const mappedDreamSleep = dreams
       .map((dream) => mapDreamSleepToSummary(dream, settings))
       .filter(Boolean) as NightlySleepSummary[];
-    const baseSummaries =
-      mappedStored.length + mappedWearable.length + mappedDreamSleep.length > 0
-        ? [...mappedStored, ...mappedWearable, ...mappedDreamSleep]
-        : buildDemoSleepSummaries(settings);
-
+    const baseSummaries = [...mappedStored, ...mappedWearable, ...mappedDreamSleep];
     return linkDreamsToSummaries(baseSummaries, dreams);
   }, [dreams, settings, storedSessions, wearableData]);
 
@@ -110,20 +116,8 @@ export function useSleepTracker({
     selectedSummary,
     monthlyReport,
     currentMonth,
+    reloadSessions,
   };
-}
-
-function loadStoredSleepSessions(): SleepData[] {
-  if (typeof window === 'undefined') return [];
-
-  try {
-    const stored = window.localStorage.getItem(SLEEP_SESSIONS_KEY);
-    if (!stored) return [];
-    const parsed = JSON.parse(stored);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
 }
 
 function linkDreamsToSummaries(

@@ -40,6 +40,7 @@ interface GenerateImageRequest {
   quality?: 'cheap' | 'quality';
   referenceImage?: string;
   model?: string;
+  look?: string;
 }
 
 interface GenerationResult {
@@ -83,6 +84,20 @@ const STYLE_MAP: Record<string, string> = {
   cinematic: 'cinematic lighting, dramatic, wide angle, film grain',
 };
 
+const FINISH_VARIATIONS = [
+  'museum print quality, subtle paper tooth',
+  'soft diffusion, no harsh contrast',
+  'rich midtones, gentle film grain',
+  'quiet composition, negative space',
+  'intimate scale, hand-made feeling',
+];
+
+function finishVariation(seed: string): string {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  return FINISH_VARIATIONS[hash % FINISH_VARIATIONS.length];
+}
+
 const DEFAULT_WIDTH = 1024;
 const DEFAULT_HEIGHT = 1024;
 const MAX_PROMPT_LENGTH = 2000;
@@ -102,9 +117,11 @@ function corsHeaders(req: Request): Record<string, string> {
   };
 }
 
-function buildEnhancedPrompt(prompt: string, style: string): string {
+function buildEnhancedPrompt(prompt: string, style: string, look?: string): string {
   const styleDesc = STYLE_MAP[style] || STYLE_MAP.dreamlike;
-  return `${prompt.trim()}, ${styleDesc}, 4k, high quality`;
+  const lookPart = look && look.trim() ? look.trim() : '';
+  const finish = finishVariation(`${prompt}|${style}|${lookPart}`);
+  return [prompt.trim(), styleDesc, lookPart, finish].filter(Boolean).join(', ');
 }
 
 function jsonResponse(
@@ -306,12 +323,13 @@ async function generateWithOpenRouter(
   quality?: string,
   requestedModel?: string,
   referenceImage?: string,
+  look?: string,
 ): Promise<GenerationResult> {
   const apiKey = Deno.env.get('OPENROUTER_API_KEY');
   if (!apiKey) throw new Error('OPENROUTER_API_KEY not set');
 
   const model = resolveOpenRouterModel(quality, requestedModel);
-  const enhancedPrompt = buildEnhancedPrompt(prompt, style);
+  const enhancedPrompt = buildEnhancedPrompt(prompt, style, look);
   const aspectRatio = aspectRatioFromSize(width, height);
   const inputReferences = parseReference(referenceImage);
 
@@ -429,11 +447,12 @@ async function generateWithHuggingFace(
   style: string,
   width: number,
   height: number,
+  look?: string,
 ): Promise<GenerationResult> {
   const apiKey = Deno.env.get('HF_INFERENCE_API_KEY');
   if (!apiKey) throw new Error('HF_INFERENCE_API_KEY not set');
 
-  const enhancedPrompt = buildEnhancedPrompt(prompt, style);
+  const enhancedPrompt = buildEnhancedPrompt(prompt, style, look);
 
   const response = await fetchWithTimeout(HF_API_URL, {
     method: 'POST',
@@ -483,11 +502,12 @@ async function generateWithFalAI(
   style: string,
   width: number,
   height: number,
+  look?: string,
 ): Promise<GenerationResult> {
   const apiKey = Deno.env.get('FAL_AI_KEY');
   if (!apiKey) throw new Error('FAL_AI_KEY not set');
 
-  const enhancedPrompt = buildEnhancedPrompt(prompt, style);
+  const enhancedPrompt = buildEnhancedPrompt(prompt, style, look);
 
   const response = await fetchWithTimeout(FAL_API_URL, {
     method: 'POST',
@@ -562,6 +582,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       quality,
       referenceImage,
       model: requestedModel,
+      look,
     } = body;
 
     if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
@@ -596,6 +617,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         quality,
         requestedModel,
         referenceImage,
+        look,
       );
       console.log(
         `[generate-image] OpenRouter succeeded model=${result.model} cost=${result.cost_usd ?? 'n/a'}`,
@@ -610,7 +632,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     // 2. Fal AI
     try {
       console.log('[generate-image] Trying Fal AI...');
-      const result = await generateWithFalAI(prompt, style, w, h);
+      const result = await generateWithFalAI(prompt, style, w, h, look);
       console.log('[generate-image] Fal AI succeeded');
       return successResponse(result, outputFormat, headers);
     } catch (err) {
@@ -622,7 +644,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     // 3. Hugging Face (free) + one retry if the model is loading
     try {
       console.log('[generate-image] Trying Hugging Face...');
-      const result = await generateWithHuggingFace(prompt, style, w, h);
+      const result = await generateWithHuggingFace(prompt, style, w, h, look);
       console.log('[generate-image] Hugging Face succeeded');
       return successResponse(result, outputFormat, headers);
     } catch (err) {
@@ -634,7 +656,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         console.log('[generate-image] Waiting for HF model to load...');
         await delay(5000);
         try {
-          const retryResult = await generateWithHuggingFace(prompt, style, w, h);
+          const retryResult = await generateWithHuggingFace(prompt, style, w, h, look);
           console.log('[generate-image] Hugging Face succeeded on retry');
           return successResponse(retryResult, outputFormat, headers);
         } catch (retryErr) {

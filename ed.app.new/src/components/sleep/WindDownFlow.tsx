@@ -9,19 +9,19 @@ import {
   ChevronRight,
   ChevronLeft,
   X,
-  Clock,
-  Brain,
   Wind,
   Droplets,
 } from 'lucide-react';
 import {
-  SLEEP_EDUCATION_CONTENT,
   GUIDED_MEDITATIONS,
   AMBIENT_SOUNDS,
-  type EducationModule,
+  SLEEP_CARD_GRADIENTS,
+  educationPalette,
+  pickWindDownCards,
   type GuidedMeditation,
   type AmbientSound,
 } from '../../lib/sleepEducation';
+import { SleepCardArticle } from '../../screens/EducationDetailScreen';
 import { EmojiWheel, type MoodState } from '../mood/EmojiWheel';
 import { addMoodEntry, type MoodEntry } from '../mood/EmojiWheel';
 
@@ -264,6 +264,7 @@ export function WindDownFlow({ onClose, onMoodLogged, circadianProfile }: WindDo
   const [selectedMeditation, setSelectedMeditation] = useState<GuidedMeditation | null>(null);
   const [meditationPlaying, setMeditationPlaying] = useState(false);
   const [currentScriptIndex, setCurrentScriptIndex] = useState(0);
+  const [educationCardIndex, setEducationCardIndex] = useState(0);
 
   const handleMoodSubmit = () => {
     if (selectedMood) {
@@ -280,6 +281,7 @@ export function WindDownFlow({ onClose, onMoodLogged, circadianProfile }: WindDo
       addMoodEntry(entry);
       
       onMoodLogged(selectedMood.label, selectedMood.energy);
+      setEducationCardIndex(0);
       setStep('education');
     }
   };
@@ -290,9 +292,18 @@ export function WindDownFlow({ onClose, onMoodLogged, circadianProfile }: WindDo
   };
 
   const stepIndex = ['mood', 'education', 'meditation', 'ambient', 'ready'].indexOf(step);
+  const windDownCards = pickWindDownCards(selectedMood);
+  const educationCard = windDownCards[educationCardIndex] || windDownCards[0];
+  const educationPaletteClass = educationCard
+    ? SLEEP_CARD_GRADIENTS[educationPalette(educationCard)]
+    : 'from-indigo-950 via-slate-900 to-slate-950';
+  const shellGradient =
+    step === 'education'
+      ? educationPaletteClass
+      : 'from-indigo-950 via-slate-900 to-slate-950';
 
   return (
-    <div className="fixed inset-0 z-[80] bg-gradient-to-b from-indigo-950 via-slate-900 to-slate-950 flex flex-col">
+    <div className={`fixed inset-0 z-[80] bg-gradient-to-br ${shellGradient} flex flex-col`}>
       {/* Header */}
       <div className="shrink-0 px-4 py-3 flex items-center justify-between border-b border-white/5">
         <button type="button" onClick={onClose} className="p-2 rounded-full hover:bg-white/10 transition">
@@ -343,49 +354,31 @@ export function WindDownFlow({ onClose, onMoodLogged, circadianProfile }: WindDo
           </div>
         )}
 
-        {/* Step 2: Sleep Education */}
-        {step === 'education' && (
-          <div className="space-y-4 max-w-md mx-auto">
-            <div className="text-center space-y-2">
-              <Brain className="w-10 h-10 text-dusk mx-auto" strokeWidth={1.2} />
-              <h2 className="text-xl font-serif text-white">Sleep Tips</h2>
-              <p className="text-sm text-white/50">Quick tips for better sleep tonight</p>
-            </div>
-
-            {/* Show relevant education based on mood */}
-            <div className="space-y-3">
-              {SLEEP_EDUCATION_CONTENT.filter(m => {
-                if (selectedMood === 'anxious') return m.category === 'sleep_hygiene';
-                if (selectedMood === 'excited') return m.category === 'sleep_hygiene' || m.id === 'meditation-sleep';
-                if (selectedMood === 'tired') return m.id === 'sleep-routine' || m.id === 'circadian-rhythm';
-                return m.category === 'sleep_hygiene';
-              }).slice(0, 2).map((module) => (
-                <div key={module.id} className="rounded-2xl bg-white/5 border border-white/10 p-4">
-                  <div className="flex items-start gap-3">
-                    <span className="text-2xl">{module.icon}</span>
-                    <div>
-                      <h3 className="text-sm font-semibold text-white">{module.title}</h3>
-                      <p className="text-xs text-white/60 mt-1 leading-relaxed">
-                        {module.content.slice(0, 150)}...
-                      </p>
-                      <div className="mt-2 space-y-1">
-                        {module.tips.slice(0, 3).map((tip, i) => (
-                          <p key={i} className="text-xs text-sage/80 flex items-start gap-1.5">
-                            <span className="text-sage mt-0.5">•</span>
-                            {tip}
-                          </p>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
+        {/* Step 2: Full-screen sleep card (quote or guide) */}
+        {step === 'education' && educationCard && (
+          <div className="max-w-lg mx-auto min-h-full flex flex-col text-[#f7f1e8]">
+            <p className="text-[10px] uppercase tracking-[0.28em] text-white/55 mb-6 text-center">
+              {educationCard.kind === 'quote' ? 'Night note' : 'Sleep guide'} · for tonight
+            </p>
+            <article className="flex-1 flex flex-col justify-center pb-8">
+              <SleepCardArticle education={educationCard} />
+            </article>
+            {windDownCards.length > 1 && (
+              <button
+                type="button"
+                onClick={() => setEducationCardIndex((i) => (i + 1) % windDownCards.length)}
+                className="mb-3 w-full rounded-2xl bg-white/10 hover:bg-white/16 border border-white/15 px-4 py-3 text-left"
+              >
+                <span className="block text-[10px] uppercase tracking-[0.2em] text-white/55">Another card</span>
+                <span className="block font-serif text-lg mt-0.5">
+                  {windDownCards[(educationCardIndex + 1) % windDownCards.length].title}
+                </span>
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setStep('meditation')}
-              className="w-full bg-sage hover:bg-sageDark text-white font-semibold py-3.5 rounded-2xl transition text-sm"
+              className="w-full bg-white/20 hover:bg-white/28 text-white font-semibold py-3.5 rounded-2xl transition text-sm"
             >
               Continue to Relaxation
             </button>

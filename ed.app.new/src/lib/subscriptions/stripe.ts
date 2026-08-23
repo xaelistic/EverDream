@@ -3,7 +3,6 @@
  */
 
 import { supabase } from '../supabase/client';
-import { getProfileId } from './subscriptionStore';
 import type { SubscriptionTier } from './types';
 
 export function isStripeConfigured(): boolean {
@@ -11,19 +10,14 @@ export function isStripeConfigured(): boolean {
 }
 
 export async function startStripeCheckout(tier: 'plus' | 'pro'): Promise<void> {
-  const profileId = await getProfileId();
-  if (!profileId) {
-    throw new Error('Sign in required before subscribing');
-  }
-
-  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://everdream.app';
-  const successUrl = `${origin}/#/settings?subscription=success&tier=${tier}`;
-  const cancelUrl = `${origin}/#/settings?subscription=cancelled`;
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://everdream.n1g3.com';
+  const successUrl = `${origin}/#/billing?subscription=success&tier=${tier}`;
+  const cancelUrl = `${origin}/#/billing?subscription=cancelled`;
 
   const { data, error } = await supabase.functions.invoke('stripe-checkout', {
     body: {
+      kind: 'subscription',
       tier,
-      profile_id: profileId,
       success_url: successUrl,
       cancel_url: cancelUrl,
     },
@@ -35,14 +29,30 @@ export async function startStripeCheckout(tier: 'plus' | 'pro'): Promise<void> {
   window.location.href = data.url as string;
 }
 
-export async function openStripeCustomerPortal(): Promise<void> {
-  const profileId = await getProfileId();
-  if (!profileId) throw new Error('Sign in required');
+export async function startStripeCreditCheckout(packId: string): Promise<void> {
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://everdream.n1g3.com';
+  const successUrl = `${origin}/#/billing?credits=success&pack=${encodeURIComponent(packId)}`;
+  const cancelUrl = `${origin}/#/billing?credits=cancelled`;
 
-  const returnUrl = `${window.location.origin}/#/settings`;
+  const { data, error } = await supabase.functions.invoke('stripe-checkout', {
+    body: {
+      kind: 'credits',
+      pack_id: packId,
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+    },
+  });
+
+  if (error) throw new Error(error.message || 'Checkout failed');
+  if (!data?.url) throw new Error('No checkout URL returned');
+  window.location.href = data.url as string;
+}
+
+export async function openStripeCustomerPortal(): Promise<void> {
+  const returnUrl = `${window.location.origin}/#/billing`;
 
   const { data, error } = await supabase.functions.invoke('stripe-portal', {
-    body: { profile_id: profileId, return_url: returnUrl },
+    body: { return_url: returnUrl },
   });
 
   if (error) throw new Error(error.message);
@@ -62,8 +72,8 @@ export function parseSubscriptionReturn(): { status: 'success' | 'cancelled' | n
   const sub = params.get('subscription');
   const tier = params.get('tier') as SubscriptionTier | null;
 
-  if (sub === 'success') return { status: 'success', tier };
-  if (sub === 'cancelled') return { status: 'cancelled', tier: null };
+  if (sub === 'success' || params.get('credits') === 'success') return { status: 'success', tier };
+  if (sub === 'cancelled' || params.get('credits') === 'cancelled') return { status: 'cancelled', tier: null };
   return { status: null, tier: null };
 }
 

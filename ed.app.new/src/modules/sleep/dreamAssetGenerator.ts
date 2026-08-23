@@ -2,6 +2,8 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { DreamAsset } from './types';
+import { consumeImageCredits, refundImageCredits } from '../../lib/subscriptions/creditService';
+import { applyTasteToPrompt, pickImageRecipe } from '../../lib/imageTaste';
 export type { DreamAsset };
 
 // Local getSupabase (modeled after other modules to avoid "not defined" at runtime)
@@ -56,36 +58,46 @@ function assetFromEdge(data: EdgeImageResponse, prompt: string, style: string): 
   };
 }
 
-async function generateViaEdgeFunction(prompt: string, style: string): Promise<DreamAsset> {
+async function generateViaEdgeFunction(prompt: string, style: string, look?: string): Promise<DreamAsset> {
+  const spent = await consumeImageCredits(1, 'image_generation');
+  if (!spent.ok) {
+    throw new Error(`Out of image credits (${spent.remaining} left). Buy a pack or upgrade on Plan & credits.`);
+  }
+
   const supabase = getSupabase();
-  const body = { prompt, style, width: 1024, height: 1024, format: 'json' as const };
+  const body = { prompt, style, look, width: 1024, height: 1024, format: 'json' as const };
 
-  if (supabase) {
-    const { data, error } = await supabase.functions.invoke('generate-image', { body });
-    if (!error && data) {
-      return assetFromEdge(data as EdgeImageResponse, prompt, style);
+  try {
+    if (supabase) {
+      const { data, error } = await supabase.functions.invoke('generate-image', { body });
+      if (!error && data) {
+        return assetFromEdge(data as EdgeImageResponse, prompt, style);
+      }
+      console.warn('[AssetGen] functions.invoke failed:', error?.message || data);
     }
-    console.warn('[AssetGen] functions.invoke failed:', error?.message || data);
-  }
 
-  const url = (import.meta as any).env?.VITE_SUPABASE_URL || '';
-  const key = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
-  if (!url || !key) throw new Error('Supabase is not configured for image generation');
+    const url = (import.meta as any).env?.VITE_SUPABASE_URL || '';
+    const key = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
+    if (!url || !key) throw new Error('Supabase is not configured for image generation');
 
-  const response = await fetch(`${url.replace(/\/$/, '')}/functions/v1/generate-image`, {
-    method: 'POST',
-    headers: {
-      apikey: key,
-      Authorization: `Bearer ${key}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
-  const payload = await response.json().catch(() => ({})) as EdgeImageResponse;
-  if (!response.ok) {
-    throw new Error(payload.error || `Image generation failed (${response.status})`);
+    const response = await fetch(`${url.replace(/\/$/, '')}/functions/v1/generate-image`, {
+      method: 'POST',
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+    const payload = await response.json().catch(() => ({})) as EdgeImageResponse;
+    if (!response.ok) {
+      throw new Error(payload.error || `Image generation failed (${response.status})`);
+    }
+    return assetFromEdge(payload, prompt, style);
+  } catch (err) {
+    await refundImageCredits(1, 'image_generation_failed');
+    throw err;
   }
-  return assetFromEdge(payload, prompt, style);
 }
 
 // Ollama NWE integration (Brief 1 - primary provider when configured)
@@ -160,24 +172,42 @@ async function generateWithOllama(prompt: string, style: string = 'dreamlike'): 
   };
 }
 
-export async function generateDreamImage(prompt: string, style = 'dreamlike'): Promise<DreamAsset> {
+export async function generateDreamImage(prompt: string, style = 'auto'): Promise<DreamAsset> {
   const text = (prompt || '').trim();
   if (text.length < 3) {
     throw new Error('Need a bit more dream text before an image can be generated.');
   }
 
-  console.log('[AssetGen] Starting image generation via generate-image edge function');
+  const recipe = pickImageRecipe();
+  const chosenStyle = !style || style === 'auto' || style === 'dreamlike' ? recipe.style : style;
+  const tasted = applyTasteToPrompt(text);
+
+  console.log('[AssetGen] recipe', recipe.id, 'style', chosenStyle);
 
   const ollamaEnabled = import.meta.env.VITE_OLLAMA_ENABLED === 'true' && !!import.meta.env.VITE_OLLAMA_URL;
   if (ollamaEnabled) {
     try {
-      return await generateWithOllama(text, style);
+      const local = await generateWithOllama(`${tasted}, ${recipe.fragment}`, chosenStyle);
+      return {
+        ...local,
+        style: `${chosenStyle}:${recipe.id}`,
+        metadata: { ...local.metadata, recipeId: recipe.id, recipeLook: recipe.fragment },
+      };
     } catch (error) {
       console.warn('[AssetGen] Ollama failed, using OpenRouter edge function:', error);
     }
   }
 
-  return generateViaEdgeFunction(text, style);
+  const asset = await generateViaEdgeFunction(tasted, chosenStyle, recipe.fragment);
+  return {
+    ...asset,
+    style: `${chosenStyle}:${recipe.id}`,
+    metadata: {
+      ...asset.metadata,
+      recipeId: recipe.id,
+      recipeLook: recipe.fragment,
+    },
+  };
 }
 
 export async function generateDreamAssets(prompt: string, count = 2): Promise<DreamAsset[]> {

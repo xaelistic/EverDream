@@ -103,10 +103,26 @@ export async function fetchOuraSleep(auth: WearableAuth, startDate: string, endD
           date: day.day,
           bedtime: session?.bedtime_start || day.day + 'T22:00:00',
           wakeTime: session?.bedtime_end || day.day + 'T06:00:00',
-          durationMinutes: session?.total || day.total_sleep_duration ? Math.round(day.total_sleep_duration / 60) : 420,
-          remMinutes: session?.rem || day.rem_sleep_duration ? Math.round(day.rem_sleep_duration / 60) : 90,
-          deepMinutes: session?.deep || day.deep_sleep_duration ? Math.round(day.deep_sleep_duration / 60) : 70,
-          lightMinutes: session?.light || day.light_sleep_duration ? Math.round(day.light_sleep_duration / 60) : 240,
+          durationMinutes: session?.total
+            ? Math.round(session.total / 60)
+            : day.total_sleep_duration
+              ? Math.round(day.total_sleep_duration / 60)
+              : 0,
+          remMinutes: session?.rem
+            ? Math.round(session.rem / 60)
+            : day.rem_sleep_duration
+              ? Math.round(day.rem_sleep_duration / 60)
+              : 0,
+          deepMinutes: session?.deep
+            ? Math.round(session.deep / 60)
+            : day.deep_sleep_duration
+              ? Math.round(day.deep_sleep_duration / 60)
+              : 0,
+          lightMinutes: session?.light
+            ? Math.round(session.light / 60)
+            : day.light_sleep_duration
+              ? Math.round(day.light_sleep_duration / 60)
+              : 0,
           awakeMinutes: session?.awake || 20,
           efficiency: session?.efficiency || day.efficiency || 85,
           score: day.score || 75,
@@ -1205,6 +1221,40 @@ export interface WearableConfig {
   enabled: boolean;
 }
 
+/** Which providers can actually return sleep from this web app. */
+export const WEARABLE_SYNC_SUPPORT: Record<WearableProvider, 'oauth' | 'unsupported'> = {
+  oura: 'oauth',
+  fitbit: 'oauth',
+  google_fit: 'oauth',
+  garmin_connect: 'oauth',
+  withings: 'oauth',
+  polar: 'oauth',
+  amazfit: 'oauth',
+  apple_health: 'unsupported',
+  samsung_health: 'unsupported',
+  huawei_health: 'unsupported',
+  xiaomi_mi_fitness: 'unsupported',
+  sony: 'unsupported',
+};
+
+export function wearableSyncUnavailableMessage(provider: WearableProvider): string {
+  const names: Record<WearableProvider, string> = {
+    oura: 'Oura',
+    fitbit: 'Fitbit',
+    google_fit: 'Google Fit',
+    apple_health: 'Apple Health',
+    samsung_health: 'Samsung Health',
+    huawei_health: 'Huawei Health',
+    xiaomi_mi_fitness: 'Xiaomi',
+    garmin_connect: 'Garmin',
+    withings: 'Withings',
+    amazfit: 'Amazfit',
+    polar: 'Polar',
+    sony: 'Sony',
+  };
+  return `${names[provider]} sleep sync is not available in the web app yet. Use phone tracking tonight, or connect Oura, Fitbit, Garmin, Withings, Polar, or Google Fit.`;
+}
+
 /**
  * Fetch sleep data from all enabled wearable providers
  */
@@ -1220,6 +1270,9 @@ export async function fetchAllWearableSleep(
 
   const promises = enabledConfigs.map(async (config) => {
     try {
+      if (WEARABLE_SYNC_SUPPORT[config.provider] === 'unsupported') {
+        throw new Error(wearableSyncUnavailableMessage(config.provider));
+      }
       let records: WearableSleepRecord[] = [];
 
       switch (config.provider) {

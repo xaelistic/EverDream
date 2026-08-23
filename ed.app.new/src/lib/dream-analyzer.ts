@@ -25,6 +25,7 @@ import { ServiceOverloadedError, isOverloadError } from './api/errorHandling';
 import { coerceNarrativeText, normalizeDreamAnalysis } from './normalizeDreamAnalysis';
 import { normalizeCategory, normalizeEmotion } from './dreamClassify';
 import { cleanDreamTranscript } from './cleanDreamTranscript';
+import { latestNightSleep, type NightSleepContext } from './nightSleep';
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -108,7 +109,7 @@ function getSupabase(): SupabaseClient | null {
 
 // ── Analysis via Supabase Edge Function ──────────────────────
 
-async function analyzeViaEdgeFunction(text: string): Promise<DreamAnalysis> {
+async function analyzeViaEdgeFunction(text: string, sleep?: NightSleepContext | null): Promise<DreamAnalysis> {
   console.log('[DreamAnalyzer] Step 1: Input validation passed, text length:', text.length);
   console.log('[DreamAnalyzer] Step 2: Invoking Supabase analyze-dream edge function...');
   
@@ -123,7 +124,7 @@ async function analyzeViaEdgeFunction(text: string): Promise<DreamAnalysis> {
 
   try {
     const { data, error } = await supabase.functions.invoke('analyze-dream', {
-      body: { text },
+      body: { text, sleep: sleep || undefined },
       signal: controller.signal,
     });
 
@@ -247,7 +248,10 @@ function validateAndNormalizeAnalysis(
  * @param text — The dream text to analyze (minimum 10 characters)
  * @returns Parsed DreamAnalysis, or fallback on failure
  */
-export async function analyzeDream(text: string): Promise<DreamAnalysis> {
+export async function analyzeDream(
+  text: string,
+  options?: { sleep?: NightSleepContext | null },
+): Promise<DreamAnalysis> {
   console.log('[DreamAnalyzer] ========== DREAM ANALYSIS STARTED ==========');
   console.log('[DreamAnalyzer] Input text preview:', text.substring(0, 100) + (text.length > 100 ? '...' : ''));
   console.log('[DreamAnalyzer] Input text length:', text.length);
@@ -271,7 +275,8 @@ export async function analyzeDream(text: string): Promise<DreamAnalysis> {
   let lastError: unknown;
   try {
     console.log('[DreamAnalyzer] Attempt 1: Trying Supabase Edge Function...');
-    const result = await analyzeViaEdgeFunction(safeText);
+    const sleep = options?.sleep === undefined ? latestNightSleep() : options.sleep;
+    const result = await analyzeViaEdgeFunction(safeText, sleep);
     console.log('[DreamAnalyzer] ✓ Edge function succeeded');
     console.log('[DreamAnalyzer] ========== DREAM ANALYSIS COMPLETED ==========');
     return result;

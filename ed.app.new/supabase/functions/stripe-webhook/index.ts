@@ -49,8 +49,26 @@ serve(async (req) => {
     case 'checkout.session.completed': {
       const session = event.data.object as Stripe.Checkout.Session;
       const profileId = session.metadata?.profile_id;
+      if (!profileId) break;
+      if (session.metadata?.kind === 'credits') {
+        const credits = Number(session.metadata.credits || 0);
+        if (credits > 0) {
+          await supabase.rpc('grant_purchased_credits', {
+            target_profile: profileId,
+            amount: credits,
+            reason: `stripe:${session.metadata.pack_id || 'pack'}`,
+          });
+          await supabase.from('subscription_events').insert({
+            user_id: profileId,
+            event_type: 'credits_purchased',
+            source: 'stripe',
+            payload: { credits, pack_id: session.metadata.pack_id, session_id: session.id },
+          });
+        }
+        break;
+      }
       const tier = (session.metadata?.tier || 'plus') as 'plus' | 'pro';
-      if (profileId && session.subscription) {
+      if (session.subscription) {
         await updateProfileTier(supabase, profileId, tier, {
           stripe_subscription_id: session.subscription,
         });

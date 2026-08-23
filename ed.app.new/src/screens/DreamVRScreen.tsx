@@ -35,7 +35,7 @@ export function DreamVRScreen({ dreamId, title, imageUrl, parallaxVideoUrl, navi
     <ProFeatureGate
       feature="Dream VR"
       description="Step inside your dream in WebXR. Requires EverDream Pro."
-      onUpgrade={() => navigate('settings')}
+      onUpgrade={() => navigate('billing')}
     >
     <div className="fixed inset-0 z-[90] bg-ink">
       <button

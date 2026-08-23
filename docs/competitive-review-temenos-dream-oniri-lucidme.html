@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Competitive Review — Temenos · Dream · Oniri · LucidMe</title>
+  <style>
+    :root {
+      --bg: #f7f5ff;
+      --paper: #fffefb;
+      --ink: #1a1a2e;
+      --muted: #5c5870;
+      --line: rgba(26, 26, 46, 0.12);
+      --aqua: #5ec4a8;
+      --aqua-soft: rgba(94, 196, 168, 0.12);
+      --lav: #9b8fd4;
+      --lav-soft: rgba(155, 143, 212, 0.12);
+      --amber: #c49a42;
+      --rose: #c86070;
+      --rose-soft: rgba(200, 96, 112, 0.1);
+      --shadow: 0 1px 3px rgba(26, 26, 46, 0.04), 0 8px 28px rgba(26, 26, 46, 0.06);
+    }
+
+    * { box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      font-size: 16px;
+      line-height: 1.65;
+      color: var(--ink);
+      background:
+        radial-gradient(ellipse 120% 60% at 10% 0%, rgba(168, 237, 220, 0.35), transparent 55%),
+        radial-gradient(ellipse 90% 50% at 95% 5%, rgba(200, 184, 255, 0.28), transparent 50%),
+        var(--bg);
+    }
+
+    .wrap {
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 2.5rem 1.25rem 4rem;
+    }
+
+    header.doc-header {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 2rem 1.75rem;
+      box-shadow: var(--shadow);
+      margin-bottom: 2rem;
+    }
+
+    header.doc-header h1 {
+      font-family: Georgia, "Times New Roman", serif;
+      font-weight: 500;
+      font-size: clamp(1.6rem, 4vw, 2.1rem);
+      line-height: 1.25;
+      margin: 0 0 0.75rem;
+      letter-spacing: -0.02em;
+    }
+
+    header.doc-header .meta {
+      color: var(--muted);
+      font-size: 0.92rem;
+      margin: 0;
+    }
+
+    header.doc-header .meta strong { color: var(--ink); }
+
+    nav.toc {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 2rem;
+      box-shadow: var(--shadow);
+    }
+
+    nav.toc h2 {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      margin: 0 0 0.75rem;
+      font-weight: 600;
+    }
+
+    nav.toc ol {
+      margin: 0;
+      padding-left: 1.25rem;
+    }
+
+    nav.toc a {
+      color: var(--lav);
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    nav.toc a:hover { text-decoration: underline; color: var(--ink); }
+
+    section {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 1.75rem 1.5rem;
+      margin-bottom: 1.25rem;
+      box-shadow: var(--shadow);
+    }
+
+    section h2 {
+      font-family: Georgia, "Times New Roman", serif;
+      font-weight: 500;
+      font-size: 1.45rem;
+      margin: 0 0 1rem;
+      padding-bottom: 0.65rem;
+      border-bottom: 1px solid var(--line);
+    }
+
+    section h3 {
+      font-size: 1.1rem;
+      margin: 1.5rem 0 0.6rem;
+      color: var(--ink);
+    }
+
+    section h4 {
+      font-size: 0.95rem;
+      margin: 1.1rem 0 0.4rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-weight: 600;
+    }
+
+    p { margin: 0 0 0.9rem; }
+
+    p.lead {
+      font-size: 1.05rem;
+      color: var(--muted);
+    }
+
+    ul, ol { margin: 0 0 1rem; padding-left: 1.35rem; }
+    li { margin-bottom: 0.35rem; }
+    li::marker { color: var(--aqua); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      margin: 1rem 0 1.25rem;
+      overflow-x: auto;
+      display: block;
+    }
+
+    thead, tbody { display: table; width: 100%; }
+
+    th, td {
+      border: 1px solid var(--line);
+      padding: 0.65rem 0.7rem;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--aqua-soft);
+      font-weight: 600;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    tr:nth-child(even) td { background: rgba(247, 245, 255, 0.5); }
+
+    .rank-list {
+      list-style: none;
+      padding: 0;
+      margin: 1rem 0;
+    }
+
+    .rank-list li {
+      display: flex;
+      gap: 0.85rem;
+      align-items: flex-start;
+      padding: 0.85rem 1rem;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      margin-bottom: 0.6rem;
+      background: #fff;
+    }
+
+    .rank-list .num {
+      flex-shrink: 0;
+      width: 1.75rem;
+      height: 1.75rem;
+      border-radius: 999px;
+      background: var(--aqua-soft);
+      color: #2a8f78;
+      font-weight: 700;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .rank-list strong { display: block; margin-bottom: 0.15rem; }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin: 0.75rem 0 1rem;
+    }
+
+    @media (max-width: 640px) {
+      .two-col { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      border-radius: 12px;
+      padding: 1rem 1.1rem;
+      border: 1px solid var(--line);
+    }
+
+    .card.love {
+      background: var(--aqua-soft);
+      border-color: rgba(94, 196, 168, 0.35);
+    }
+
+    .card.want {
+      background: var(--rose-soft);
+      border-color: rgba(200, 96, 112, 0.25);
+    }
+
+    .card h4 {
+      margin-top: 0;
+      color: var(--ink);
+      text-transform: none;
+      letter-spacing: 0;
+      font-size: 0.95rem;
+    }
+
+    .card ul { margin-bottom: 0; }
+
+    .callout {
+      background: var(--lav-soft);
+      border: 1px solid rgba(155, 143, 212, 0.3);
+      border-radius: 12px;
+      padding: 1rem 1.15rem;
+      margin: 1rem 0;
+    }
+
+    .callout strong { color: #5a4f9a; }
+
+    .bottom-line {
+      background: linear-gradient(135deg, var(--aqua-soft), var(--lav-soft));
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 1.15rem 1.25rem;
+      margin: 1.25rem 0 0;
+    }
+
+    .bottom-line ul { margin-bottom: 0; }
+
+    .tag {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 0.2rem 0.55rem;
+      border-radius: 999px;
+      background: var(--aqua-soft);
+      color: #2a8f78;
+      margin-right: 0.35rem;
+      vertical-align: middle;
+    }
+
+    .tag.lav { background: var(--lav-soft); color: #5a4f9a; }
+    .tag.amber { background: rgba(196, 154, 66, 0.15); color: #8a6a20; }
+
+    footer {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-top: 1.5rem;
+      padding: 0 0.5rem;
+    }
+
+    a { color: var(--lav); }
+    a:hover { color: var(--ink); }
+
+    .table-scroll {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      margin: 1rem 0 1.25rem;
+    }
+
+    .table-scroll table {
+      display: table;
+      min-width: 640px;
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="doc-header">
+      <h1>Competitive review: Temenos · Dream · Oniri · LucidMe</h1>
+      <p class="meta">
+        Snapshot as of early <strong>August 2026</strong> (App Store / Google Play + public reviews).<br />
+        “Dream” is treated as <strong>DreamApp</strong> (the large mainstream product). A tiny app also named
+        <em>Dream : Dreams Journal with AI</em> (~36 ratings, last update 2023) is not competitive at this scale.
+      </p>
+    </header>
+
+    <nav class="toc" aria-label="Table of contents">
+      <h2>Contents</h2>
+      <ol>
+        <li><a href="#popularity">Who is most popular right now?</a></li>
+        <li><a href="#love-want">What users love vs want</a></li>
+        <li><a href="#feature-map">Feature demand map</a></li>
+        <li><a href="#temenos-feed">Deep dive: Temenos feed</a></li>
+        <li><a href="#everdream">Strategic takeaways for EverDream</a></li>
+        <li><a href="#sources">Sources</a></li>
+      </ol>
+    </nav>
+
+    <!-- POPULARITY -->
+    <section id="popularity">
+      <h2>a) Who is most popular <em>right now</em>?</h2>
+
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>App</th>
+              <th>iOS ratings</th>
+              <th>Android reviews</th>
+              <th>Approx. total</th>
+              <th>Downloads / claims</th>
+              <th>Stars (iOS / Android)</th>
+              <th>Ship cadence</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>DreamApp</strong></td>
+              <td>~3.9K</td>
+              <td>~12.5K</td>
+              <td><strong>~16K</strong></td>
+              <td><strong>1M+</strong> (site ~1.6M)</td>
+              <td>4.6 / ~3.7</td>
+              <td>Ongoing; last iOS ~Jul 2026</td>
+            </tr>
+            <tr>
+              <td><strong>Oniri</strong></td>
+              <td>~3.7K</td>
+              <td>~390</td>
+              <td><strong>~4.1K</strong></td>
+              <td>Site: <strong>300k+</strong> dreamers</td>
+              <td>4.6 / ~3.9</td>
+              <td><strong>Very hot</strong> (v6.x Jul 2026)</td>
+            </tr>
+            <tr>
+              <td><strong>LucidMe</strong></td>
+              <td>~10</td>
+              <td>~1.4K</td>
+              <td><strong>~1.4K</strong></td>
+              <td><strong>100K+</strong></td>
+              <td>4.4 / ~4.0</td>
+              <td>Active social (v5.9 Jul 2026)</td>
+            </tr>
+            <tr>
+              <td><strong>Temenos</strong></td>
+              <td>~674</td>
+              <td>~584</td>
+              <td><strong>~1.2K</strong></td>
+              <td><strong>10K+</strong></td>
+              <td><strong>4.9 / ~4.9</strong></td>
+              <td>Steady fixes through Jun 2026</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Ranking by different “popularity” lenses</h3>
+      <ol class="rank-list">
+        <li>
+          <span class="num">1</span>
+          <div>
+            <strong>Scale / installs / review volume → DreamApp</strong>
+            Largest footprint by far; mass TikTok-style acquisition; global dictionary + AI interpretation positioning.
+          </div>
+        </li>
+        <li>
+          <span class="num">2</span>
+          <div>
+            <strong>Brand health + “people stick with this” → Oniri</strong>
+            Best-known pure dream-journal brand in Western iOS (Forbes/Cosmo/etc.), claims 300k+ users, long multi-year retention stories, and the highest product velocity right now.
+          </div>
+        </li>
+        <li>
+          <span class="num">3</span>
+          <div>
+            <strong>Quality / love-score among people who use it → Temenos</strong>
+            Smallest install base but elite ratings (~4.9) and long, recent 5★ reviews (Jungian podcast funnel, therapy substitute framing). Not “most popular,” but strongest reputation density.
+          </div>
+        </li>
+        <li>
+          <span class="num">4</span>
+          <div>
+            <strong>Social-graph momentum → LucidMe</strong>
+            Smaller store rating base on iOS, but community is the product: feed, likes, comments, follows, clans, challenges. Android has volume; iOS still thin.
+          </div>
+        </li>
+      </ol>
+
+      <div class="bottom-line">
+        <strong>Bottom line for “most popular at the moment”</strong>
+        <ul>
+          <li><strong>Most users overall:</strong> DreamApp</li>
+          <li><strong>Most culturally / productively “hot” in the dream-journal niche:</strong> Oniri</li>
+          <li><strong>Most loved (rating quality):</strong> Temenos</li>
+          <li><strong>Most social:</strong> LucidMe (and Temenos’ Circles as a calmer alternative)</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- LOVE VS WANT -->
+    <section id="love-want">
+      <h2>b) What users love vs want</h2>
+
+      <h3><span class="tag">1</span> Temenos Dream</h3>
+      <p class="lead">Jungian AI + Circles. Sacred / depth-psych dream work; AI as reflective companion (not a horoscope dictionary); privacy + optional sharing.</p>
+      <div class="two-col">
+        <div class="card love">
+          <h4>Loved</h4>
+          <ul>
+            <li>Voice capture → text so you don’t fully wake to write</li>
+            <li>Chat-style AI (follow-ups, associations, symbols)</li>
+            <li>Jungian / myth / archetype framing (“harder” introspective prompts)</li>
+            <li>Nightmare reframing; “bridge until I can afford therapy”</li>
+            <li>Encryption / private-by-default, then optional share</li>
+          </ul>
+        </div>
+        <div class="card want">
+          <h4>Want / pain</h4>
+          <ul>
+            <li>Export should include full AI chat, not just interpretation notes</li>
+            <li>Mobile typing bugs, long-text UI, transcription glitches</li>
+            <li>Price pushback (~$50–60/yr premium)</li>
+            <li>Occasional “too much / busy” UI</li>
+          </ul>
+        </div>
+      </div>
+      <p><strong>Recency:</strong> Reviews and changelog into 2025–mid 2026; Android bugs being fixed live; still growing, not stagnant.</p>
+
+      <h3><span class="tag">2</span> DreamApp (“Dream”)</h3>
+      <p class="lead">Mainstream AI meanings + therapist angle + heavy growth marketing.</p>
+      <div class="two-col">
+        <div class="card love">
+          <h4>Loved</h4>
+          <ul>
+            <li>“Spookily accurate” AI when users write long, specific dreams</li>
+            <li>Life / PTSD / pattern connections; conversational AI</li>
+            <li>Volume of content and multi-language reach</li>
+          </ul>
+        </div>
+        <div class="card want">
+          <h4>Want / pain (loud)</h4>
+          <ul>
+            <li>Billing / free-trial / cancel issues dominate negatives</li>
+            <li>Price + aggressive paywall</li>
+            <li>Trust damage from support non-response stories</li>
+            <li>Android rating dragged (~3.7) despite strong iOS score</li>
+          </ul>
+        </div>
+      </div>
+      <p><strong>Recency:</strong> Still huge, but sentiment is polarized — scale without trust is a liability EverDream can avoid.</p>
+
+      <h3><span class="tag">3</span> Oniri</h3>
+      <p class="lead">“#1 dream app” — journal + AI analysis + lucid practice stack (reality checks, audio cues, WBTB, MILD, SSILD, FILD…). Site claims 300k+ dreamers.</p>
+      <div class="two-col">
+        <div class="card love">
+          <h4>Loved</h4>
+          <ul>
+            <li>Beautiful, sticky journal UX (people finally leave paper behind)</li>
+            <li>Voice notes + transcription, images (search + generate), drawings</li>
+            <li>Stats: emotions, people, symbols, trends, nightmare analysis</li>
+            <li>Lucid tools that “actually help”</li>
+            <li>Passcode / privacy, PDF export, widgets</li>
+            <li>Long-term users (years of entries)</li>
+          </ul>
+        </div>
+        <div class="card want">
+          <h4>Want / pain</h4>
+          <ul>
+            <li>Android lagging iOS (layout/keyboard, free tier, ~3.9★)</li>
+            <li>Heavy paywall for interpretation / lucid / multi-image</li>
+            <li>Dictionary/symbol coverage gaps (older reviews)</li>
+            <li>Reality-check notifications unreliable (being fixed)</li>
+            <li>Richer dream categories (lucidity spectrum, custom types)</li>
+          </ul>
+        </div>
+      </div>
+      <p><strong>Recency:</strong> Highest ship velocity in this set (nightmare analysis, trends, re-recorded audio, widgets in Jul 2026). Strong “most actively competitive” signal.</p>
+
+      <h3><span class="tag">4</span> LucidMe</h3>
+      <p class="lead">REMspace / Raduga orbit — lucid / OBE practice + in-app social network + optional hardware mask.</p>
+      <div class="two-col">
+        <div class="card love">
+          <h4>Loved</h4>
+          <ul>
+            <li>Community / dream sharing as a first-class feature</li>
+            <li>Techniques library; free research-style content</li>
+            <li>Social proof (likes, activity, challenges)</li>
+          </ul>
+        </div>
+        <div class="card want">
+          <h4>Want / pain</h4>
+          <ul>
+            <li>Reply / conversation notifications (users miss threads for days)</li>
+            <li>Accessibility (tiny text, dark mode)</li>
+            <li>App freezes, reinstall loops</li>
+            <li>Mask / hardware frustration ($200, false cues, forced registration)</li>
+            <li>Support feels offline</li>
+          </ul>
+        </div>
+      </div>
+      <p><strong>Recency:</strong> Social product is actively expanding (activity + notifications for likes/comments/follows; rating-based feed; clans; dream mates; challenges; streaks).</p>
+    </section>
+
+    <!-- FEATURE MAP -->
+    <section id="feature-map">
+      <h2>Feature demand map (across all four)</h2>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Theme</th>
+              <th>Love signal</th>
+              <th>Want signal</th>
+              <th>Who leads today</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Morning capture (voice)</strong></td>
+              <td>Very high</td>
+              <td>Reliable transcription</td>
+              <td>Temenos, Oniri</td>
+            </tr>
+            <tr>
+              <td><strong>AI interpretation + chat</strong></td>
+              <td>Very high</td>
+              <td>Continuity, export of chat, less “generic”</td>
+              <td>Temenos (depth), DreamApp (mass), Oniri (reflective)</td>
+            </tr>
+            <tr>
+              <td><strong>Visuals</strong></td>
+              <td>High</td>
+              <td>Quality + free quota</td>
+              <td>Oniri, DreamApp</td>
+            </tr>
+            <tr>
+              <td><strong>Patterns / stats / symbols</strong></td>
+              <td>High</td>
+              <td>Nightmare trends, correlations</td>
+              <td>Oniri</td>
+            </tr>
+            <tr>
+              <td><strong>Lucid toolkit</strong></td>
+              <td>High (lucid segment)</td>
+              <td>Reliable alarms / RC</td>
+              <td>Oniri, LucidMe</td>
+            </tr>
+            <tr>
+              <td><strong>Community / feed</strong></td>
+              <td>Growing</td>
+              <td>Notifications, safety, intimacy vs spam</td>
+              <td><strong>LucidMe</strong> (open), <strong>Temenos Circles</strong> (private)</td>
+            </tr>
+            <tr>
+              <td><strong>Privacy</strong></td>
+              <td>High</td>
+              <td>Clear E2E story, export/delete</td>
+              <td>Temenos messaging, Oniri claims</td>
+            </tr>
+            <tr>
+              <td><strong>Trust / pricing</strong></td>
+              <td>—</td>
+              <td>Transparent trials, easy cancel</td>
+              <td>DreamApp is the cautionary tale</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- TEMENOS FEED -->
+    <section id="temenos-feed">
+      <h2>Deep dive: Temenos “feed” (and what to steal for EverDream)</h2>
+      <p>
+        Temenos is <strong>not</strong> primarily a global TikTok of dreams. From product copy + founder interviews, sharing is layered:
+      </p>
+      <ol>
+        <li><strong>Private by default</strong> (encrypted journal)</li>
+        <li><strong>Share with one person</strong></li>
+        <li><strong>Dream Circles</strong> — small groups for discussion (human-powered, not algorithm-first)</li>
+        <li><strong>Optional public post</strong> so others can comment</li>
+        <li>Broader “public wall” / messaging mentioned in 2025 roundups</li>
+      </ol>
+      <p>
+        So the model is closer to <strong>“intimate circles + optional public wall”</strong> than Discord-or-bust.
+        That maps well to replacing a Discord-centric community:
+      </p>
+
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Discord pain</th>
+              <th>Temenos-style alternative</th>
+              <th>EverDream opportunity</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Context switch, new app</td>
+              <td>Stay inside journal after capture</td>
+              <td><strong>Share this dream → Feed / Circle</strong> in one tap</td>
+            </tr>
+            <tr>
+              <td>Noisy / off-topic</td>
+              <td>Circles you choose</td>
+              <td>Circles: friends, cohort, “nightmares only,” etc.</td>
+            </tr>
+            <tr>
+              <td>Hard to link a dream</td>
+              <td>Share is a first-class dream object</td>
+              <td>Feed post = dream card (image, nugget, themes) + privacy tier</td>
+            </tr>
+            <tr>
+              <td>Moderation chaos</td>
+              <td>Smaller rooms + public optional</td>
+              <td>Default <strong>private / friends / circle / public</strong></td>
+            </tr>
+            <tr>
+              <td>No product loop</td>
+              <td>Share after AI insight</td>
+              <td>Prompt: “Share interpretation?” vs raw narrative only</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>LucidMe’s feed lessons</h3>
+      <p>What users explicitly ask for if you build social:</p>
+      <ul>
+        <li><strong>Reply notifications</strong> and conversation continuity</li>
+        <li>Readable typography / accessibility</li>
+        <li>Sort modes (recent vs rating / quality)</li>
+        <li>Light social objects: likes, comments, follows, “similar dreams,” optional challenges/streaks</li>
+        <li>Avoid coupling community to hardware or forced phone signup</li>
+      </ul>
+
+      <h3>Temenos lessons</h3>
+      <p>Higher trust for EverDream’s brand:</p>
+      <ul>
+        <li>Circles before infinite public feed</li>
+        <li>Jungian / reflective framing of comments (“what does this image mean <em>to you</em>?”) not hot takes</li>
+        <li>AI stays personal; humans add resonance</li>
+        <li>Privacy defaults that are easy to explain</li>
+      </ul>
+    </section>
+
+    <!-- EVERDREAM -->
+    <section id="everdream">
+      <h2>Strategic takeaways for EverDream</h2>
+
+      <h3>Most popular right now</h3>
+      <ul>
+        <li><strong>DreamApp</strong> wins raw popularity.</li>
+        <li><strong>Oniri</strong> wins “best-in-class journal product people recommend and keep.”</li>
+        <li><strong>Temenos</strong> wins trust and depth among a smaller, high-intent cohort.</li>
+        <li><strong>LucidMe</strong> is the clearest proof that in-app social/feed is a real product direction — if notifications and UX work.</li>
+      </ul>
+
+      <h3>Features that move the needle (love)</h3>
+      <ol>
+        <li>Instant morning voice capture</li>
+        <li>Good AI that feels personal + follow-up chat</li>
+        <li>Images</li>
+        <li>Patterns over time</li>
+        <li>Optional community that doesn’t force leaving the app</li>
+      </ol>
+
+      <h3>Features that lose trust (avoid)</h3>
+      <ol>
+        <li>Dark-pattern trials / hard cancel (DreamApp)</li>
+        <li>Android half-baked (Oniri)</li>
+        <li>Social without notifications (LucidMe)</li>
+        <li>Overwhelming UI / capture bugs (Temenos mobile complaints)</li>
+      </ol>
+
+      <div class="callout">
+        <strong>Feed vs Discord — recommendation</strong>
+        <p style="margin: 0.5rem 0 0;">
+          Build a <strong>Temenos-shaped social layer</strong>, not a Discord clone:
+        </p>
+        <ol style="margin-bottom: 0;">
+          <li><strong>Privacy ladder:</strong> Private → Friends → Circle → Public</li>
+          <li><strong>Dream-native posts:</strong> card with image + short nugget + themes (not a chat dump)</li>
+          <li><strong>Circles first</strong> (small, intentional), public feed second</li>
+          <li><strong>Activity + reply notifications</strong> (LucidMe’s #1 ask)</li>
+          <li>Optional “similar dreams” / resonance matching (LucidMe already ships this)</li>
+          <li>Keep Discord as optional power-user space, not the home of community</li>
+        </ol>
+      </div>
+
+      <p style="margin-top: 1.25rem;">
+        That combination is rare: DreamApp/Oniri are weak on intimate community; LucidMe is strong on social but weaker as a polished journal; Temenos has the right social <em>philosophy</em> but limited scale.
+        A <strong>journal-first app with Circles + light public feed</strong> is a clear white space — and a direct upgrade path off Discord-centric community.
+      </p>
+    </section>
+
+    <section id="sources">
+      <h2>Sources</h2>
+      <ul>
+        <li>App Store / Google Play listings for Temenos, Oniri, LucidMe, DreamApp</li>
+        <li><a href="https://www.temenosdream.com/" target="_blank" rel="noopener">temenosdream.com</a></li>
+        <li><a href="https://www.oniri.io/" target="_blank" rel="noopener">oniri.io</a></li>
+        <li>Public review text and 2025–2026 changelogs</li>
+      </ul>
+    </section>
+
+    <footer>
+      EverDream competitive research · August 2026 ·
+      File: <code>docs/competitive-review-temenos-dream-oniri-lucidme.html</code>
+    </footer>
+  </div>
+</body>
+</html>

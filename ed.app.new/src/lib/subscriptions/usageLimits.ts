@@ -42,9 +42,6 @@ export function getImageUsageThisMonth(): number {
 
 export function canGenerateImage(tier: SubscriptionTier): { allowed: boolean; remaining: number; limit: number } {
   const limit = getLimitsForTier(tier).aiImagesPerMonth;
-  if (!Number.isFinite(limit)) {
-    return { allowed: true, remaining: Infinity, limit };
-  }
   const used = getImageUsageThisMonth();
   const planRemaining = Math.max(0, limit - used);
   const bonusTokens = getGenerationTokenBalance();

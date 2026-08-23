@@ -7,8 +7,10 @@ import { useSleepTracker } from '../../hooks/useSleepTracker';
 import type { DreamLike, TrackerSettings, WearableSleepLike } from '../../modules/sleep';
 import { getSleepQualityLabel, getSleepQualitySymbol } from '../../modules/sleep';
 import { getDailyEducation } from '../../lib/dailyContent';
+import { SLEEP_CARD_GRADIENTS, educationPalette } from '../../lib/sleepEducation';
 import { MonthlySleepReport } from './MonthlySleepReport';
 import { SleepStageStack } from './SleepStageStack';
+import { PhoneNightTracker } from './PhoneNightTracker';
 
 type TrackerScreenProps = {
   dreams: DreamLike[];
@@ -18,8 +20,9 @@ type TrackerScreenProps = {
   onLogDream?: (dateKey: string) => void;
   /** Navigate to wearables / connect flow */
   onConnectTracker?: () => void;
+  onSyncWearables?: () => void;
   /** Open full-screen education piece (not inline dump) */
-  onOpenEducation?: () => void;
+  onOpenEducation?: (moduleId: string) => void;
 };
 
 function formatMinutes(total: number): string {
@@ -44,6 +47,7 @@ export function TrackerScreen({
   onOpenDream,
   onLogDream,
   onConnectTracker,
+  onSyncWearables,
   onOpenEducation,
 }: TrackerScreenProps) {
   const [showMonth, setShowMonth] = useState(false);
@@ -84,6 +88,8 @@ export function TrackerScreen({
 
   return (
     <div className="space-y-5">
+      <PhoneNightTracker />
+
       {/* ── 1. Hero: Last night at a glance (Oura-style) ── */}
       <section className="rounded-3xl border border-line bg-gradient-to-br from-cream to-parchment p-5 shadow-lift">
         <div className="flex items-start justify-between gap-4">
@@ -97,7 +103,7 @@ export function TrackerScreen({
                 })}
               </p>
             ) : (
-              <p className="text-sm text-muted mt-1">No data yet — log a dream or connect a wearable</p>
+              <p className="text-sm text-muted mt-1">No nights yet — start phone tracking above or sync a wearable</p>
             )}
           </div>
           {lastNight && (
@@ -244,49 +250,46 @@ export function TrackerScreen({
       </section>
 
       {/* ── 6. Education teaser (full piece opens fullscreen) ── */}
-      <section className="rounded-2xl border border-line bg-cream p-4 shadow-paper">
-        <div className="flex items-start gap-3">
-          <div className="w-10 h-10 rounded-xl bg-dusk/10 flex items-center justify-center shrink-0">
-            <Lightbulb className="w-5 h-5 text-duskDeep" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-[10px] uppercase tracking-[0.18em] text-muted mb-1">
-              {education.icon} Learn · {education.readTimeMinutes} min
-            </p>
-            <h3 className="font-semibold text-ink">{education.title}</h3>
-            <p className="text-sm text-muted mt-2 leading-relaxed line-clamp-2">{education.content}</p>
-            {education.tips[0] && (
-              <p className="text-xs text-sageDark mt-2 flex items-start gap-1.5">
-                <Heart className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                <span className="line-clamp-1">{education.tips[0]}</span>
-              </p>
-            )}
-            {onOpenEducation && (
-              <button
-                type="button"
-                onClick={onOpenEducation}
-                className="mt-3 text-xs font-semibold text-sageDark inline-flex items-center gap-1"
-              >
-                Learn more <ChevronRight className="w-3 h-3" />
-              </button>
-            )}
-          </div>
-        </div>
-      </section>
+      <button
+        type="button"
+        onClick={() => onOpenEducation?.(education.id)}
+        className={`w-full text-left rounded-3xl border border-line overflow-hidden bg-gradient-to-br ${SLEEP_CARD_GRADIENTS[educationPalette(education)]} p-6 shadow-lift`}
+      >
+        <p className="text-[10px] uppercase tracking-[0.28em] text-white/60 mb-3">
+          Sleep card · {education.readTimeMinutes} min
+        </p>
+        <h3 className="font-serif text-2xl text-[#f7f1e8] leading-snug">{education.title}</h3>
+        <p className="text-sm text-white/80 mt-3 leading-relaxed line-clamp-3">{education.quote || education.content}</p>
+        <span className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-white">
+          Open full card <ChevronRight className="w-3.5 h-3.5" />
+        </span>
+      </button>
 
       {/* ── 7. Connect a tracker ── */}
-      {onConnectTracker && (
-        <section className="pb-2">
-          <button
-            type="button"
-            onClick={onConnectTracker}
-            className="w-full rounded-2xl border border-sage/30 bg-sage/10 hover:bg-sage/15 text-sageDark font-semibold py-3.5 px-4 transition flex items-center justify-center gap-2 shadow-paper"
-          >
-            <Watch className="w-5 h-5" strokeWidth={1.75} />
-            Connect a tracker
-          </button>
+      {(onConnectTracker || onSyncWearables) && (
+        <section className="pb-2 space-y-2">
+          {onSyncWearables && (
+            <button
+              type="button"
+              onClick={onSyncWearables}
+              className="w-full rounded-2xl border border-line bg-cream hover:bg-parchment text-ink font-semibold py-3.5 px-4 transition flex items-center justify-center gap-2 shadow-paper"
+            >
+              <Watch className="w-5 h-5 text-duskDeep" strokeWidth={1.75} />
+              Sync wearables
+            </button>
+          )}
+          {onConnectTracker && (
+            <button
+              type="button"
+              onClick={onConnectTracker}
+              className="w-full rounded-2xl border border-sage/30 bg-sage/10 hover:bg-sage/15 text-sageDark font-semibold py-3.5 px-4 transition flex items-center justify-center gap-2 shadow-paper"
+            >
+              <Watch className="w-5 h-5" strokeWidth={1.75} />
+              Connect a tracker
+            </button>
+          )}
           <p className="text-center text-[11px] text-muted mt-2">
-            Link Apple Health, Oura, Whoop, Fitbit, and more
+            Phone tracking works tonight. Oura, Fitbit, Garmin, Withings, Polar, and Google Fit can sync over the web.
           </p>
         </section>
       )}

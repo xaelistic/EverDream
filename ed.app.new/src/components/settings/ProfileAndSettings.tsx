@@ -30,6 +30,7 @@ import { connectSocialProvider, disconnectSocialProvider } from '../../lib/socia
 import { isProviderLinkedInDb } from '../../lib/social/socialAccounts';
 import { useSocialAuth } from '../../hooks/use-social-auth';
 import type { SocialProviderId } from '../../lib/socialShare';
+import { BillingScreen } from '../../screens/BillingScreen';
 
 // Safe localStorage helpers with try-catch wrappers
 function safeGetLocalStorage(key: string): string | null {
@@ -863,75 +864,7 @@ export default function ProfileAndSettings({ user, onClose }: ProfileAndSettings
     </div>
   );
 
-  const renderSubscriptionTab = () => (
-    <div className="space-y-4">
-      {/* Current Plan */}
-      <div className="p-6 bg-gradient-to-br from-purple-600 to-pink-600 rounded-2xl text-white">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <p className="text-purple-200 text-sm">Current Plan</p>
-            <h3 className="text-2xl font-bold">Free</h3>
-          </div>
-          <CreditCard className="w-8 h-8 text-purple-200" />
-        </div>
-        <p className="text-sm text-purple-100 mb-4">
-          Upgrade to unlock advanced features
-        </p>
-        <button className="w-full py-3 bg-white text-purple-600 rounded-xl font-semibold hover:bg-purple-50 transition">
-          Upgrade Now
-        </button>
-      </div>
-
-      {/* Plan Options */}
-      <div className="space-y-3">
-        {SUBSCRIPTION_PLANS.map((plan) => (
-          <div
-            key={plan.id}
-            className={`p-4 rounded-xl border-2 ${
-              plan.popular
-                ? 'border-purple-500 bg-purple-50'
-                : 'border-gray-200 bg-white'
-            }`}
-          >
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <h4 className="font-semibold text-gray-900">{plan.name}</h4>
-                <p className="text-2xl font-bold text-gray-900">
-                  {plan.price}
-                  <span className="text-sm font-normal text-gray-500">/{plan.period}</span>
-                </p>
-              </div>
-              {plan.popular && (
-                <span className="px-2 py-1 bg-purple-600 text-white text-xs font-medium rounded-full">
-                  Most Popular
-                </span>
-              )}
-            </div>
-
-            <ul className="space-y-2 mb-4">
-              {plan.features.map((feature, i) => (
-                <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                  <Check className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
-                  {feature}
-                </li>
-              ))}
-            </ul>
-
-            {plan.limitations && (
-              <ul className="space-y-2">
-                {plan.limitations.map((limitation, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-gray-500">
-                    <X className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" />
-                    {limitation}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+  const renderSubscriptionTab = () => <BillingScreen />;
 
   const renderPrivacyTab = () => (
     <div className="space-y-6">

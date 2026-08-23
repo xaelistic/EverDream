@@ -138,7 +138,7 @@ export function DreamSimulacrumScreen({
     <ProFeatureGate
       feature="Dream Simulacrum"
       description="Build explorable 3D terrain and GLB meshes from your dream images. Included with EverDream Pro."
-      onUpgrade={() => navigate('settings')}
+      onUpgrade={() => navigate('billing')}
     >
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">

@@ -4,7 +4,9 @@ import { presentDream } from '../lib/dreamClassify';
 import { ENERGY_LEVELS, type EnergyLevel } from '../lib/dailyCheckin';
 import type { WearableSleepRecord } from '../lib/wearables';
 import type { DailyQuote } from '../lib/dailyContent';
+import { getDailyQuoteCard } from '../lib/dailyContent';
 import type { EducationModule } from '../lib/sleepEducation';
+import { SLEEP_CARD_GRADIENTS, educationPalette } from '../lib/sleepEducation';
 
 interface Dream {
   id: string;
@@ -41,6 +43,7 @@ interface HomeScreenProps {
   checkInSaved: boolean;
   reflectionSleepData: WearableSleepRecord | null;
   dailyEducation: EducationModule;
+  onOpenSleepCard?: (moduleId: string) => void;
   getCategoryBadgeClass: (category: string) => string;
   getEmotionEmoji: (emotion: string) => string;
 }
@@ -58,6 +61,7 @@ export function HomeScreen({
   checkInSaved,
   reflectionSleepData,
   dailyEducation,
+  onOpenSleepCard,
   getEmotionEmoji,
 }: HomeScreenProps) {
   const formatSleepDuration = (minutes: number) => {
@@ -69,19 +73,27 @@ export function HomeScreen({
   return (
     <div className="space-y-5">
       {/* ── Daily reflection (top) ── */}
-      <section className="rounded-3xl border border-line bg-gradient-to-br from-parchment via-cream to-moon/20 p-5 shadow-lift relative overflow-hidden">
-        <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-dusk/10 blur-2xl pointer-events-none" />
-        <p className="text-[10px] uppercase tracking-[0.22em] text-muted mb-2">Daily reflection</p>
-        <blockquote className="font-serif text-xl sm:text-2xl leading-snug text-ink">
-          &ldquo;{reflectionQuote.text}&rdquo;
-        </blockquote>
-        <p className="text-sm text-muted mt-3">— {reflectionQuote.source}</p>
-        <p className="text-sm text-ink/75 mt-4 leading-relaxed italic">{reflectionQuote.prompt}</p>
-
+      <section className={`rounded-3xl border border-line bg-gradient-to-br ${SLEEP_CARD_GRADIENTS[educationPalette(getDailyQuoteCard())]} p-6 shadow-lift relative overflow-hidden min-h-[220px] text-[#f7f1e8]`}>
+        <div className="absolute inset-0 opacity-25 pointer-events-none bg-[radial-gradient(ellipse_at_top,_rgba(255,255,255,0.2),_transparent_55%)]" />
+        <p className="relative text-[10px] uppercase tracking-[0.28em] text-white/60 mb-4">Night note</p>
+        <button
+          type="button"
+          onClick={() => (onOpenSleepCard ? onOpenSleepCard(getDailyQuoteCard().id) : navigate('education'))}
+          className="relative text-left w-full"
+        >
+          <blockquote className="font-serif text-[1.85rem] sm:text-4xl leading-[1.15] tracking-tight">
+            &ldquo;{reflectionQuote.text}&rdquo;
+          </blockquote>
+          <p className="text-xs tracking-[0.18em] uppercase text-white/70 mt-6">— {reflectionQuote.source}</p>
+          <p className="text-sm text-white/85 mt-5 leading-relaxed italic">{reflectionQuote.prompt}</p>
+          <span className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-white/90">
+            Open full card <ChevronRight className="w-3.5 h-3.5" />
+          </span>
+        </button>
         <button
           type="button"
           onClick={() => navigate('record')}
-          className="mt-5 w-full bg-sage hover:bg-sageDark text-cream font-semibold py-3.5 rounded-2xl transition flex items-center justify-center gap-2 text-sm shadow-paper"
+          className="relative mt-5 w-full bg-white/15 hover:bg-white/22 border border-white/20 text-white font-semibold py-3.5 rounded-2xl transition flex items-center justify-center gap-2 text-sm"
         >
           <PenLine className="w-4 h-4" strokeWidth={2} />
           Journal about this
@@ -218,23 +230,18 @@ export function HomeScreen({
       </section>
 
       {/* ── Sleep education snippet ── */}
-      <section className="rounded-2xl border border-line bg-parchment/80 p-4">
-        <div className="flex items-start gap-3">
-          <span className="text-2xl shrink-0" aria-hidden>{dailyEducation.icon}</span>
-          <div className="min-w-0">
-            <p className="text-[10px] uppercase tracking-[0.18em] text-muted mb-1">Sleep & wellness</p>
-            <h3 className="font-semibold text-ink text-sm">{dailyEducation.title}</h3>
-            <p className="text-sm text-muted mt-1 leading-relaxed line-clamp-2">{dailyEducation.content}</p>
-            <button
-              type="button"
-              onClick={() => navigate('education')}
-              className="mt-2 text-xs font-semibold text-sageDark inline-flex items-center gap-1"
-            >
-              Learn more <ChevronRight className="w-3 h-3" />
-            </button>
-          </div>
-        </div>
-      </section>
+      <button
+        type="button"
+        onClick={() => (onOpenSleepCard ? onOpenSleepCard(dailyEducation.id) : navigate('education'))}
+        className={`w-full text-left rounded-3xl border border-line overflow-hidden min-h-[160px] bg-gradient-to-br ${SLEEP_CARD_GRADIENTS[educationPalette(dailyEducation)]} p-6 shadow-lift relative`}
+      >
+        <p className="text-[10px] uppercase tracking-[0.28em] text-white/60 mb-3">Sleep guide</p>
+        <h3 className="font-serif text-2xl sm:text-3xl text-[#f7f1e8] leading-snug">{dailyEducation.title}</h3>
+        <p className="text-sm text-white/80 mt-3 leading-relaxed line-clamp-3">{dailyEducation.content}</p>
+        <span className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-white">
+          Open full card <ChevronRight className="w-3.5 h-3.5" />
+        </span>
+      </button>
 
       {/* ── Quick capture + streak ── */}
       <section className="rounded-2xl border border-line bg-cream p-4 flex items-center justify-between gap-4">

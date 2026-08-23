@@ -13,7 +13,7 @@
 
 import { createClient, SupabaseClient, User } from '@supabase/supabase-js';
 import { coerceNarrativeText, sanitizeDreamForUI } from './normalizeDreamAnalysis';
-import { toDreamsUpsertRow } from './dreamsRecord';
+import { fromDreamsRow, toDreamsUpsertRow } from './dreamsRecord';
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -43,6 +43,13 @@ export interface DreamData {
   isSample?: boolean;
   createdAt: string;
   updatedAt: string;
+  audioCapture?: unknown;
+  videoCapture?: unknown;
+  generatedImage?: { url?: string; prompt?: string; style?: string; source?: string } | null;
+  mediaStoragePath?: string | null;
+  processingStatus?: string;
+  processingStep?: string;
+  date?: string;
 }
 
 export interface DreamServiceError {
@@ -144,14 +151,19 @@ function dreamToRecord(dream: DreamData, userId: string) {
     nugget: dream.nugget,
     interpretation: dream.interpretation,
     captureMode: dream.captureMode,
-    generatedImage: dream.imageUrl
+    audioCapture: dream.audioCapture,
+    videoCapture: dream.videoCapture,
+    mediaStoragePath: dream.mediaStoragePath,
+    processingStatus: dream.processingStatus,
+    processingStep: dream.processingStep,
+    generatedImage: dream.generatedImage || (dream.imageUrl
       ? {
           url: dream.imageUrl,
           prompt: dream.imagePrompt,
           style: dream.imageStyle,
           source: dream.imageSource,
         }
-      : null,
+      : null),
     context: dream.context,
     sleepData: dream.sleepData,
     isSample: dream.isSample,
@@ -159,34 +171,42 @@ function dreamToRecord(dream: DreamData, userId: string) {
 }
 
 function recordToDream(record: Record<string, unknown>): DreamData {
-  const content = (record.content as string) || '';
-  const narrative = coerceNarrativeText(record.narrative, content) || undefined;
+  const hydrated = fromDreamsRow(record);
+  const content = hydrated.content || '';
+  const narrative = coerceNarrativeText(hydrated.narrative, content) || undefined;
   const nugget =
-    typeof record.nugget === 'string' && record.nugget.length > 0
-      ? record.nugget
+    typeof hydrated.nugget === 'string' && hydrated.nugget.length > 0
+      ? hydrated.nugget
       : narrative?.substring(0, 100);
+  const imageUrl = hydrated.generatedImage?.url;
 
-  const meta = (record.ai_metadata || {}) as { local_id?: string };
   return {
-    id: (meta.local_id as string) || (record.id as string),
+    id: hydrated.id,
     content,
-    title: nugget || undefined,
-    category: (record.category as string) || 'normal',
-    themes: (record.themes as string[]) || [],
-    emotion: (record.emotion as string) || 'neutral',
-    symbols: (record.symbols as string[]) || [],
+    title: hydrated.title || nugget || undefined,
+    category: hydrated.category || 'normal',
+    themes: hydrated.themes || [],
+    emotion: hydrated.emotion || 'neutral',
+    symbols: hydrated.symbols || [],
     narrative,
     nugget,
-    interpretation: (record.interpretation as DreamData['interpretation']) || undefined,
-    imageUrl: (record.generated_image_url as string) || undefined,
-    imagePrompt: (record.generated_image_prompt as string) || undefined,
-    imageStyle: (record.generated_image_style as string) || undefined,
-    imageSource: (record.generated_image_source as string) || undefined,
-    captureMode: (record.capture_mode as DreamData['captureMode']) || 'text',
-    context: (record.context as Record<string, unknown>) || undefined,
-    isSample: (record.is_sample as boolean) || false,
-    createdAt: (record.local_created_at as string) || (record.created_at as string) || new Date().toISOString(),
+    interpretation: (hydrated.interpretation as DreamData['interpretation']) || undefined,
+    imageUrl: imageUrl || undefined,
+    imagePrompt: hydrated.generatedImage?.prompt,
+    imageStyle: hydrated.generatedImage?.style,
+    imageSource: hydrated.generatedImage?.source,
+    captureMode: (hydrated.captureMode as DreamData['captureMode']) || 'text',
+    context: (hydrated.context as Record<string, unknown>) || undefined,
+    isSample: Boolean(hydrated.isSample),
+    createdAt: hydrated.date || new Date().toISOString(),
     updatedAt: (record.local_updated_at as string) || (record.updated_at as string) || new Date().toISOString(),
+    date: hydrated.date,
+    audioCapture: hydrated.audioCapture || undefined,
+    videoCapture: hydrated.videoCapture || undefined,
+    generatedImage: hydrated.generatedImage || (imageUrl ? { url: imageUrl } : null),
+    mediaStoragePath: hydrated.mediaStoragePath || null,
+    processingStatus: hydrated.processingStatus,
+    processingStep: hydrated.processingStep,
   };
 }
 
@@ -371,7 +391,9 @@ export async function syncFromSupabase(): Promise<number> {
     let merged = 0;
 
     for (const record of data) {
-      const remote = sanitizeDreamForUI(recordToDream(record)) as DreamData;
+      const remote = sanitizeDreamForUI(
+        recordToDream(record) as unknown as Record<string, unknown>,
+      ) as unknown as DreamData;
       const existing = localMap.get(remote.id);
       if (!existing) {
         local.push(remote);

@@ -154,8 +154,14 @@ export function extractVisuals(context: TasteContext): ExtractedVisuals {
       .map(([key]) => key);
 
   const traits = pick(TRAIT_LEXICON);
-  if (context.style && TRAIT_LEXICON[context.style]) {
-    traits.unshift(context.style);
+  const styleKey = context.style?.split(':')[0];
+  if (styleKey && TRAIT_LEXICON[styleKey]) {
+    traits.unshift(styleKey);
+  }
+
+  const recipe = recipeFromStyle(context.style);
+  if (recipe) {
+    traits.push(...recipe.traits);
   }
 
   return {
@@ -358,3 +364,84 @@ export function getLastSignalForDream(dreamId: string): TasteSignal | null {
 function unique(values: string[]): string[] {
   return [...new Set(values)];
 }
+
+export interface ImageRecipe {
+  id: string;
+  style: string;
+  fragment: string;
+  traits: string[];
+}
+
+/** Distinct looks — one is chosen per generation so nights do not clone each other. */
+export const IMAGE_RECIPES: ImageRecipe[] = [
+  { id: 'ethereal-mist', style: 'dreamlike', traits: ['ethereal', 'peaceful'], fragment: 'soft mist, pearl haze, gentle bloom, weightless atmosphere' },
+  { id: 'oil-nocturne', style: 'artistic', traits: ['painterly', 'dark'], fragment: 'oil nocturne, visible brushwork, deep umber and indigo glazes' },
+  { id: 'moonlit-film', style: 'cinematic', traits: ['cinematic', 'ethereal'], fragment: 'anamorphic moonlight, film grain, wide still, quiet cinema' },
+  { id: 'ukiyo-night', style: 'artistic', traits: ['painterly', 'symbolic'], fragment: 'ukiyo-e night scene, flattened perspective, woodblock grain, silver clouds' },
+  { id: 'gilded-icon', style: 'dreamlike', traits: ['sacred', 'symbolic'], fragment: 'illuminated manuscript gold leaf, sacred geometry, icon-like stillness' },
+  { id: 'analog-photo', style: 'realistic', traits: ['photoreal', 'cinematic'], fragment: 'shot on 50mm film, natural grain, available light, lived-in realism' },
+  { id: 'pastel-liminal', style: 'minimal', traits: ['minimal', 'peaceful'], fragment: 'liminal pastel space, sparse composition, hush, empty architecture' },
+  { id: 'neon-threshold', style: 'cinematic', traits: ['neon', 'surreal'], fragment: 'wet neon reflections, magenta-teal rim light, night-city threshold' },
+  { id: 'watercolor-dawn', style: 'artistic', traits: ['painterly', 'peaceful'], fragment: 'watercolor wash at dawn, bleeding pigments, soft paper tooth' },
+  { id: 'charcoal-myth', style: 'artistic', traits: ['symbolic', 'dark'], fragment: 'charcoal myth drawing, smudged graphite, archetypal silhouette' },
+  { id: 'glass-garden', style: 'dreamlike', traits: ['ethereal', 'vibrant'], fragment: 'blown-glass flora, translucent petals, caustic light on water' },
+  { id: 'ember-altar', style: 'cinematic', traits: ['sacred', 'dark'], fragment: 'ember glow on stone, ritual still, warm dark, slow firelight' },
+  { id: 'ink-scroll', style: 'artistic', traits: ['painterly', 'minimal'], fragment: 'sumi-e ink wash, spare brush, large unpainted paper' },
+  { id: 'frost-window', style: 'dreamlike', traits: ['ethereal', 'peaceful'], fragment: 'frosted glass, winter window light, pale bloom, hush' },
+  { id: 'stained-glass', style: 'artistic', traits: ['sacred', 'vibrant'], fragment: 'stained glass colour fields, lead lines, chapel dusk' },
+  { id: 'polaroid-night', style: 'realistic', traits: ['photoreal', 'cinematic'], fragment: 'instant film night photo, soft flash, lived-in grain' },
+];
+
+export function recipeFromStyle(style?: string): ImageRecipe | undefined {
+  if (!style) return undefined;
+  const id = style.includes(':') ? style.slice(style.indexOf(':') + 1) : style;
+  return IMAGE_RECIPES.find((r) => r.id === id);
+}
+
+const RECENT_RECIPES_KEY = 'everdream-image-recipes-recent';
+
+function loadRecentRecipeIds(): string[] {
+  try {
+    const raw = localStorage.getItem(RECENT_RECIPES_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((id) => typeof id === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRecentRecipeId(id: string) {
+  const next = [id, ...loadRecentRecipeIds().filter((x) => x !== id)].slice(0, 4);
+  try {
+    localStorage.setItem(RECENT_RECIPES_KEY, JSON.stringify(next));
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Weighted pick: likes pull, dislikes push, recent recipes are almost never repeated. */
+export function pickImageRecipe(taste?: ImageTaste | null): ImageRecipe {
+  const summary = summarizeTaste(taste || loadLocalTaste());
+  const recent = loadRecentRecipeIds();
+  const scored = IMAGE_RECIPES.map((recipe) => {
+    let score = 0.8 + Math.random();
+    if (recent.includes(recipe.id)) score *= 0.12;
+    if (summary.likes.some((like) => recipe.traits.includes(like))) score *= 2.4;
+    if (summary.avoids.some((avoid) => recipe.traits.includes(avoid))) score *= 0.2;
+    if (summary.palettes.some((p) => recipe.fragment.includes(p.split('-')[0]))) score *= 1.3;
+    return { recipe, score };
+  });
+  const total = scored.reduce((sum, row) => sum + row.score, 0);
+  let dart = Math.random() * total;
+  for (const row of scored) {
+    dart -= row.score;
+    if (dart <= 0) {
+      saveRecentRecipeId(row.recipe.id);
+      return row.recipe;
+    }
+  }
+  const fallback = scored[0].recipe;
+  saveRecentRecipeId(fallback.id);
+  return fallback;
+}
+

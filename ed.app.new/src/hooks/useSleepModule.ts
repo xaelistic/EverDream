@@ -18,6 +18,7 @@ import {
   sleepStageDetector,
   sleepScoreCalculator,
 } from '../modules/sleep';
+import { savePhoneSleepSessions } from '../lib/nightSleep';
 
 const STORAGE_KEY_SETTINGS = 'sleep_settings';
 const STORAGE_KEY_CONSENT = 'sleep_privacy_consent';
@@ -45,7 +46,7 @@ export const useSleepModule = () => {
     settings: loadSettings(),
     privacyConsent: loadConsent(),
     currentSession: sleepSessionManager.getCurrentSession(),
-    isTracking: false,
+    isTracking: Boolean(sleepSessionManager.getCurrentSession()?.isActive),
     completedSessions: loadCompletedSessions(),
     recentCheckIns: new Map(),
     showSettings: false,
@@ -71,19 +72,73 @@ export const useSleepModule = () => {
     setState((prev) => ({ ...prev, settings: newSettings }));
   }, []);
 
-  // Start sleep session
-  const startSession = useCallback(() => {
-    if (!state.settings.enabled || !state.privacyConsent?.sleepTrackingConsent) {
-      console.warn('[Sleep] Cannot start: not consented or disabled');
-      return;
+  // Start sleep session — create the session first so sensors have somewhere to write.
+  const startSession = useCallback(async () => {
+    const consent: PrivacyConsent = state.privacyConsent || {
+      sleepTrackingConsent: true,
+      consentTimestamp: Date.now(),
+      audioPrivacyAcknowledged: true,
+      analyticsAllowed: true,
+    };
+    if (!state.privacyConsent?.sleepTrackingConsent) {
+      localStorage.setItem(STORAGE_KEY_CONSENT, JSON.stringify(consent));
     }
 
+    const settings: SleepSettings = {
+      ...state.settings,
+      enabled: true,
+      consentGiven: true,
+      enableMotionSensor: true,
+      enableAudioRecording: true,
+    };
+    localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings));
+
     const session = sleepSessionManager.createSession();
+
+    let motionOk = false;
+    let audioOk = false;
+    try {
+      motionOk = await motionSensorManager.start();
+    } catch (err) {
+      console.warn('[Sleep] Motion sensor failed:', err);
+    }
+    try {
+      audioOk = await audioRecorderManager.start();
+    } catch (err) {
+      console.warn('[Sleep] Microphone failed:', err);
+    }
+
+    try {
+      const nav = navigator as Navigator & { wakeLock?: { request: (type: 'screen') => Promise<unknown> } };
+      await nav.wakeLock?.request?.('screen');
+    } catch {
+      /* optional — keeps the session alive on some phones */
+    }
+
+    if (!motionOk && !audioOk) {
+      sleepSessionManager.endSession(() => ({
+        timestamp: session.startTime,
+        totalDuration: 0,
+        stageBreakdown: { awake: 0, light: 0, deep: 0, rem: 0 },
+        awakenings: 0,
+        waso: 0,
+        efficiency: 0,
+        algorithmicScore: 0,
+        sleepOnset: session.startTime,
+        wakeTime: Date.now(),
+      }));
+      throw new Error('Could not access the microphone or motion sensors. Check permissions and try again.');
+    }
+
     setState((prev) => ({
       ...prev,
+      settings,
+      privacyConsent: consent,
       currentSession: session,
       isTracking: true,
     }));
+
+    return { motionOk, audioOk };
   }, [state.settings, state.privacyConsent]);
 
   // End sleep session and compute sleep data
@@ -137,7 +192,7 @@ export const useSleepModule = () => {
     // Save completed session
     if (sleepData) {
       const updated = [...state.completedSessions, sleepData];
-      localStorage.setItem(STORAGE_KEY_SESSIONS, JSON.stringify(updated));
+      savePhoneSleepSessions(updated);
 
       setState((prev) => ({
         ...prev,

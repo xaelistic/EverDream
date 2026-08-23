@@ -19,6 +19,21 @@
 // SLEEP EDUCATION CONTENT
 // ============================================================
 
+export type SleepCardPalette = 'dusk' | 'sage' | 'ink' | 'moon' | 'ember' | 'pearl';
+
+export const SLEEP_CARD_GRADIENTS: Record<SleepCardPalette, string> = {
+  dusk: 'from-[#1b1424] via-[#3a2a4a] to-[#c4a574]',
+  sage: 'from-[#14201c] via-[#2f5a4a] to-[#d7c4a3]',
+  ink: 'from-[#0e0d0c] via-[#2a2724] to-[#e8dcc8]',
+  moon: 'from-[#12151c] via-[#3d4a63] to-[#c9d4e8]',
+  ember: 'from-[#1a100c] via-[#6b3a28] to-[#e8c4a0]',
+  pearl: 'from-[#1c1916] via-[#5c5348] to-[#f0e6d6]',
+};
+
+export function educationPalette(module: EducationModule): SleepCardPalette {
+  return module.palette || (module.kind === 'quote' ? 'dusk' : 'sage');
+}
+
 export interface EducationModule {
   id: string;
   category: 'sleep_hygiene' | 'circadian' | 'dreams' | 'supplements' | 'environment';
@@ -27,6 +42,10 @@ export interface EducationModule {
   tips: string[];
   readTimeMinutes: number;
   icon: string;
+  kind?: 'quote' | 'guide';
+  quote?: string;
+  source?: string;
+  palette?: SleepCardPalette;
 }
 
 export const SLEEP_EDUCATION_CONTENT: EducationModule[] = [
@@ -47,6 +66,8 @@ If you must use screens, enable night mode/blue light filters and reduce brightn
     ],
     readTimeMinutes: 2,
     icon: '📱',
+    kind: 'guide',
+    palette: 'ink',
   },
   {
     id: 'sleep-routine',
@@ -65,6 +86,8 @@ Your body thrives on predictability. A wind-down routine signals to your brain t
     ],
     readTimeMinutes: 3,
     icon: '🕐',
+    kind: 'guide',
+    palette: 'pearl',
   },
   {
     id: 'sleep-environment',
@@ -83,6 +106,8 @@ Even small improvements to your environment can significantly increase deep slee
     ],
     readTimeMinutes: 2,
     icon: '🛏️',
+    kind: 'guide',
+    palette: 'moon',
   },
   {
     id: 'circadian-rhythm',
@@ -101,6 +126,8 @@ Your chronotype (early bird vs night owl) is genetically determined but can be s
     ],
     readTimeMinutes: 3,
     icon: '🌅',
+    kind: 'guide',
+    palette: 'ember',
   },
   {
     id: 'dream-science',
@@ -119,6 +146,8 @@ Lucid dreaming - being aware you\'re dreaming - can be trained with practice.`,
     ],
     readTimeMinutes: 3,
     icon: '🧠',
+    kind: 'guide',
+    palette: 'dusk',
   },
   {
     id: 'meditation-sleep',
@@ -136,6 +165,8 @@ Body scan meditation is particularly effective for sleep as it releases physical
     ],
     readTimeMinutes: 2,
     icon: '🧘',
+    kind: 'guide',
+    palette: 'sage',
   },
   {
     id: 'food-sleep',
@@ -154,6 +185,8 @@ Certain foods contain sleep-promoting nutrients like tryptophan, magnesium, and 
     ],
     readTimeMinutes: 2,
     icon: '🍽️',
+    kind: 'guide',
+    palette: 'pearl',
   },
   {
     id: 'exercise-sleep',
@@ -171,6 +204,8 @@ However, timing matters - vigorous exercise too close to bedtime can be stimulat
     ],
     readTimeMinutes: 2,
     icon: '🏃',
+    kind: 'guide',
+    palette: 'ember',
   },
   {
     id: 'nootropics',
@@ -190,8 +225,431 @@ Start with the lowest effective dose and track your response.`,
     ],
     readTimeMinutes: 3,
     icon: '💊',
+    kind: 'guide',
+    palette: 'sage',
+  },
+  {
+    id: 'rem-and-emotion',
+    category: 'dreams',
+    title: 'REM is where feeling gets filed',
+    content: `Most vivid dreaming happens in REM, when the brain replays the day’s emotion without the body’s action. That is why a short night often feels more brittle — you cut the last, longest REM periods.
+
+Protecting the second half of the night is the simplest way to keep dream recall and mood steadier.`,
+    tips: [
+      'If you must shorten sleep, keep the wake time and go to bed earlier the next night',
+      'Alcohol after dinner steals late-night REM — notice how dreams vanish after wine',
+      'A consistent wake time grows REM more reliably than a weekend lie-in',
+    ],
+    readTimeMinutes: 2,
+    icon: '🌒',
+    kind: 'guide',
+    palette: 'dusk',
+  },
+  {
+    id: 'sleep-inertia',
+    category: 'circadian',
+    title: 'The fog after waking is not failure',
+    content: `Sleep inertia — the groggy twenty minutes after the alarm — is the brain climbing out of deep sleep. Forcing a journal in that fog can still work: the dream is closest then.
+
+Capture a sentence first. Analysis can wait until the kettle boils.`,
+    tips: [
+      'Keep the phone on the nightstand in audio-journal mode',
+      'Write three words if a paragraph feels impossible',
+      'Sit up and get daylight before you open other apps',
+    ],
+    readTimeMinutes: 2,
+    icon: '🌤️',
+    kind: 'guide',
+    palette: 'ember',
+  },
+  {
+    id: 'naps-and-nights',
+    category: 'circadian',
+    title: 'Naps are a loan, not a gift',
+    content: `A twenty-minute nap can restore alertness. A ninety-minute nap can finish a REM cycle. Anything in between often leaves you heavier than before.
+
+If nights are already short, a late-afternoon nap can push bedtime later. Borrow carefully.`,
+    tips: [
+      'Set an alarm at 20 minutes, or commit to a full 90',
+      'Nap before 3pm if you struggle to fall asleep at night',
+      'Dark and cool still helps — treat it like a miniature night',
+    ],
+    readTimeMinutes: 2,
+    icon: '☕',
+    kind: 'guide',
+    palette: 'pearl',
+  },
+  {
+    id: 'temperature-drop',
+    category: 'environment',
+    title: 'Sleep follows a falling temperature',
+    content: `Core body temperature needs to drop about one degree for sleep to deepen. A hot room, a heavy duvet, or a late workout fights that drop.
+
+Cool the room, warm the extremities. Hands and feet that feel warm help the core let go.`,
+    tips: [
+      'Aim for 18–20°C / 65–68°F in the bedroom',
+      'A warm shower an hour before bed, then a cool room',
+      'Socks in bed are underrated',
+    ],
+    readTimeMinutes: 2,
+    icon: '🌡️',
+    kind: 'guide',
+    palette: 'moon',
+  },
+  {
+    id: 'worry-hour',
+    category: 'sleep_hygiene',
+    title: 'Give the worry a chair before bed',
+    content: `The mind that journals dreams also rehearses tomorrow. A ten-minute “worry hour” earlier in the evening — paper, not the phone — often shortens sleep latency more than another breathing app.
+
+You are not emptying the mind. You are telling it the meeting already happened.`,
+    tips: [
+      'Write tomorrow’s three tasks before dimming the lights',
+      'If a thought returns in bed, add one line to the list — then close it',
+      'Keep the list outside the bedroom if you can',
+    ],
+    readTimeMinutes: 2,
+    icon: '📝',
+    kind: 'guide',
+    palette: 'ink',
+  },
+  {
+    id: 'quote-thoreau',
+    category: 'dreams',
+    title: 'Touchstones',
+    content: 'Dreams are the touchstones of our character.',
+    quote: 'Dreams are the touchstones of our character.',
+    source: 'Henry David Thoreau',
+    tips: ['What part of yourself showed up in your dreams lately?'],
+    readTimeMinutes: 1,
+    icon: '✧',
+    kind: 'quote',
+    palette: 'dusk',
+  },
+  {
+    id: 'quote-cossman',
+    category: 'sleep_hygiene',
+    title: 'The bridge',
+    content: 'The best bridge between despair and hope is a good night’s sleep.',
+    quote: 'The best bridge between despair and hope is a good night’s sleep.',
+    source: 'E. Joseph Cossman',
+    tips: ['How did rest shape your mood this morning?'],
+    readTimeMinutes: 1,
+    icon: '✧',
+    kind: 'quote',
+    palette: 'sage',
+  },
+  {
+    id: 'quote-lennon',
+    category: 'dreams',
+    title: 'Together',
+    content: 'A dream you dream alone is only a dream. A dream you dream together is reality.',
+    quote: 'A dream you dream alone is only a dream. A dream you dream together is reality.',
+    source: 'John Lennon',
+    tips: ['Who or what felt most alive in your inner world last night?'],
+    readTimeMinutes: 1,
+    icon: '✧',
+    kind: 'quote',
+    palette: 'ember',
+  },
+  {
+    id: 'quote-dalai',
+    category: 'sleep_hygiene',
+    title: 'Meditation',
+    content: 'Sleep is the best meditation.',
+    quote: 'Sleep is the best meditation.',
+    source: 'Dalai Lama',
+    tips: ['What would help you wind down better tonight?'],
+    readTimeMinutes: 1,
+    icon: '✧',
+    kind: 'quote',
+    palette: 'moon',
+  },
+  {
+    id: 'quote-shakespeare',
+    category: 'dreams',
+    title: 'Rounded with a sleep',
+    content: 'We are such stuff as dreams are made on, and our little life is rounded with a sleep.',
+    quote: 'We are such stuff as dreams are made on, and our little life is rounded with a sleep.',
+    source: 'William Shakespeare',
+    tips: ['If last night’s dream had a title, what would it be?'],
+    readTimeMinutes: 1,
+    icon: '✧',
+    kind: 'quote',
+    palette: 'ink',
+  },
+  {
+    id: 'quote-jung',
+    category: 'dreams',
+    title: 'Who looks inside',
+    content: 'Your vision will become clear only when you can look into your own heart. Who looks outside, dreams; who looks inside, awakes.',
+    quote: 'Your vision will become clear only when you can look into your own heart. Who looks outside, dreams; who looks inside, awakes.',
+    source: 'Carl Jung',
+    tips: ['What symbol keeps returning in your dreams?'],
+    readTimeMinutes: 1,
+    icon: '✧',
+    kind: 'quote',
+    palette: 'pearl',
+  },
+  {
+    id: 'quote-dillard',
+    category: 'sleep_hygiene',
+    title: 'How we spend our days',
+    content: 'How we spend our days is, of course, how we spend our lives.',
+    quote: 'How we spend our days is, of course, how we spend our lives.',
+    source: 'Annie Dillard',
+    tips: ['What one evening habit is writing the rest of your nights?'],
+    readTimeMinutes: 1,
+    icon: '✧',
+    kind: 'quote',
+    palette: 'sage',
+  },
+  {
+    id: 'quote-rilke',
+    category: 'dreams',
+    title: 'Live the questions',
+    content: 'Be patient toward all that is unsolved in your heart and try to love the questions themselves.',
+    quote: 'Be patient toward all that is unsolved in your heart and try to love the questions themselves.',
+    source: 'Rainer Maria Rilke',
+    tips: ['Which unfinished feeling from the day asked to be dreamed?'],
+    readTimeMinutes: 1,
+    icon: '✧',
+    kind: 'quote',
+    palette: 'dusk',
+  },
+  {
+    id: 'quote-oliver',
+    category: 'circadian',
+    title: 'This one wild life',
+    content: 'Tell me, what is it you plan to do with your one wild and precious life?',
+    quote: 'Tell me, what is it you plan to do with your one wild and precious life?',
+    source: 'Mary Oliver',
+    tips: ['What would a well-rested version of you protect tomorrow morning?'],
+    readTimeMinutes: 1,
+    icon: '✧',
+    kind: 'quote',
+    palette: 'ember',
+  },
+  {
+    id: 'quote-walker',
+    category: 'sleep_hygiene',
+    title: 'The dictionary of our lives',
+    content: 'Sleep is the single most effective thing we can do to reset our brain and body health each day.',
+    quote: 'Sleep is the single most effective thing we can do to reset our brain and body health each day.',
+    source: 'Matthew Walker',
+    tips: ['If sleep were an appointment, what would you decline to keep it?'],
+    readTimeMinutes: 1,
+    icon: '✧',
+    kind: 'quote',
+    palette: 'moon',
+  },
+  {
+    id: 'caffeine-window',
+    category: 'sleep_hygiene',
+    title: 'Caffeine has a longer shadow than the cup',
+    content: `A coffee at 4pm is still in you at 10. Caffeine’s half-life is five to seven hours — longer if you are tired, on the pill, or genetically slow to clear it.
+
+The crash you feel in the afternoon is often yesterday’s last cup leaving. Protect the second half of the night by closing the caffeine window after lunch.`,
+    tips: [
+      'Make 2pm the last caffeinated drink most days',
+      'Chocolate, tea, and some headache tablets count',
+      'If you nap, skip the “coffee nap” after 3pm',
+    ],
+    readTimeMinutes: 2,
+    icon: '☕',
+    kind: 'guide',
+    palette: 'ember',
+  },
+  {
+    id: 'alcohol-architecture',
+    category: 'sleep_hygiene',
+    title: 'Wine helps you fall, then steals the film',
+    content: `Alcohol sedates. It does not sleep. You drop off faster, then lose late-night REM — the long, story-rich dreams — and wake at 3am as the dose wears off.
+
+Notice the blank dream journal after a heavy dinner drink. That absence is architecture, not a mystery.`,
+    tips: [
+      'Leave three hours between the last drink and lights-out',
+      'If you drink, drink with food, then water',
+      'Track one dry week and read the dream log — the contrast is the lesson',
+    ],
+    readTimeMinutes: 2,
+    icon: '🍷',
+    kind: 'guide',
+    palette: 'ink',
+  },
+  {
+    id: 'morning-light',
+    category: 'circadian',
+    title: 'The first light is a clock, not a mood',
+    content: `Ten minutes of outdoor light after waking advances your body clock. Indoor lamps lie: they are bright enough to delay melatonin at night, too weak to set the morning.
+
+If you cannot get outside, sit by the brightest window you have, without sunglasses, while the kettle boils.`,
+    tips: [
+      'Outdoor light within 30 minutes of waking, even on grey days',
+      'Keep mornings screen-dim until you have had real light',
+      'Night owls need this more, not less',
+    ],
+    readTimeMinutes: 2,
+    icon: '☀️',
+    kind: 'guide',
+    palette: 'ember',
+  },
+  {
+    id: 'social-jetlag',
+    category: 'circadian',
+    title: 'Sunday night is a timezone you invented',
+    content: `A two-hour lie-in is a flight west. Sunday evening then asks the body to fly home. That is social jet lag: the groggy Monday that feels like character, and is mostly schedule.
+
+Keep the wake time. Move bedtime earlier if you need the hours. The weekend is allowed to be gentler — not a different continent.`,
+    tips: [
+      'Wake within an hour of your weekday time, even Saturday',
+      'If you stay up, still greet morning light at the usual hour',
+      'A short afternoon nap beats a late sleep-in',
+    ],
+    readTimeMinutes: 2,
+    icon: '✈️',
+    kind: 'guide',
+    palette: 'pearl',
+  },
+  {
+    id: 'dream-recall',
+    category: 'dreams',
+    title: 'Dreams vanish unless you give them a chair',
+    content: `Recall is a habit, not a gift. The image is closest in the first ninety seconds of waking, before the room, the phone, the list.
+
+Keep a sentence, a colour, a name. Analysis can wait. The journal trains the brain that the night is worth bringing back.`,
+    tips: [
+      'Audio-journal before you sit up, even three words',
+      'Stay still a moment and scan: place, people, feeling',
+      'Write last night tonight if morning was a blur — late is still a vote',
+    ],
+    readTimeMinutes: 2,
+    icon: '📓',
+    kind: 'guide',
+    palette: 'dusk',
+  },
+  {
+    id: 'phone-threshold',
+    category: 'sleep_hygiene',
+    title: 'The phone is a doorway, not a lamp',
+    content: `The last thing you read becomes the first rehearsal of the night. A feed is an infinite corridor. A paper book, a dream journal, a single album — those have walls.
+
+Charge the phone outside the room if you can. If you cannot, put it face-down after the alarm is set, and let the corridor close.`,
+    tips: [
+      'Set the alarm, then put the phone out of arm’s reach',
+      'Replace the last fifteen minutes of scrolling with one analog thing',
+      'Nightstand: water, pen, journal. Not a second screen',
+    ],
+    readTimeMinutes: 2,
+    icon: '🚪',
+    kind: 'guide',
+    palette: 'ink',
+  },
+  {
+    id: 'quote-cook',
+    category: 'dreams',
+    title: 'Inconvenient morning',
+    content: 'Morning is wonderful. Its only drawback is that it comes at such an inconvenient time of day.',
+    quote: 'Morning is wonderful. Its only drawback is that it comes at such an inconvenient time of day.',
+    source: 'Glen Cook',
+    tips: ['Capture one image or feeling before the day pulls you away.'],
+    readTimeMinutes: 1,
+    icon: '✧',
+    kind: 'quote',
+    palette: 'ember',
+  },
+  {
+    id: 'quote-borges',
+    category: 'dreams',
+    title: 'The other tiger',
+    content: 'I have always imagined that Paradise will be a kind of library.',
+    quote: 'I have always imagined that Paradise will be a kind of library.',
+    source: 'Jorge Luis Borges',
+    tips: ['Which shelf of last night would you want to reread?'],
+    readTimeMinutes: 1,
+    icon: '✧',
+    kind: 'quote',
+    palette: 'ink',
+  },
+  {
+    id: 'quote-dickinson',
+    category: 'dreams',
+    title: 'The brain is wider',
+    content: 'The brain is wider than the sky.',
+    quote: 'The brain is wider than the sky.',
+    source: 'Emily Dickinson',
+    tips: ['What in last night’s dream did not fit in the day’s rooms?'],
+    readTimeMinutes: 1,
+    icon: '✧',
+    kind: 'quote',
+    palette: 'moon',
+  },
+  {
+    id: 'quote-gaiman',
+    category: 'dreams',
+    title: 'A small door',
+    content: 'You get ideas from daydreaming. You get ideas from being bored. You get ideas all the time. The only difference between writers and other people is we notice when we’re doing it.',
+    quote: 'You get ideas from daydreaming. You get ideas from being bored. You get ideas all the time.',
+    source: 'Neil Gaiman',
+    tips: ['What leftover image from the night still wants a sentence?'],
+    readTimeMinutes: 1,
+    icon: '✧',
+    kind: 'quote',
+    palette: 'dusk',
+  },
+  {
+    id: 'quote-hersey',
+    category: 'sleep_hygiene',
+    title: 'Rest is not a reward',
+    content: 'Rest is a beautiful interruption in a world that does not want you to be well.',
+    quote: 'Rest is not a luxury, a privilege, or a bonus we must wait for once we have completed our tasks.',
+    source: 'Tricia Hersey',
+    tips: ['What would you decline tonight so sleep is not leftover time?'],
+    readTimeMinutes: 1,
+    icon: '✧',
+    kind: 'quote',
+    palette: 'sage',
+  },
+  {
+    id: 'quote-aristotle',
+    category: 'dreams',
+    title: 'The residue of waking',
+    content: 'The dream is a residue of waking impressions, recombined.',
+    quote: 'Even when one is asleep, there is something in consciousness which declares that what then presents itself is but a dream.',
+    source: 'Aristotle',
+    tips: ['Which leftover from yesterday was remixed in the night?'],
+    readTimeMinutes: 1,
+    icon: '✧',
+    kind: 'quote',
+    palette: 'pearl',
   },
 ];
+
+export function pickWindDownCards(mood?: {
+  label?: string;
+  energy?: number;
+  valence?: number;
+} | null): EducationModule[] {
+  const label = (mood?.label || '').toLowerCase();
+  const energy = mood?.energy ?? 0;
+  const valence = mood?.valence ?? 0;
+
+  let preferIds: string[];
+  if ((valence < 0 && energy > 0.1) || /anxious|worried|tense|overwhelm/.test(label)) {
+    preferIds = ['worry-hour', 'meditation-sleep', 'quote-dalai', 'quote-rilke', 'phone-threshold'];
+  } else if (energy > 0.3 || /excit|ecstatic|happy/.test(label)) {
+    preferIds = ['meditation-sleep', 'temperature-drop', 'quote-dillard', 'caffeine-window'];
+  } else if (energy < -0.15 || /tired|sleepy|exhaust|relaxed/.test(label)) {
+    preferIds = ['sleep-inertia', 'naps-and-nights', 'sleep-routine', 'quote-cossman'];
+  } else {
+    preferIds = ['quote-thoreau', 'rem-and-emotion', 'temperature-drop', 'dream-recall'];
+  }
+
+  const preferred = preferIds
+    .map((id) => SLEEP_EDUCATION_CONTENT.find((m) => m.id === id))
+    .filter((m): m is EducationModule => Boolean(m));
+  return preferred.length ? preferred : SLEEP_EDUCATION_CONTENT.filter((m) => m.kind === 'quote').slice(0, 3);
+}
 
 // ============================================================
 // GUIDED MEDITATIONS

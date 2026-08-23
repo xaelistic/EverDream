@@ -98,7 +98,11 @@ class AudioRecorderManager {
 
       source.connect(this.processor);
       this.processor.connect(this.analyser);
-      this.analyser.connect(this.audioContext.destination);
+      // Keep the graph alive without playing the mic through the speakers.
+      const mute = this.audioContext.createGain();
+      mute.gain.value = 0;
+      this.analyser.connect(mute);
+      mute.connect(this.audioContext.destination);
 
       this.processor.onaudioprocess = this.onAudioProcess;
 

@@ -25,6 +25,7 @@ class MotionSensorManager {
   private accelerometerBuffer: number[] = [];
   private rotationBuffer: number[] = [];
   private lastPermissionRequest = 0;
+  private flushTimer: number | null = null;
 
   /**
    * Request motion sensor permissions (iOS 13+)
@@ -76,6 +77,9 @@ class MotionSensorManager {
 
     this.isActive = true;
     this.setupMotionListener();
+    if (typeof window !== 'undefined') {
+      this.flushTimer = window.setInterval(() => this.flushToSession(), this.config.samplingInterval);
+    }
     console.log('[MotionSensor] Started collecting motion data');
     return true;
   }
@@ -86,6 +90,11 @@ class MotionSensorManager {
   stop(): void {
     this.isActive = false;
     window.removeEventListener('devicemotion', this.onDeviceMotion);
+    if (this.flushTimer != null) {
+      window.clearInterval(this.flushTimer);
+      this.flushTimer = null;
+    }
+    this.flushToSession();
     console.log('[MotionSensor] Stopped collecting motion data');
   }
 
@@ -133,18 +142,20 @@ class MotionSensorManager {
   private onDeviceMotion = (event: DeviceMotionEvent): void => {
     if (!this.isActive) return;
 
-    const acc = event.acceleration;
+    const acc = event.accelerationIncludingGravity || event.acceleration;
     const rot = event.rotationRate;
+    if (!acc) return;
 
-    if (!acc || !rot) return;
-
-    // Compute acceleration magnitude
-    const accelMagnitude = Math.sqrt(
+    // Gravity-inclusive magnitude sits near 9.8 m/s² when still; movement is the deviation.
+    const rawMagnitude = Math.sqrt(
       (acc.x || 0) ** 2 + (acc.y || 0) ** 2 + (acc.z || 0) ** 2
     );
-    const rotMagnitude = Math.sqrt(
-      (rot.alpha || 0) ** 2 + (rot.beta || 0) ** 2 + (rot.gamma || 0) ** 2
-    );
+    const accelMagnitude = event.acceleration
+      ? rawMagnitude
+      : Math.abs(rawMagnitude - 9.81);
+    const rotMagnitude = rot
+      ? Math.sqrt((rot.alpha || 0) ** 2 + (rot.beta || 0) ** 2 + (rot.gamma || 0) ** 2)
+      : 0;
 
     // Normalize to 0-1 range (tunable)
     const normalizedAccel = Math.min(accelMagnitude / 50, 1);

@@ -32,6 +32,16 @@ interface DreamAnalysis {
 
 interface AnalyzeRequestBody {
   text?: string;
+  sleep?: {
+    source?: string;
+    durationMinutes?: number;
+    remMinutes?: number;
+    deepMinutes?: number;
+    lightMinutes?: number;
+    awakeMinutes?: number;
+    efficiency?: number;
+    score?: number;
+  };
 }
 
 interface ProviderResult {
@@ -316,9 +326,20 @@ function parseModelJson(content: string, sourceText = ''): DreamAnalysis {
   return analysis;
 }
 
+function sleepPromptBlock(sleep?: AnalyzeRequestBody['sleep']): string {
+  if (!sleep || !sleep.durationMinutes) return '';
+  const hours = Math.floor(sleep.durationMinutes / 60);
+  const minutes = sleep.durationMinutes % 60;
+  return `
+
+Last night's sleep (${sleep.source || 'tracker'}): ${hours}h ${minutes}m. REM ${sleep.remMinutes ?? '?'}m, deep ${sleep.deepMinutes ?? '?'}m, light ${sleep.lightMinutes ?? '?'}m, awake ${sleep.awakeMinutes ?? '?'}m.${sleep.efficiency != null ? ` Efficiency ${sleep.efficiency}%.` : ''}${sleep.score != null ? ` Score ${sleep.score}.` : ''}
+Use this as health context in interpretation.meaning (sleep debt, high REM/vividness, fragmentation). Do not invent extra numbers.`;
+}
+
 async function analyzeWithOpenRouter(
   text: string,
   model: string,
+  sleep?: AnalyzeRequestBody['sleep'],
 ): Promise<ProviderResult> {
   const apiKey = Deno.env.get('OPENROUTER_API_KEY');
   if (!apiKey) throw new Error('OPENROUTER_API_KEY not set');
@@ -335,7 +356,7 @@ async function analyzeWithOpenRouter(
       model,
       messages: [
         { role: 'system', content: 'Return only compact valid JSON. No markdown.' },
-        { role: 'user', content: ANALYSIS_PROMPT + text },
+        { role: 'user', content: ANALYSIS_PROMPT + text + sleepPromptBlock(sleep) },
       ],
       temperature: 0.4,
       max_tokens: 1800,
@@ -431,7 +452,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     for (const model of models) {
       try {
         console.log(`[analyze-dream] Trying ${model}...`);
-        const result = await analyzeWithOpenRouter(safeText, model);
+        const result = await analyzeWithOpenRouter(safeText, model, body.sleep);
         console.log(`[analyze-dream] ${model} succeeded`);
         return jsonResponse(result, 200, headers);
       } catch (err) {

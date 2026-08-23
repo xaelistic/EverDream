@@ -22,7 +22,7 @@ import { cleanDreamTranscript } from './cleanDreamTranscript';
 // ── Inline Rate Limiter (avoids import issues in test env) ───
 
 const transcriptionCalls: number[] = [];
-const TRANSCRIPTION_MAX_CALLS = 3;
+const TRANSCRIPTION_MAX_CALLS = 8;
 const TRANSCRIPTION_WINDOW_MS = 60_000;
 
 function isTranscriptionAllowed(): boolean {
@@ -272,18 +272,16 @@ export async function transcribeWithWhisper(
       }
 
       try {
-        // Convert blob to ArrayBuffer for the edge function
-        console.log('[Transcription] Converting blob to ArrayBuffer...');
-        const arrayBuffer = await blob.arrayBuffer();
-        console.log('[Transcription] ArrayBuffer size:', arrayBuffer.byteLength, 'bytes');
-
-        console.log('[Transcription] Invoking Supabase edge function...');
+        console.log('[Transcription] Invoking Supabase edge function...', blob.size, 'bytes');
+        const fileName = audioData instanceof File ? audioData.name : undefined;
         const { data, error } = await supabase.functions.invoke('transcribe-audio', {
-          body: arrayBuffer,
+          body: blob,
           headers: {
             'Content-Type': blob.type || 'audio/wav',
             'X-Language': language,
+            ...(fileName ? { 'X-Filename': fileName } : {}),
           },
+          timeout: 90_000,
         });
 
         if (error) {
@@ -356,7 +354,7 @@ async function transcribeWithHFDirect(
   onProgress?: (status: string) => void,
 ): Promise<TranscriptionResult> {
   const HF_WHISPER_URL =
-    'https://api-inference.huggingface.co/models/openai/whisper-large-v3';
+    'https://router.huggingface.co/hf-inference/models/openai/whisper-large-v3';
   const HF_API_KEY = import.meta.env.VITE_HF_INFERENCE_API_KEY || '';
 
   onProgress?.('Uploading audio to Whisper (direct)...');
@@ -567,7 +565,7 @@ export async function isWhisperAvailable(): Promise<boolean> {
       if (HF_API_KEY) headers['Authorization'] = `Bearer ${HF_API_KEY}`;
       const silentAudio = new Blob([new Uint8Array(100)], { type: 'audio/wav' });
       const response = await fetch(
-        'https://api-inference.huggingface.co/models/openai/whisper-large-v3',
+        'https://router.huggingface.co/hf-inference/models/openai/whisper-large-v3',
         { method: 'POST', headers, body: silentAudio },
       );
       return response.status !== 503;

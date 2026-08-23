@@ -556,6 +556,6 @@ class MediaStorageManager {
 export const mediaStorageManager = new MediaStorageManager();
 
 // Auto-initialize on module load
-if (typeof window !== 'undefined') {
+if (typeof window !== 'undefined' && typeof indexedDB !== 'undefined') {
   mediaStorageManager.initialize().catch(console.error);
 }

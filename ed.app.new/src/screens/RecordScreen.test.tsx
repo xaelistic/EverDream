@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { RecordScreen } from './RecordScreen';
 
@@ -22,5 +22,15 @@ describe('RecordScreen', () => {
     render(<RecordScreen onComplete={vi.fn()} onCancel={vi.fn()} />);
 
     expect(screen.getByTestId('video-capture-flow')).toBeInTheDocument();
+  });
+
+  it('can switch to upload mode for audio and text files', () => {
+    render(<RecordScreen onComplete={vi.fn()} onCancel={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('tab', { name: /upload/i }));
+
+    expect(screen.getByText('Upload a dream')).toBeInTheDocument();
+    expect(screen.getByText('Audio file')).toBeInTheDocument();
+    expect(screen.getByText('Text file')).toBeInTheDocument();
   });
 });

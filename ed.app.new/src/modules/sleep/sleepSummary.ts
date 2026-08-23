@@ -96,11 +96,19 @@ export type WearableSleepLike = {
   bedtime?: string;
   wakeTime?: string;
   sleepDuration?: number;
+  durationMinutes?: number;
   sleepQuality?: number;
+  score?: number;
+  efficiency?: number;
   remDuration?: number;
+  remMinutes?: number;
   deepDuration?: number;
+  deepMinutes?: number;
+  lightMinutes?: number;
+  awakeMinutes?: number;
   movement?: number;
   heartRate?: { avg?: number };
+  heartRateAvg?: number;
   hrv?: number;
   stages?: Array<{ phase?: string; duration?: number }>;
 };
@@ -213,7 +221,7 @@ export function mapLegacySleepDataToSummary(
     sleepTalkIndex: sleepData.audioMetrics?.detectedSpeech ? 45 : 0,
     restednessScore: sleepData.userReportScore,
     calibrationOffset: sleepData.calibrationOffset,
-    signalsSource: 'browser-estimate',
+    signalsSource: 'native-device',
     settings,
   });
 }
@@ -225,7 +233,11 @@ export function mapWearableSleepToSummary(
   const wakeTime = session.wakeTime || session.date;
   if (!wakeTime) return null;
 
-  const duration = Math.max(0, Number(session.sleepDuration) || 450);
+  const duration = Math.max(
+    0,
+    Number(session.durationMinutes) || Number(session.sleepDuration) || 0,
+  );
+  if (!duration) return null;
   const end = new Date(wakeTime);
   const start = session.bedtime
     ? new Date(session.bedtime)
@@ -243,10 +255,14 @@ export function mapWearableSleepToSummary(
     movementIndex: Number(session.movement) || 18,
     snoreIndex: 12,
     sleepTalkIndex: 6,
-    heartRateAvg: session.heartRate?.avg,
+    heartRateAvg: session.heartRateAvg ?? session.heartRate?.avg,
     heartRateVariability: session.hrv,
-    restednessScore: session.sleepQuality ? Math.round(Number(session.sleepQuality) / 10) : undefined,
-    signalsSource: session.source === 'apple_watch' ? 'wearable' : 'manual',
+    restednessScore: session.sleepQuality
+      ? Math.round(Number(session.sleepQuality) / 10)
+      : session.score
+        ? Math.round(Number(session.score) / 10)
+        : undefined,
+    signalsSource: 'wearable',
     settings,
   });
 }
@@ -382,10 +398,13 @@ function stagesFromWearable(session: WearableSleepLike, duration: number): Sleep
     return normalizeStageMinutes(stages);
   }
 
-  const rem = Math.max(0, Number(session.remDuration) || Math.round(duration * 0.22));
-  const deep = Math.max(0, Number(session.deepDuration) || Math.round(duration * 0.18));
-  const awake = 24;
-  const light = Math.max(0, duration - rem - deep);
+  const rem = Math.max(0, Number(session.remMinutes ?? session.remDuration) || 0);
+  const deep = Math.max(0, Number(session.deepMinutes ?? session.deepDuration) || 0);
+  const awake = Math.max(0, Number(session.awakeMinutes) || 0);
+  const light = Math.max(
+    0,
+    Number(session.lightMinutes) || duration - rem - deep - awake,
+  );
 
   return normalizeStageMinutes({ awake, light, deep, rem });
 }

@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>EverDream — Plans & credits</title>
+    <style>
+      :root { --ink:#1c1916; --muted:#6b645c; --cream:#f7f1e8; --sage:#4a9e86; --line:#e4d9cc; }
+      body { margin:0; font-family: Georgia, serif; background:#f4eee6; color:var(--ink); }
+      main { max-width: 920px; margin: 0 auto; padding: 48px 20px 80px; }
+      h1 { font-size: 2.4rem; font-weight: 500; margin: 0 0 8px; }
+      .lede { color: var(--muted); font-family: system-ui, sans-serif; margin-bottom: 36px; }
+      .grid { display:grid; gap:16px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+      .card { background: var(--cream); border:1px solid var(--line); border-radius: 24px; padding: 24px; }
+      .card.featured { border-color: var(--sage); box-shadow: 0 10px 30px rgba(74,158,134,.12); }
+      .price { font-size: 2rem; margin: 8px 0; }
+      .muted { color: var(--muted); font-family: system-ui, sans-serif; font-size: 14px; }
+      ul { padding-left: 18px; font-family: system-ui, sans-serif; font-size: 14px; line-height: 1.5; }
+      a.cta { display:inline-block; margin-top:16px; background:var(--sage); color:#fff; text-decoration:none; padding:12px 18px; border-radius: 14px; font-family: system-ui, sans-serif; font-weight: 600; }
+      .packs { margin-top: 40px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="muted">EverDream</p>
+      <h1>Capture dreams. Spend credits only when you make them visible.</h1>
+      <p class="lede">Journaling is free. AI images, storyboards and motion stills use credits. Monthly credits reset. Packs you buy stay until you use them.</p>
+      <div class="grid">
+        <article class="card">
+          <h2>Free</h2>
+          <p class="price">$0</p>
+          <p class="muted">14 starter credits · about two weeks · no monthly refill</p>
+          <ul>
+            <li>Text, audio and video journals</li>
+            <li>AI analysis</li>
+            <li>Phone sleep tracking</li>
+          </ul>
+          <a class="cta" href="/#/billing">Open the app</a>
+        </article>
+        <article class="card featured">
+          <h2>EverDream+</h2>
+          <p class="price">$5.99<span class="muted">/mo</span></p>
+          <p class="muted">40 image credits / month</p>
+          <ul>
+            <li>Wearable sync</li>
+            <li>Cloud backup</li>
+            <li>PDF export</li>
+            <li>Advanced analysis</li>
+          </ul>
+          <a class="cta" href="/#/billing">Upgrade</a>
+        </article>
+        <article class="card">
+          <h2>Pro</h2>
+          <p class="price">$12.99<span class="muted">/mo</span></p>
+          <p class="muted">120 image credits / month</p>
+          <ul>
+            <li>Everything in Plus</li>
+            <li>VR / simulacra rooms</li>
+            <li>Priority generation</li>
+          </ul>
+          <a class="cta" href="/#/billing">Go Pro</a>
+        </article>
+      </div>
+      <section class="packs">
+        <h2>Need more images this month?</h2>
+        <p class="lede">20 credits $4.99 · 60 credits $11.99 · 150 credits $24.99. Buy from Plan & credits in the app after you sign in.</p>
+      </section>
+    </main>
+  </body>
+</html>

@@ -9,15 +9,20 @@ import {
   Star,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   FileText,
   Mic,
   Play,
+  X,
 } from 'lucide-react';
 import { FEATURE_NFT_UI_ENABLED } from '../config/features';
 import DreamVisualizer from '../components/dreams/DreamVisualizer';
 import type { EmotionCapture } from '../components/face/FacialEmotionDetector';
 import { mediaStorageManager } from '../lib/mediaStorage';
 import { persistUserMedia, signedMediaUrl } from '../lib/mediaPersist';
+import { isStuckJournalDream, type JournalMediaDream } from '../lib/audioJournal';
+import { reprocessStuckMediaDream } from '../lib/stuckDreamProcessor';
 import { useSubscription } from '../hooks/use-subscription';
 import { coerceNarrativeText } from '../lib/normalizeDreamAnalysis';
 import { deriveDreamTitle, presentDream } from '../lib/dreamClassify';
@@ -64,9 +69,11 @@ interface GeneratedImage {
 
 interface AudioCapture {
   url?: string;
+  path?: string;
   capturedAt?: string;
   duration?: number;
   mediaId?: string;
+  fileName?: string;
 }
 
 interface Dream {
@@ -150,6 +157,7 @@ export function DreamDetailScreen({
   const [storyboardBusy, setStoryboardBusy] = useState(false);
   const [videoBusy, setVideoBusy] = useState(false);
   const [storyboardError, setStoryboardError] = useState<string | null>(null);
+  const [storyboardViewIndex, setStoryboardViewIndex] = useState<number | null>(null);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [resolvedVideoUrl, setResolvedVideoUrl] = useState<string | null>(
     detailDream.videoCapture?.url ?? null,
@@ -157,6 +165,8 @@ export function DreamDetailScreen({
   const [resolvedAudioUrl, setResolvedAudioUrl] = useState<string | null>(
     detailDream.audioCapture?.url || detailDream.sourceAudio || detailDream.audioFile || null,
   );
+  const [retrying, setRetrying] = useState(false);
+  const retriedIdRef = useRef<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const summary = useMemo(
@@ -231,10 +241,40 @@ export function DreamDetailScreen({
   };
 
   useEffect(() => {
-    if (analysisPending && (transcript || analysisNarrative).length >= 10) {
+    if (analysisPending && (transcript || analysisNarrative).length >= 10 && !isPlaceholderTranscript(transcript)) {
       void runAnalysis();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot when opening a pending dream
+  }, [detailDream.id]);
+
+  const retryMediaProcessing = async () => {
+    if (retrying || !onUpdateDream) return;
+    setRetrying(true);
+    onUpdateDream({ processingStatus: 'processing', processingStep: 'transcribe' });
+    try {
+      const next = await reprocessStuckMediaDream(detailDream as unknown as JournalMediaDream);
+      if (!next) throw new Error('Could not find the saved recording to transcribe.');
+      onUpdateDream(next as Partial<Dream>);
+      addToast({ type: 'success', message: 'Your audio dream is ready.' });
+    } catch (err) {
+      onUpdateDream({ processingStatus: 'failed', processingStep: 'transcribe' });
+      addToast({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Transcription failed. Try again in a moment.',
+      });
+    } finally {
+      setRetrying(false);
+    }
+  };
+
+  useEffect(() => {
+    const stuckAudio =
+      (detailDream.captureMode === 'audio' || Boolean(detailDream.audioCapture)) &&
+      isStuckJournalDream(detailDream);
+    if (!stuckAudio || retriedIdRef.current === detailDream.id) return;
+    retriedIdRef.current = detailDream.id;
+    void retryMediaProcessing();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- retry once per dream open
   }, [detailDream.id]);
 
   const runStoryboard = async () => {
@@ -252,7 +292,8 @@ export function DreamDetailScreen({
         frames.push({ url: asset.url, title: scene.title, prompt: scene.prompt });
       }
       onUpdateDream?.({ scenes, storyboardImages: frames });
-      addToast({ type: 'success', message: `Storyboard ready — ${frames.length} scenes.` });
+      setStoryboardViewIndex(0);
+      addToast({ type: 'success', message: `Storyboard ready — ${frames.length} scenes. Tap a panel to enlarge.` });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Storyboard generation failed.';
       setStoryboardError(message);
@@ -341,24 +382,32 @@ export function DreamDetailScreen({
 
     const resolveAudio = async () => {
       const mediaId = detailDream.audioCapture?.mediaId;
+      const path = detailDream.audioCapture?.path;
       const fallback =
         detailDream.audioCapture?.url || detailDream.sourceAudio || detailDream.audioFile || null;
-      if (!mediaId) {
-        setResolvedAudioUrl(fallback);
-        return;
+
+      if (mediaId) {
+        try {
+          const media = await mediaStorageManager.getMedia(mediaId);
+          if (media) {
+            objectUrl = URL.createObjectURL(media.blob);
+            setResolvedAudioUrl(objectUrl);
+            return;
+          }
+        } catch {
+          /* fall through */
+        }
       }
 
-      try {
-        const media = await mediaStorageManager.getMedia(mediaId);
-        if (media) {
-          objectUrl = URL.createObjectURL(media.blob);
-          setResolvedAudioUrl(objectUrl);
-        } else {
-          setResolvedAudioUrl(fallback);
+      if (path) {
+        const signed = await signedMediaUrl(path);
+        if (signed) {
+          setResolvedAudioUrl(signed);
+          return;
         }
-      } catch {
-        setResolvedAudioUrl(fallback);
       }
+
+      setResolvedAudioUrl(fallback && !fallback.startsWith('blob:') ? fallback : fallback);
     };
 
     resolveAudio();
@@ -370,6 +419,7 @@ export function DreamDetailScreen({
     detailDream.id,
     detailDream.audioCapture?.mediaId,
     detailDream.audioCapture?.url,
+    detailDream.audioCapture?.path,
     detailDream.sourceAudio,
     detailDream.audioFile,
   ]);
@@ -379,6 +429,31 @@ export function DreamDetailScreen({
   const videoDuration = formatDuration(detailDream.videoCapture?.duration);
   const audioDuration = formatDuration(detailDream.audioCapture?.duration);
   const presented = presentDream(detailDream);
+
+  const storyboardFrames = detailDream.storyboardImages || [];
+  const openStoryboardFrame = storyboardViewIndex != null ? storyboardFrames[storyboardViewIndex] : null;
+
+  useEffect(() => {
+    if (storyboardViewIndex == null) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setStoryboardViewIndex(null);
+      if (event.key === 'ArrowRight' && storyboardFrames.length) {
+        setStoryboardViewIndex((i) => (i == null ? 0 : (i + 1) % storyboardFrames.length));
+      }
+      if (event.key === 'ArrowLeft' && storyboardFrames.length) {
+        setStoryboardViewIndex((i) =>
+          i == null ? 0 : (i - 1 + storyboardFrames.length) % storyboardFrames.length,
+        );
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [storyboardViewIndex, storyboardFrames.length]);
 
   const handleImageGenerated = (asset: DreamAsset) => {
     onImageGenerated({
@@ -391,6 +466,7 @@ export function DreamDetailScreen({
   };
 
   return (
+    <>
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3">
         <button
@@ -430,6 +506,29 @@ export function DreamDetailScreen({
         />
 
         <div className="space-y-4 p-5 sm:p-6 pt-4">
+          {(detailDream.processingStatus === 'failed' || retrying || (
+            isStuckJournalDream(detailDream) && (detailDream.captureMode === 'audio' || Boolean(detailDream.audioCapture))
+          )) && (
+            <div className="rounded-2xl border border-line bg-parchment/60 p-4 flex items-center justify-between gap-3">
+              <p className="text-sm text-muted">
+                {retrying
+                  ? 'Transcribing your recording…'
+                  : 'This audio journal is saved but not transcribed yet.'}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  retriedIdRef.current = null;
+                  void retryMediaProcessing();
+                }}
+                disabled={retrying}
+                className="shrink-0 text-xs font-medium px-3 py-1.5 rounded-full border border-line bg-cream hover:bg-parchment disabled:opacity-50"
+              >
+                {retrying ? 'Working…' : 'Retry transcription'}
+              </button>
+            </div>
+          )}
+
           {(hasVideo || hasAudio) && (
             <section className="rounded-2xl border border-line bg-parchment/50 overflow-hidden">
               <div className="flex items-center gap-2 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted">
@@ -615,13 +714,20 @@ export function DreamDetailScreen({
                 This dream looks like {scenes.length} scenes. Generate a comic-style sequence
                 {isPremium ? ' — included with your plan.' : ` — ${storyboardCost} image credits.`}
               </p>
-              {detailDream.storyboardImages?.length ? (
+              {storyboardFrames.length ? (
                 <div className="grid grid-cols-2 gap-2">
-                  {detailDream.storyboardImages.map((frame) => (
-                    <figure key={frame.url} className="rounded-xl overflow-hidden border border-line bg-parchment">
-                      <img src={frame.url} alt={frame.title} className="w-full h-32 object-cover" />
-                      <figcaption className="px-2 py-1.5 text-[11px] text-ink font-medium">{frame.title}</figcaption>
-                    </figure>
+                  {storyboardFrames.map((frame, index) => (
+                    <button
+                      key={`${frame.url}-${index}`}
+                      type="button"
+                      onClick={() => setStoryboardViewIndex(index)}
+                      className="rounded-xl overflow-hidden border border-line bg-parchment text-left hover:border-sage/50 hover:shadow-paper transition focus:outline-none focus-visible:ring-2 focus-visible:ring-sage"
+                    >
+                      <img src={frame.url} alt={frame.title} className="w-full h-36 object-cover pointer-events-none" />
+                      <span className="block px-2 py-1.5 text-[11px] text-ink font-medium">
+                        {index + 1}. {frame.title}
+                      </span>
+                    </button>
                   ))}
                 </div>
               ) : (
@@ -776,5 +882,73 @@ export function DreamDetailScreen({
         </div>
       </div>
     </div>
+
+    {openStoryboardFrame && storyboardViewIndex != null && (
+      <div
+        className="fixed inset-0 z-[90] bg-ink/95 flex flex-col text-cream"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Storyboard scene ${storyboardViewIndex + 1}: ${openStoryboardFrame.title}`}
+      >
+        <div className="relative flex items-center justify-between px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-2">
+          <p className="text-[10px] uppercase tracking-[0.24em] text-white/55">
+            Scene {storyboardViewIndex + 1} of {storyboardFrames.length}
+          </p>
+          <button
+            type="button"
+            onClick={() => setStoryboardViewIndex(null)}
+            className="inline-flex items-center gap-1.5 rounded-full bg-white/10 hover:bg-white/16 px-3 py-1.5 text-sm"
+            aria-label="Close storyboard"
+          >
+            <X className="w-4 h-4" strokeWidth={1.75} />
+            Close
+          </button>
+        </div>
+
+        <div className="relative flex-1 flex items-center justify-center px-3 min-h-0">
+          {storyboardFrames.length > 1 && (
+            <button
+              type="button"
+              onClick={() =>
+                setStoryboardViewIndex(
+                  (storyboardViewIndex - 1 + storyboardFrames.length) % storyboardFrames.length,
+                )
+              }
+              className="absolute left-2 z-10 w-11 h-11 rounded-full bg-white/12 hover:bg-white/20 flex items-center justify-center"
+              aria-label="Previous scene"
+            >
+              <ChevronLeft className="w-6 h-6" strokeWidth={1.75} />
+            </button>
+          )}
+          <img
+            src={openStoryboardFrame.url}
+            alt={openStoryboardFrame.title}
+            className="max-h-full max-w-full object-contain rounded-lg"
+          />
+          {storyboardFrames.length > 1 && (
+            <button
+              type="button"
+              onClick={() =>
+                setStoryboardViewIndex((storyboardViewIndex + 1) % storyboardFrames.length)
+              }
+              className="absolute right-2 z-10 w-11 h-11 rounded-full bg-white/12 hover:bg-white/20 flex items-center justify-center"
+              aria-label="Next scene"
+            >
+              <ChevronRight className="w-6 h-6" strokeWidth={1.75} />
+            </button>
+          )}
+        </div>
+
+        <div className="px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 max-w-lg mx-auto w-full">
+          <p className="font-serif text-xl leading-snug">{openStoryboardFrame.title}</p>
+          {openStoryboardFrame.prompt && (
+            <p className="mt-2 text-sm text-white/70 leading-relaxed line-clamp-3">
+              {openStoryboardFrame.prompt}
+            </p>
+          )}
+        </div>
+      </div>
+    )}
+    </>
   );
 }

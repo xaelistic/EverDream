@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect } from 'react';
-import { RefreshCw, Share2, Sparkles } from 'lucide-react';
+import { RefreshCw, Share2, Sparkles, ThumbsDown, ThumbsUp } from 'lucide-react';
 import { generateDreamImage } from '../../modules/sleep/dreamAssetGenerator';
 import type { DreamAsset } from '../../modules/sleep/types';
-import { recordTasteSignal } from '../../lib/imageTaste';
+import { getLastSignalForDream, recordTasteSignal } from '../../lib/imageTaste';
 import { DreamProcessingOverlay } from './DreamProcessingOverlay';
 
 interface DreamVisualizerProps {
@@ -44,6 +44,10 @@ export default function DreamVisualizer({
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [imageLoaded, setImageLoaded] = useState(!!existingImageUrl);
+  const [tasteVote, setTasteVote] = useState<'like' | 'dislike' | null>(() => {
+    const last = getLastSignalForDream(dreamId);
+    return last === 'like' || last === 'dislike' ? last : null;
+  });
 
   useEffect(() => {
     if (!existingImageUrl) return;
@@ -78,6 +82,7 @@ export default function DreamVisualizer({
     try {
       const result = await generateDreamImage(dreamText, 'dreamlike');
       setAsset(result);
+      setTasteVote(null);
       onImageGenerated?.(result);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to generate image';
@@ -98,6 +103,17 @@ export default function DreamVisualizer({
     }
     onShare?.();
   }, [asset, dreamId, dreamText, onShare]);
+
+  const handleTasteVote = useCallback((signal: 'like' | 'dislike') => {
+    if (!asset?.url) return;
+    recordTasteSignal(signal, {
+      dreamId,
+      prompt: asset.prompt || dreamText,
+      style: asset.style,
+      source: asset.source,
+    });
+    setTasteVote(signal);
+  }, [asset, dreamId, dreamText]);
 
   return (
     <div data-component="DreamVisualizer">
@@ -183,7 +199,8 @@ export default function DreamVisualizer({
       )}
 
       {processingStatus !== 'processing' && (onShare || asset) && (
-        <div className="flex gap-2 px-5 sm:px-6 pt-4">
+        <div className="px-5 sm:px-6 pt-4 space-y-2">
+          <div className="flex gap-2">
           {onShare && (
             <button
               type="button"
@@ -196,16 +213,49 @@ export default function DreamVisualizer({
             </button>
           )}
           {asset && (
-            <button
-              type="button"
-              onClick={handleVisualize}
-              disabled={isGenerating}
-              className="flex-1 border border-line bg-parchment/70 hover:bg-parchment text-ink py-2.5 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm disabled:opacity-50"
-              aria-label="Regenerate dream image"
-            >
-              <RefreshCw className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} strokeWidth={1.75} />
-              Regenerate
-            </button>
+              <button
+                type="button"
+                onClick={handleVisualize}
+                disabled={isGenerating}
+                className="flex-1 border border-line bg-parchment/70 hover:bg-parchment text-ink py-2.5 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm disabled:opacity-50"
+                aria-label="Regenerate dream image"
+              >
+                <RefreshCw className={`w-4 h-4 ${isGenerating ? 'animate-spin' : ''}`} strokeWidth={1.75} />
+                Another look
+              </button>
+          )}
+          </div>
+          {asset && (
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => handleTasteVote('like')}
+                className={`flex-1 border py-2.5 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm ${
+                  tasteVote === 'like'
+                    ? 'border-sage bg-sage/15 text-sageDark'
+                    : 'border-line bg-parchment/70 hover:bg-parchment text-ink'
+                }`}
+                aria-pressed={tasteVote === 'like'}
+                aria-label="I like this image style"
+              >
+                <ThumbsUp className="w-4 h-4" strokeWidth={1.75} />
+                Like this look
+              </button>
+              <button
+                type="button"
+                onClick={() => handleTasteVote('dislike')}
+                className={`flex-1 border py-2.5 rounded-xl transition flex items-center justify-center gap-2 font-medium text-sm ${
+                  tasteVote === 'dislike'
+                    ? 'border-blush bg-blush/20 text-duskDeep'
+                    : 'border-line bg-parchment/70 hover:bg-parchment text-ink'
+                }`}
+                aria-pressed={tasteVote === 'dislike'}
+                aria-label="I dislike this image style"
+              >
+                <ThumbsDown className="w-4 h-4" strokeWidth={1.75} />
+                Not this
+              </button>
+            </div>
           )}
         </div>
       )}

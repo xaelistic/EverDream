@@ -91,7 +91,7 @@ export function getTierLabel(tier: SubscriptionTier): string {
 
 export function getImageGenerationLimit(tier: SubscriptionTier, isAdmin = false): number | null {
   if (isAdmin || tier === 'plus' || tier === 'pro') return null;
-  return 5;
+  return 0;
 }
 
 export function bypassesRateLimits(tier: SubscriptionTier, isAdmin = false): boolean {

@@ -15,7 +15,8 @@ import {
   Radio,
 } from 'lucide-react';
 import type { WearableConfig, WearableProvider, WearableSleepRecord } from '../../lib/wearables';
-import { fetchAllWearableSleep } from '../../lib/wearables';
+import { fetchAllWearableSleep, WEARABLE_SYNC_SUPPORT, wearableSyncUnavailableMessage } from '../../lib/wearables';
+import { notifySleepUpdated } from '../../lib/nightSleep';
 import { WearableConnectModal } from './WearableConnectModal';
 
 interface WearableSettingsProps {
@@ -189,6 +190,7 @@ export function WearableSettings({
       const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
       const records = await fetchAllWearableSleep([config], startDate, endDate);
       onSleepDataReceived(records);
+      notifySleepUpdated();
       setLastSync((prev) => ({ ...prev, [provider]: new Date().toLocaleString() }));
       setStatus(
         records.length > 0
@@ -218,6 +220,7 @@ export function WearableSettings({
       const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
       const records = await fetchAllWearableSleep(enabledConfigs, startDate, endDate);
       onSleepDataReceived(records);
+      notifySleepUpdated();
       const now = new Date().toLocaleString();
       const newLastSync = { ...lastSync };
       for (const config of enabledConfigs) {
@@ -240,6 +243,10 @@ export function WearableSettings({
   };
 
   const openConnect = (provider: WearableProvider) => {
+    if (WEARABLE_SYNC_SUPPORT[provider] === 'unsupported') {
+      setStatus(wearableSyncUnavailableMessage(provider));
+      return;
+    }
     setConnectProvider(provider);
     onInitialConnectHandled?.();
   };
@@ -290,6 +297,9 @@ export function WearableSettings({
               ))}
             </div>
 
+            {WEARABLE_SYNC_SUPPORT[provider] === 'unsupported' && (
+              <p className="text-[10px] text-dusk mt-1.5">Web sync not available — use phone tracking</p>
+            )}
             {info.marketNote && (
               <p className="text-[10px] text-dusk mt-1.5 italic">📍 {info.marketNote}</p>
             )}

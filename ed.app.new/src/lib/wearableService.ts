@@ -122,18 +122,13 @@ export async function syncAndPersistWearableData(
   const endDate = new Date().toISOString().split('T')[0];
   const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-  const allRecords = await fetchAllWearableSleep(
-    enabled.map(c => c.auth),
-    startDate,
-    endDate
-  );
+  const allRecords = await fetchAllWearableSleep(enabled, startDate, endDate);
 
   if (allRecords.length === 0) return allRecords;
 
-  // Map and upsert
-  const payloads = allRecords.map(record => {
-    // Find which provider this record came from (simple heuristic or enhance record)
-    const provider = enabled[0]?.provider || 'oura'; // TODO: enhance to track per record
+  const payloads = allRecords.map((record) => {
+    const matched = enabled.find((c) => c.provider === record.source) || enabled[0];
+    const provider = matched?.provider || 'oura';
     return mapWearableRecordToSleepSession(record, profileId, provider);
   });
 
@@ -155,4 +150,25 @@ export async function syncAndPersistWearableData(
     .upsert({ user_id: profileId, wearable_sync: true, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
 
   return allRecords;
+}
+
+export async function persistWearableRecords(
+  profileId: string,
+  records: WearableSleepRecord[],
+): Promise<void> {
+  if (!profileId || records.length === 0) return;
+  const payloads = records.map((record) =>
+    mapWearableRecordToSleepSession(
+      record,
+      profileId,
+      (record.source as WearableProvider) || 'oura',
+    ),
+  );
+  const { error } = await supabase.from('sleep_sessions').upsert(payloads, {
+    onConflict: 'user_id,sleep_start,wearable_provider',
+    ignoreDuplicates: false,
+  });
+  if (error) {
+    console.warn('[wearableService] persist failed:', error.message);
+  }
 }

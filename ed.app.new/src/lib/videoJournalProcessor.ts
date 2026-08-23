@@ -13,6 +13,7 @@ import { analyzeDream, type DreamAnalysis } from './dream-analyzer';
 import { detectDreamScenes, type DreamScene } from './dreamScenes';
 import { normalizeCategory, normalizeEmotion, deriveDreamTitle } from './dreamClassify';
 import { cleanDreamTranscript, dreamTellingFromTranscript } from './cleanDreamTranscript';
+import { guessAudioMime, resolveJournalAudioBlob, resolveJournalVideoBlob } from './audioJournal';
 
 export type DreamProcessStep = 'transcribe' | 'analyse' | 'image' | 'complete';
 import { generateDreamImage } from '../modules/sleep/dreamAssetGenerator';
@@ -37,6 +38,7 @@ export interface VideoJournalInput {
   thumbnail?: string;
   duration: number;
   mediaId?: string;
+  path?: string;
   capturedEmotion?: EmotionCapture | null;
   hasAudio?: boolean;
 }
@@ -274,9 +276,15 @@ async function transcribeMediaBlob(
   placeholder: string,
   logPrefix: string,
   onProgress?: (status: string) => void,
+  fileName?: string,
 ): Promise<{ text: string; source: VideoJournalProcessResult['transcriptSource'] }> {
   try {
-    const result = await transcribeWithWhisper(blob, { onProgress, language: 'en' });
+    const typed = fileName && (!blob.type || blob.type === 'application/octet-stream')
+      ? new File([blob], fileName, { type: guessAudioMime(fileName, blob.type || 'audio/webm') })
+      : fileName
+        ? new File([blob], fileName, { type: blob.type || guessAudioMime(fileName) })
+        : blob;
+    const result = await transcribeWithWhisper(typed, { onProgress, language: 'en' });
     if (result.text && result.text.length > 5 && result.source !== 'fallback') {
       return {
         text: dreamTellingFromTranscript(result.text),
@@ -362,14 +370,12 @@ export async function processVideoJournal(
   input: VideoJournalInput,
   onStep?: (step: DreamProcessStep) => void,
 ): Promise<VideoJournalProcessResult> {
-  let videoBlob = input.videoBlob;
-  if ((!videoBlob || videoBlob.size === 0) && input.mediaId) {
-    const stored = await mediaStorageManager.getMedia(input.mediaId);
-    if (stored?.blob) videoBlob = stored.blob;
-  }
-  if (!videoBlob || videoBlob.size === 0) {
-    throw new Error('Video recording is missing — cannot transcribe or generate an image.');
-  }
+  const videoBlob = await resolveJournalVideoBlob({
+    videoBlob: input.videoBlob,
+    videoUrl: input.videoUrl,
+    mediaId: input.mediaId,
+    path: input.path,
+  });
 
   logStage('start', {
     blobSize: videoBlob.size,
@@ -513,6 +519,8 @@ export interface AudioJournalInput {
   audioUrl?: string;
   duration: number;
   mediaId?: string;
+  path?: string;
+  fileName?: string;
 }
 
 export interface AudioJournalDream {
@@ -533,6 +541,8 @@ export interface AudioJournalDream {
     capturedAt: string;
     duration: number;
     mediaId?: string;
+    path?: string;
+    fileName?: string;
   };
   generatedImage: VideoJournalDream['generatedImage'];
   isSample: false;
@@ -549,16 +559,14 @@ export async function processAudioJournal(
 }> {
   const logPrefix = 'audio_journal';
 
-  let audioBlob = input.audioBlob;
-  if ((!audioBlob || audioBlob.size === 0) && input.mediaId) {
-    const stored = await mediaStorageManager.getMedia(input.mediaId);
-    if (stored?.blob) audioBlob = stored.blob;
-  }
-  if (!audioBlob || audioBlob.size === 0) {
-    throw new Error('Audio file is missing or empty. Try .m4a, .mp3, .ogg, or .wav.');
-  }
+  const audioBlob = await resolveJournalAudioBlob({
+    audioBlob: input.audioBlob,
+    audioUrl: input.audioUrl,
+    mediaId: input.mediaId,
+    path: input.path,
+  });
 
-  console.log(`[${logPrefix}] start`, { size: audioBlob.size, type: audioBlob.type });
+  console.log(`[${logPrefix}] start`, { size: audioBlob.size, type: audioBlob.type, fileName: input.fileName });
   trackEvent('custom', `${logPrefix}_start`, {
     blobSize: audioBlob.size,
     duration: input.duration,
@@ -570,6 +578,7 @@ export async function processAudioJournal(
     AUDIO_PLACEHOLDER,
     logPrefix,
     (status) => console.log(`[${logPrefix}]`, status),
+    input.fileName,
   );
 
   if (transcriptSource === 'none' || transcriptText === AUDIO_PLACEHOLDER) {
@@ -649,6 +658,8 @@ export async function processAudioJournal(
       capturedAt: new Date().toISOString(),
       duration: input.duration || 0,
       mediaId: input.mediaId,
+      path: input.path,
+      fileName: input.fileName,
     },
     generatedImage,
     isSample: false,

@@ -140,6 +140,8 @@ export interface DreamAsset {
     note?: string;
     generatedAt?: number;
     estimated_cost_usd?: number;
+    recipeId?: string;
+    recipeLook?: string;
   };
 }
 

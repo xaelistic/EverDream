@@ -8,22 +8,12 @@ import { AudioWaveform } from '../components/capture/AudioWaveform';
 import { Mic, Square, Loader2, X, Upload, FileText, ArrowLeft } from 'lucide-react';
 import { mediaStorageManager } from '../lib/mediaStorage';
 import { stopCaptureMedia } from '../lib/stopCaptureMedia';
+import { getAudioDurationSeconds, guessAudioMime } from '../lib/audioJournal';
 
 
 interface RecordScreenProps {
   onComplete: (result: any, text: string) => Promise<void>;
   onCancel: () => void;
-}
-
-function guessAudioMime(name: string): string {
-  const lower = name.toLowerCase();
-  if (lower.endsWith('.m4a') || lower.endsWith('.aac')) return 'audio/mp4';
-  if (lower.endsWith('.mp3')) return 'audio/mpeg';
-  if (lower.endsWith('.wav')) return 'audio/wav';
-  if (lower.endsWith('.ogg') || lower.endsWith('.opus')) return 'audio/ogg';
-  if (lower.endsWith('.webm')) return 'audio/webm';
-  if (lower.endsWith('.flac')) return 'audio/flac';
-  return 'audio/webm';
 }
 
 function readTextFile(file: File): Promise<string> {
@@ -295,7 +285,11 @@ function UploadCapturePanel({
       }
 
       const mimeType = file.type || guessAudioMime(file.name);
-      const audioBlob = mimeType && mimeType !== file.type ? new Blob([file], { type: mimeType }) : file;
+      const audioBlob = mimeType && mimeType !== file.type
+        ? new File([file], file.name, { type: mimeType })
+        : file;
+
+      const duration = await getAudioDurationSeconds(audioBlob);
 
       let mediaId: string | null = null;
       try {
@@ -303,7 +297,7 @@ function UploadCapturePanel({
           type: 'audio',
           mimeType,
           size: audioBlob.size,
-          duration: 0,
+          duration,
           recordedAt: new Date().toISOString(),
           backedUp: false,
           cloudProviders: [],
@@ -312,7 +306,13 @@ function UploadCapturePanel({
       } catch { /* continue — IndexedDB is optional */ }
 
       const audioUrl = URL.createObjectURL(audioBlob);
-      await onComplete({ audioBlob, audioUrl, duration: 0, mediaId, fileName: file.name }, '');
+      await onComplete({
+        audioBlob,
+        audioUrl,
+        duration,
+        mediaId,
+        fileName: file.name,
+      }, '');
     } catch (err) {
       console.error('[Upload] Audio pipeline failed:', err);
       setError('Could not process that audio. Try .m4a, .mp3, .ogg, or .wav.');

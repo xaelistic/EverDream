@@ -84,6 +84,9 @@ export interface JournalDreamLike {
   sleepData?: unknown;
   isSample?: boolean;
   mediaStoragePath?: string | null;
+  processingStatus?: string;
+  processingStep?: string;
+  title?: string;
 }
 
 export function toDreamsUpsertRow(dream: JournalDreamLike, profileId: string): Record<string, unknown> {
@@ -140,6 +143,68 @@ export function toDreamsUpsertRow(dream: JournalDreamLike, profileId: string): R
       scenes: (dream as { scenes?: unknown }).scenes || null,
       storyboard: (dream as { storyboardImages?: unknown }).storyboardImages || null,
       has_inline_image: Boolean(dream.generatedImage?.url?.startsWith('data:')),
+      processing_status: dream.processingStatus || null,
+      processing_step: dream.processingStep || null,
+      title: dream.title || null,
     },
+  };
+}
+
+interface DreamsAiMetadata {
+  local_id?: string;
+  video_capture?: JournalDreamLike['videoCapture'];
+  audio_capture?: JournalDreamLike['audioCapture'];
+  source_audio?: string | null;
+  context?: unknown;
+  sleep_data?: unknown;
+  scenes?: unknown;
+  storyboard?: unknown;
+  processing_status?: string | null;
+  processing_step?: string | null;
+  title?: string | null;
+}
+
+/** Hydrate a journal dream from a public.dreams row, including audio/video capture. */
+export function fromDreamsRow(record: Record<string, unknown>): JournalDreamLike & {
+  date: string;
+  generatedImage: JournalDreamLike['generatedImage'];
+} {
+  const meta = (record.ai_metadata || {}) as DreamsAiMetadata;
+  const content = String(record.content || '');
+  const narrative = typeof record.narrative === 'string' ? record.narrative : content;
+  const imageUrl = typeof record.generated_image_url === 'string' ? record.generated_image_url : null;
+
+  return {
+    id: meta.local_id || String(record.id || ''),
+    date: String(record.local_created_at || record.timestamp || record.created_at || new Date().toISOString()),
+    content,
+    category: String(record.category || 'uncategorized'),
+    themes: Array.isArray(record.themes) ? record.themes.map(String) : [],
+    emotion: String(record.emotion || 'neutral'),
+    symbols: Array.isArray(record.symbols) ? record.symbols.map(String) : [],
+    narrative,
+    nugget: typeof record.nugget === 'string' ? record.nugget : narrative.substring(0, 100),
+    interpretation: record.interpretation || null,
+    moodValence: typeof record.mood_valence === 'number' ? record.mood_valence : undefined,
+    captureMode: String(record.capture_mode || record.media_type || 'text'),
+    generatedImage: imageUrl
+      ? {
+          url: imageUrl,
+          prompt: typeof record.generated_image_prompt === 'string' ? record.generated_image_prompt : undefined,
+          style: typeof record.generated_image_style === 'string' ? record.generated_image_style : undefined,
+          source: typeof record.generated_image_source === 'string' ? record.generated_image_source : undefined,
+        }
+      : null,
+    videoCapture: meta.video_capture || null,
+    audioCapture: meta.audio_capture || null,
+    audioFile: meta.source_audio || null,
+    sourceAudio: meta.source_audio || null,
+    context: meta.context || record.context || null,
+    sleepData: meta.sleep_data || null,
+    isSample: Boolean(record.is_sample),
+    mediaStoragePath: (typeof record.media_storage_path === 'string' && record.media_storage_path) || null,
+    processingStatus: meta.processing_status || undefined,
+    processingStep: meta.processing_step || undefined,
+    title: meta.title || (typeof record.nugget === 'string' ? record.nugget : undefined),
   };
 }

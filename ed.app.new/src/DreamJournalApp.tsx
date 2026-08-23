@@ -55,6 +55,7 @@ import {
 import PhotoUploadFlow from './components/photo-upload/PhotoUploadFlow';
 import type { ExtractedDreamEntry } from './components/photo-upload/PhotoUploadFlow';
 import { generateDreamImage } from './modules/sleep/dreamAssetGenerator';
+import { recordTasteSignal } from './lib/imageTaste';
 import { generateParallaxVideo } from './lib/assets/pipeline';
 import type { EmotionCapture } from './components/face/FacialEmotionDetector';
 import {
@@ -84,6 +85,7 @@ import { DreamDetailScreen } from './screens/DreamDetailScreen';
 import ShareModal from './components/dreams/ShareModal';
 import { VideoJournalScreen } from './screens/VideoJournalScreen';
 import { PrivacyScreen } from './screens/PrivacyScreen';
+import { BillingScreen } from './screens/BillingScreen';
 import { analyzeDream, type DreamAnalysis } from './lib/dream-analyzer';
 import { coerceNarrativeText, sanitizeDreamForUI } from './lib/normalizeDreamAnalysis';
 import OnboardingFlow from './components/onboarding/OnboardingFlow';
@@ -103,7 +105,14 @@ import type { DreamAsset } from './modules/sleep/types';
 import { initDreamService, syncFromSupabase } from './lib/dreamService';
 import { generateDreamId, toDreamsUpsertRow } from './lib/dreamsRecord';
 import { persistUserMedia } from './lib/mediaPersist';
-import { mediaStorageManager } from './lib/mediaStorage';
+import {
+  latestNightSleep,
+  mergeWearableRecords,
+  sleepContextToDreamSleepData,
+} from './lib/nightSleep';
+import { persistWearableRecords } from './lib/wearableService';
+import { mergeJournalDreams } from './lib/audioJournal';
+import { isStuckJournalDream, reprocessStuckMediaDream } from './lib/stuckDreamProcessor';
 import { 
   updateUserProfileFromDream, 
   enrichAnalysisWithProfile, 
@@ -193,7 +202,7 @@ const DreamJournalApp = () => {
       potentialValue: string;
     };
     sourceAudio?: string | null;
-    audioCapture?: { url?: string; path?: string; capturedAt?: string; duration?: number; mediaId?: string } | null;
+    audioCapture?: { url?: string; path?: string; capturedAt?: string; duration?: number; mediaId?: string; fileName?: string } | null;
     videoCapture?: { url: string; path?: string; capturedAt: string; duration?: number; thumbnail?: string; mediaId?: string } | null;
     mediaStoragePath?: string | null;
     captureMode?: string;
@@ -204,6 +213,7 @@ const DreamJournalApp = () => {
       sleepQuality: number;
     };
     isSample?: boolean;
+    sleepData?: Record<string, unknown>;
     title?: string;
     processingStatus?: 'processing' | 'complete' | 'failed';
     processingStep?: 'transcribe' | 'analyse' | 'image' | 'complete';
@@ -575,18 +585,20 @@ const DreamJournalApp = () => {
       if (supabaseReady) {
         console.log('[App] Supabase initialized — syncing from cloud');
         syncFromSupabase().then(async (merged) => {
-          if (merged > 0) {
-            console.log(`[App] Merged ${merged} dreams from Supabase`);
-            try {
-              const raw = localStorage.getItem('everdream_dreams');
-              if (raw) {
-                const mergedDreams = (JSON.parse(raw) as Dream[]).map((dream) =>
-                  sanitizeDreamForUI(dream) as Dream,
-                );
-                setDreams(mergedDreams);
-              }
-            } catch { /* ignore */ }
-          }
+          try {
+            const raw = localStorage.getItem('everdream_dreams');
+            const stored = await window.storage?.get('dreams');
+            const cloud = raw ? (JSON.parse(raw) as Dream[]) : [];
+            const local = stored?.value ? (JSON.parse(stored.value) as Dream[]) : [];
+            if (merged > 0 || cloud.length > 0) {
+              console.log(`[App] Merged ${merged} dreams from Supabase`);
+              const mergedDreams = mergeJournalDreams(local, cloud).map(
+                (dream) => sanitizeDreamForUI(dream as Dream) as Dream,
+              );
+              setDreams(mergedDreams);
+              saveDreamsToStorage(mergedDreams).catch(console.error);
+            }
+          } catch { /* ignore */ }
           try {
             const stored = await window.storage?.get('dreams');
             const local = stored?.value
@@ -602,37 +614,28 @@ const DreamJournalApp = () => {
             const stored = await window.storage?.get('dreams');
             const local = stored?.value ? (JSON.parse(stored.value) as Dream[]) : [];
             for (const dream of local) {
-              const stuck = /processing your/i.test(dream.content || '') || /processing in progress/i.test(dream.narrative || '');
-              if (!stuck) continue;
-              const mediaId = dream.videoCapture?.mediaId || dream.audioCapture?.mediaId;
-              if (!mediaId) continue;
-              const media = await mediaStorageManager.getMedia(mediaId);
-              if (!media?.blob) continue;
-              if (dream.captureMode === 'video' || dream.videoCapture) {
-                const uploaded = await persistUserMedia({ blob: media.blob, kind: 'video', dreamId: dream.id });
-                const { dream: processed } = await processVideoJournal({
-                  videoBlob: media.blob,
-                  duration: dream.videoCapture?.duration || 0,
-                  mediaId,
-                  thumbnail: dream.videoCapture?.thumbnail,
-                });
-                const nextDream = {
-                  ...processed,
-                  id: dream.id,
-                  videoCapture: {
-                    ...processed.videoCapture,
-                    url: uploaded?.url || processed.videoCapture.url,
-                    path: uploaded?.path,
-                    mediaId,
-                  },
-                  mediaStoragePath: uploaded?.path || dream.mediaStoragePath,
-                };
+              if (!isStuckJournalDream(dream)) continue;
+              try {
+                const nextDream = await reprocessStuckMediaDream(dream);
+                if (!nextDream) continue;
+                const patched = { ...dream, ...nextDream } as Dream;
                 setDreams((prev) => {
-                  const next = prev.map((d) => (d.id === dream.id ? nextDream : d));
+                  const next = prev.map((d) => (d.id === dream.id ? patched : d));
                   saveDreamsToStorage(next).catch(console.error);
                   return next;
                 });
-                syncDreamToSupabase(nextDream).catch(console.error);
+                syncDreamToSupabase(patched).catch(console.error);
+              } catch (err) {
+                console.warn('[App] Stuck dream reprocess failed:', dream.id, err);
+                setDreams((prev) => {
+                  const next = prev.map((d) =>
+                    d.id === dream.id
+                      ? { ...d, processingStatus: 'failed' as const, processingStep: 'transcribe' as const }
+                      : d,
+                  );
+                  saveDreamsToStorage(next).catch(console.error);
+                  return next;
+                });
               }
             }
           } catch (err) {
@@ -766,6 +769,33 @@ const DreamJournalApp = () => {
       saveDreamsToStorage(next).catch(console.error);
       return next;
     });
+  };
+
+  const applyNightSleep = <T extends Dream>(dream: T): T => {
+    const night = latestNightSleep(wearableData);
+    if (!night) return dream;
+    return {
+      ...dream,
+      sleepData: sleepContextToDreamSleepData(night),
+      context: {
+        mood: dream.context?.mood || '',
+        yesterdayEvents: dream.context?.yesterdayEvents || '',
+        sleepQuality: night.score ?? night.efficiency ?? 0,
+      },
+    };
+  };
+
+  const ingestWearableRecords = (records: WearableSleepRecord[]) => {
+    setWearableData((prev) => {
+      const next = mergeWearableRecords(prev, records);
+      window.storage?.set('wearableData', JSON.stringify(next)).catch(console.error);
+      return next;
+    });
+    getProfile()
+      .then((profile) => {
+        if (profile?.id) return persistWearableRecords(profile.id, records);
+      })
+      .catch((err) => console.warn('[Wearables] persist failed:', err));
   };
 
   const generateDreamImageAsync = async (dreamData: any) => {
@@ -1199,10 +1229,7 @@ const DreamJournalApp = () => {
       const records = await syncAndPersistWearableData(profile.id, enabledConfigs, 30);
 
       if (records.length > 0) {
-        setWearableData(records);
-        try {
-          await window.storage.set('wearableData', JSON.stringify(records));
-        } catch {}
+        ingestWearableRecords(records);
         addToast({ type: 'success', message: `Synced ${records.length} nights from wearable(s)! Data saved to your sleep log.` });
       } else {
         addToast({ type: 'info', message: 'No new wearable data found for the last 30 days.' });
@@ -1826,11 +1853,22 @@ const DreamJournalApp = () => {
 
   const handleToggleFavourite = useCallback((dreamId: string) => {
     setFavouriteIds((prev) => {
+      const willLike = !prev.includes(dreamId);
+      const dream = dreams.find((d) => d.id === dreamId);
+      if (dream?.generatedImage) {
+        recordTasteSignal(willLike ? 'like' : 'dislike', {
+          dreamId,
+          prompt: dream.generatedImage.prompt || dream.narrative || dream.content,
+          style: dream.generatedImage.style,
+          themes: dream.themes,
+          emotion: dream.emotion,
+        });
+      }
       const next = toggleFavouriteId(prev, dreamId);
       void saveFavouriteIds(next);
       return next;
     });
-  }, []);
+  }, [dreams]);
 
   const insights = getSleepInsights();
   const recommendations = getCircadianRecommendations();
@@ -1888,6 +1926,10 @@ const DreamJournalApp = () => {
             checkInSaved={checkInSaved}
             reflectionSleepData={reflectionSleepData}
             dailyEducation={dailyEducation}
+            onOpenSleepCard={(id) => {
+              setEducationModuleOverride(id);
+              navigate('education');
+            }}
             getCategoryBadgeClass={getCategoryBadgeClass}
             getEmotionEmoji={getEmotionEmoji}
           />
@@ -2002,7 +2044,11 @@ const DreamJournalApp = () => {
             wearableData={wearableData}
             onOpenDream={(dreamId) => navigate('dream', dreamId)}
             onConnectTracker={() => navigate('wearables')}
-            onOpenEducation={() => navigate('education')}
+            onSyncWearables={syncWearableData}
+            onOpenEducation={(moduleId) => {
+              setEducationModuleOverride(moduleId);
+              navigate('education');
+            }}
             onLogDream={(dateKey) => {
               // Actually log a dream for this tracker date (fixes non-working + symbol / log from tracker)
               const dreamId = generateDreamId();
@@ -2168,10 +2214,7 @@ const DreamJournalApp = () => {
             <WearableSettings
               configs={wearableConfigs}
               onConfigsChange={setWearableConfigs}
-              onSleepDataReceived={(records) => {
-                setWearableData(records);
-                window.storage.set('wearableData', JSON.stringify(records)).catch(console.error);
-              }}
+              onSleepDataReceived={ingestWearableRecords}
               clientIdMap={wearableClientIdMap}
               redirectUri={wearableRedirectUri}
               initialConnectProvider={wearableConnectProvider}
@@ -2232,6 +2275,8 @@ const DreamJournalApp = () => {
           />
         )}
 
+        {route.screen === 'billing' && <BillingScreen />}
+
         {route.screen === 'privacy' && (
           <PrivacyScreen
             privacySettings={privacySettings}
@@ -2279,6 +2324,7 @@ const DreamJournalApp = () => {
                 processingStep: 'analyse',
                 isSample: false,
               };
+              newDream = applyNightSleep(newDream);
               const uploadedDreams = [newDream, ...dreams.filter((d) => !d.isSample)];
               setDreams(uploadedDreams);
               await saveDreamsToStorage(uploadedDreams);
@@ -2370,6 +2416,7 @@ const DreamJournalApp = () => {
                 processingStep: 'transcribe',
                 isSample: false,
               };
+              newDream = applyNightSleep(newDream);
 
               const updatedDreams = [newDream, ...dreams];
               setDreams(updatedDreams);
@@ -2393,6 +2440,7 @@ const DreamJournalApp = () => {
                     thumbnail: result.thumbnail,
                     duration: result.duration,
                     mediaId: result.mediaId,
+                    path: uploaded?.path,
                     hasAudio: result.hasAudio,
                     capturedEmotion: result.capturedEmotion,
                   }, (step) => {
@@ -2422,6 +2470,7 @@ const DreamJournalApp = () => {
                     capturedEmotions: processedDream.capturedEmotions || result.capturedEmotion || null,
                     mediaStoragePath: uploaded?.path || null,
                     generatedImage: image,
+                    sleepData: newDream.sleepData,
                     processingStatus: 'complete',
                     processingStep: 'complete',
                   };
@@ -2468,6 +2517,7 @@ const DreamJournalApp = () => {
                   capturedAt: new Date().toISOString(),
                   duration: audioDuration,
                   mediaId: result.mediaId,
+                  fileName: result.fileName,
                 },
                 mediaStoragePath: uploadedAudio?.path || null,
                 generatedImage: null,
@@ -2475,6 +2525,7 @@ const DreamJournalApp = () => {
                 processingStep: 'transcribe',
                 isSample: false,
               };
+              newDream = applyNightSleep(newDream);
 
               const updatedDreams = [newDream, ...dreams];
               setDreams(updatedDreams);
@@ -2492,6 +2543,8 @@ const DreamJournalApp = () => {
                     audioUrl: uploadedAudio?.url || result.audioUrl,
                     duration: audioDuration,
                     mediaId: result.mediaId,
+                    path: uploadedAudio?.path,
+                    fileName: result.fileName,
                   }, (step) => {
                     patchDreamById(dreamId, { processingStatus: 'processing', processingStep: step });
                   });
@@ -2517,9 +2570,11 @@ const DreamJournalApp = () => {
                       url: uploadedAudio?.url || processedDream.audioCapture.url,
                       path: uploadedAudio?.path,
                       mediaId: result.mediaId,
+                      fileName: result.fileName,
                     },
                     mediaStoragePath: uploadedAudio?.path || null,
                     generatedImage: image,
+                    sleepData: newDream.sleepData,
                     processingStatus: 'complete',
                     processingStep: 'complete',
                   };
@@ -2575,6 +2630,7 @@ const DreamJournalApp = () => {
                 captureMode: 'text',
                 isSample: false,
               };
+              newDream = applyNightSleep(newDream);
             }
 
             // Save to state
