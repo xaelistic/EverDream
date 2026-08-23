@@ -58,6 +58,8 @@ export type NightlySleepSummary = {
   educationTier: EducationTier;
   educationText: string;
   signalsSource: SignalsSource;
+  morningFeeling?: 'good' | 'ok' | 'low';
+  morningMood?: string;
 };
 
 export type TrackerSettings = {

@@ -87,6 +87,8 @@ export interface JournalDreamLike {
   processingStatus?: string;
   processingStep?: string;
   title?: string;
+  scenes?: unknown;
+  storyboardImages?: { url: string; title: string; prompt: string }[];
 }
 
 export function toDreamsUpsertRow(dream: JournalDreamLike, profileId: string): Record<string, unknown> {
@@ -206,5 +208,25 @@ export function fromDreamsRow(record: Record<string, unknown>): JournalDreamLike
     processingStatus: meta.processing_status || undefined,
     processingStep: meta.processing_step || undefined,
     title: meta.title || (typeof record.nugget === 'string' ? record.nugget : undefined),
+    scenes: Array.isArray(meta.scenes) ? meta.scenes : undefined,
+    storyboardImages: normalizeStoryboard(meta.storyboard),
   };
+}
+
+function normalizeStoryboard(raw: unknown): { url: string; title: string; prompt: string }[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const frames = raw
+    .map((item, index) => {
+      if (!item || typeof item !== 'object') return null;
+      const row = item as Record<string, unknown>;
+      const url = String(row.url || row.imageUrl || row.src || '');
+      if (!url) return null;
+      return {
+        url,
+        title: String(row.title || `Scene ${index + 1}`),
+        prompt: String(row.prompt || ''),
+      };
+    })
+    .filter((frame): frame is { url: string; title: string; prompt: string } => Boolean(frame));
+  return frames.length ? frames : undefined;
 }

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ArrowLeft,
   Award,
@@ -430,7 +431,10 @@ export function DreamDetailScreen({
   const audioDuration = formatDuration(detailDream.audioCapture?.duration);
   const presented = presentDream(detailDream);
 
-  const storyboardFrames = detailDream.storyboardImages || [];
+  const storyboardFrames = useMemo(
+    () => normalizeStoryboardFrames(detailDream.storyboardImages),
+    [detailDream.storyboardImages],
+  );
   const openStoryboardFrame = storyboardViewIndex != null ? storyboardFrames[storyboardViewIndex] : null;
 
   useEffect(() => {
@@ -720,12 +724,17 @@ export function DreamDetailScreen({
                     <button
                       key={`${frame.url}-${index}`}
                       type="button"
-                      onClick={() => setStoryboardViewIndex(index)}
-                      className="rounded-xl overflow-hidden border border-line bg-parchment text-left hover:border-sage/50 hover:shadow-paper transition focus:outline-none focus-visible:ring-2 focus-visible:ring-sage"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        setStoryboardViewIndex(index);
+                      }}
+                      className="relative rounded-xl overflow-hidden border border-line bg-parchment text-left hover:border-sage/50 hover:shadow-paper transition focus:outline-none focus-visible:ring-2 focus-visible:ring-sage cursor-pointer"
                     >
-                      <img src={frame.url} alt={frame.title} className="w-full h-36 object-cover pointer-events-none" />
-                      <span className="block px-2 py-1.5 text-[11px] text-ink font-medium">
-                        {index + 1}. {frame.title}
+                      <img src={frame.url} alt="" className="w-full h-40 object-cover pointer-events-none" />
+                      <span className="absolute inset-0" aria-hidden />
+                      <span className="relative block px-2 py-1.5 text-[11px] text-ink font-medium bg-parchment/95">
+                        {index + 1}. {frame.title} · Open
                       </span>
                     </button>
                   ))}
@@ -883,72 +892,93 @@ export function DreamDetailScreen({
       </div>
     </div>
 
-    {openStoryboardFrame && storyboardViewIndex != null && (
-      <div
-        className="fixed inset-0 z-[90] bg-ink/95 flex flex-col text-cream"
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Storyboard scene ${storyboardViewIndex + 1}: ${openStoryboardFrame.title}`}
-      >
-        <div className="relative flex items-center justify-between px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-2">
-          <p className="text-[10px] uppercase tracking-[0.24em] text-white/55">
-            Scene {storyboardViewIndex + 1} of {storyboardFrames.length}
-          </p>
-          <button
-            type="button"
-            onClick={() => setStoryboardViewIndex(null)}
-            className="inline-flex items-center gap-1.5 rounded-full bg-white/10 hover:bg-white/16 px-3 py-1.5 text-sm"
-            aria-label="Close storyboard"
+    {openStoryboardFrame && storyboardViewIndex != null && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            className="fixed inset-0 z-[200] flex flex-col text-cream"
+            style={{ background: 'rgba(10, 9, 12, 0.97)' }}
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Storyboard scene ${storyboardViewIndex + 1}: ${openStoryboardFrame.title}`}
           >
-            <X className="w-4 h-4" strokeWidth={1.75} />
-            Close
-          </button>
-        </div>
+            <div className="relative flex items-center justify-between px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-2">
+              <p className="text-[10px] uppercase tracking-[0.24em] text-white/55">
+                Scene {storyboardViewIndex + 1} of {storyboardFrames.length}
+              </p>
+              <button
+                type="button"
+                onClick={() => setStoryboardViewIndex(null)}
+                className="inline-flex items-center gap-1.5 rounded-full bg-white/15 hover:bg-white/25 px-3 py-1.5 text-sm"
+                aria-label="Close storyboard"
+              >
+                <X className="w-4 h-4" strokeWidth={1.75} />
+                Close
+              </button>
+            </div>
 
-        <div className="relative flex-1 flex items-center justify-center px-3 min-h-0">
-          {storyboardFrames.length > 1 && (
-            <button
-              type="button"
-              onClick={() =>
-                setStoryboardViewIndex(
-                  (storyboardViewIndex - 1 + storyboardFrames.length) % storyboardFrames.length,
-                )
-              }
-              className="absolute left-2 z-10 w-11 h-11 rounded-full bg-white/12 hover:bg-white/20 flex items-center justify-center"
-              aria-label="Previous scene"
-            >
-              <ChevronLeft className="w-6 h-6" strokeWidth={1.75} />
-            </button>
-          )}
-          <img
-            src={openStoryboardFrame.url}
-            alt={openStoryboardFrame.title}
-            className="max-h-full max-w-full object-contain rounded-lg"
-          />
-          {storyboardFrames.length > 1 && (
-            <button
-              type="button"
-              onClick={() =>
-                setStoryboardViewIndex((storyboardViewIndex + 1) % storyboardFrames.length)
-              }
-              className="absolute right-2 z-10 w-11 h-11 rounded-full bg-white/12 hover:bg-white/20 flex items-center justify-center"
-              aria-label="Next scene"
-            >
-              <ChevronRight className="w-6 h-6" strokeWidth={1.75} />
-            </button>
-          )}
-        </div>
+            <div className="relative flex-1 flex items-center justify-center px-3 min-h-0 overflow-auto">
+              {storyboardFrames.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setStoryboardViewIndex(
+                      (storyboardViewIndex - 1 + storyboardFrames.length) % storyboardFrames.length,
+                    )
+                  }
+                  className="absolute left-2 z-10 w-11 h-11 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center"
+                  aria-label="Previous scene"
+                >
+                  <ChevronLeft className="w-6 h-6" strokeWidth={1.75} />
+                </button>
+              )}
+              <img
+                src={openStoryboardFrame.url}
+                alt={openStoryboardFrame.title}
+                className="max-h-[75dvh] w-auto max-w-full object-contain rounded-lg"
+              />
+              {storyboardFrames.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setStoryboardViewIndex((storyboardViewIndex + 1) % storyboardFrames.length)
+                  }
+                  className="absolute right-2 z-10 w-11 h-11 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center"
+                  aria-label="Next scene"
+                >
+                  <ChevronRight className="w-6 h-6" strokeWidth={1.75} />
+                </button>
+              )}
+            </div>
 
-        <div className="px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 max-w-lg mx-auto w-full">
-          <p className="font-serif text-xl leading-snug">{openStoryboardFrame.title}</p>
-          {openStoryboardFrame.prompt && (
-            <p className="mt-2 text-sm text-white/70 leading-relaxed line-clamp-3">
-              {openStoryboardFrame.prompt}
-            </p>
-          )}
-        </div>
-      </div>
-    )}
+            <div className="px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 max-w-lg mx-auto w-full">
+              <p className="font-serif text-xl leading-snug">{openStoryboardFrame.title}</p>
+              {openStoryboardFrame.prompt && (
+                <p className="mt-2 text-sm text-white/70 leading-relaxed line-clamp-3">
+                  {openStoryboardFrame.prompt}
+                </p>
+              )}
+            </div>
+          </div>,
+          document.body,
+        )
+      : null}
     </>
   );
+}
+
+function normalizeStoryboardFrames(
+  raw: Dream['storyboardImages'],
+): { url: string; title: string; prompt: string }[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((frame, index) => {
+      const url = String(frame?.url || '');
+      if (!url) return null;
+      return {
+        url,
+        title: String(frame.title || `Scene ${index + 1}`),
+        prompt: String(frame.prompt || ''),
+      };
+    })
+    .filter((frame): frame is { url: string; title: string; prompt: string } => Boolean(frame));
 }

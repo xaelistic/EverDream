@@ -7,6 +7,7 @@ import { useSleepTracker } from '../../hooks/useSleepTracker';
 import type { DreamLike, TrackerSettings, WearableSleepLike } from '../../modules/sleep';
 import { getSleepQualityLabel, getSleepQualitySymbol } from '../../modules/sleep';
 import { getDailyEducation } from '../../lib/dailyContent';
+import { ENERGY_LEVELS, feelingLabel } from '../../lib/dailyCheckin';
 import { SLEEP_CARD_GRADIENTS, educationPalette } from '../../lib/sleepEducation';
 import { MonthlySleepReport } from './MonthlySleepReport';
 import { SleepStageStack } from './SleepStageStack';
@@ -126,6 +127,12 @@ export function TrackerScreen({
             <HeroStat label="REM" value={formatMinutes(lastNight.stageMinutes?.rem || 0)} />
           </div>
         )}
+        {lastNight?.morningFeeling && (
+          <p className="text-sm text-ink mt-3">
+            {ENERGY_LEVELS.find((row) => row.id === lastNight.morningFeeling)?.emoji} Woke{' '}
+            {feelingLabel(lastNight.morningFeeling).toLowerCase()}
+          </p>
+        )}
       </section>
 
       {/* ── 2. Week strip (Rise / Apple Health style) ── */}
@@ -156,11 +163,27 @@ export function TrackerScreen({
                   {hasData ? score : '·'}
                 </div>
                 {day.summary?.dreamLogged && <span className="text-[9px] mt-0.5">💭</span>}
+                {day.checkin?.energyLevel && (
+                  <span className="text-[11px] mt-0.5" title={feelingLabel(day.checkin.energyLevel)}>
+                    {ENERGY_LEVELS.find((row) => row.id === day.checkin?.energyLevel)?.emoji}
+                  </span>
+                )}
               </button>
             );
           })}
         </div>
       </section>
+
+      {!selected && tracker.selectedCheckin && (
+        <section className="rounded-2xl border border-line bg-cream p-4 shadow-paper">
+          <p className="text-[10px] uppercase tracking-wider text-muted">Morning feeling</p>
+          <p className="font-serif text-xl text-ink mt-1">
+            {ENERGY_LEVELS.find((row) => row.id === tracker.selectedCheckin?.energyLevel)?.emoji}{' '}
+            {feelingLabel(tracker.selectedCheckin.energyLevel)}
+          </p>
+          <p className="text-sm text-muted mt-1">Saved from Home. It will colour tonight’s analysis and images.</p>
+        </section>
+      )}
 
       {/* ── 3. Selected night detail ── */}
       {selected ? (
@@ -187,6 +210,14 @@ export function TrackerScreen({
                 <p className="font-semibold">{formatMinutes(selected.stageMinutes?.light || 0)}</p>
               </div>
             </div>
+            {(selected.morningFeeling || tracker.selectedCheckin) && (
+              <p className="text-sm text-ink mt-3 leading-relaxed border-t border-line pt-3">
+                <span className="text-[10px] uppercase tracking-wider text-muted block mb-1">Morning feeling</span>
+                {ENERGY_LEVELS.find((row) => row.id === (selected.morningFeeling || tracker.selectedCheckin?.energyLevel))?.emoji}{' '}
+                {feelingLabel(selected.morningFeeling || tracker.selectedCheckin?.energyLevel)}
+                {selected.morningMood ? ` · ${selected.morningMood}` : ''}
+              </p>
+            )}
             {selected.educationText && (
               <p className="text-xs text-muted mt-3 leading-relaxed border-t border-line pt-3">
                 {selected.educationText}

@@ -4,6 +4,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { DreamAsset } from './types';
 import { consumeImageCredits, refundImageCredits } from '../../lib/subscriptions/creditService';
 import { applyTasteToPrompt, pickImageRecipe } from '../../lib/imageTaste';
+import { feelingImageCue, loadDailyCheckin } from '../../lib/dailyCheckin';
 export type { DreamAsset };
 
 // Local getSupabase (modeled after other modules to avoid "not defined" at runtime)
@@ -180,7 +181,9 @@ export async function generateDreamImage(prompt: string, style = 'auto'): Promis
 
   const recipe = pickImageRecipe();
   const chosenStyle = !style || style === 'auto' || style === 'dreamlike' ? recipe.style : style;
-  const tasted = applyTasteToPrompt(text);
+  const moodCue = feelingImageCue(loadDailyCheckin()?.energyLevel);
+  const withMood = moodCue ? `${text}. ${moodCue}` : text;
+  const tasted = applyTasteToPrompt(withMood);
 
   console.log('[AssetGen] recipe', recipe.id, 'style', chosenStyle);
 

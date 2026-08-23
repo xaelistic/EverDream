@@ -41,6 +41,9 @@ interface AnalyzeRequestBody {
     awakeMinutes?: number;
     efficiency?: number;
     score?: number;
+    feeling?: string;
+    feelingLabel?: string;
+    mood?: string;
   };
 }
 
@@ -327,13 +330,22 @@ function parseModelJson(content: string, sourceText = ''): DreamAnalysis {
 }
 
 function sleepPromptBlock(sleep?: AnalyzeRequestBody['sleep']): string {
-  if (!sleep || !sleep.durationMinutes) return '';
-  const hours = Math.floor(sleep.durationMinutes / 60);
-  const minutes = sleep.durationMinutes % 60;
-  return `
-
-Last night's sleep (${sleep.source || 'tracker'}): ${hours}h ${minutes}m. REM ${sleep.remMinutes ?? '?'}m, deep ${sleep.deepMinutes ?? '?'}m, light ${sleep.lightMinutes ?? '?'}m, awake ${sleep.awakeMinutes ?? '?'}m.${sleep.efficiency != null ? ` Efficiency ${sleep.efficiency}%.` : ''}${sleep.score != null ? ` Score ${sleep.score}.` : ''}
-Use this as health context in interpretation.meaning (sleep debt, high REM/vividness, fragmentation). Do not invent extra numbers.`;
+  if (!sleep) return '';
+  const parts: string[] = [];
+  if (sleep.durationMinutes) {
+    const hours = Math.floor(sleep.durationMinutes / 60);
+    const minutes = sleep.durationMinutes % 60;
+    parts.push(
+      `Last night's sleep (${sleep.source || 'tracker'}): ${hours}h ${minutes}m. REM ${sleep.remMinutes ?? '?'}m, deep ${sleep.deepMinutes ?? '?'}m, light ${sleep.lightMinutes ?? '?'}m, awake ${sleep.awakeMinutes ?? '?'}m.${sleep.efficiency != null ? ` Efficiency ${sleep.efficiency}%.` : ''}${sleep.score != null ? ` Score ${sleep.score}.` : ''}`,
+    );
+  }
+  if (sleep.feeling) {
+    parts.push(
+      `This morning they checked in as ${sleep.feelingLabel || sleep.feeling}${sleep.mood ? ` (mood: ${sleep.mood})` : ''}. Let waking mood colour emotional interpretation without overriding the dream's own symbols.`,
+    );
+  }
+  if (!parts.length) return '';
+  return `\n\n${parts.join(' ')} Use this as health context in interpretation.meaning (sleep debt, high REM/vividness, fragmentation, waking energy). Do not invent extra numbers.`;
 }
 
 async function analyzeWithOpenRouter(

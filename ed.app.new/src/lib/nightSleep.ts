@@ -4,6 +4,7 @@
 
 import type { WearableSleepRecord } from './wearables';
 import type { SleepData } from '../modules/sleep/types';
+import { feelingLabel, loadDailyCheckin } from './dailyCheckin';
 
 export const SLEEP_UPDATED_EVENT = 'everdream-sleep-updated';
 export const SLEEP_SESSIONS_KEY = 'sleep_completed_sessions';
@@ -20,6 +21,9 @@ export type NightSleepContext = {
   score?: number;
   bedtime?: string;
   wakeTime?: string;
+  feeling?: string;
+  feelingLabel?: string;
+  mood?: string;
 };
 
 export function notifySleepUpdated(): void {
@@ -113,7 +117,30 @@ export function latestNightSleep(wearableData?: WearableSleepRecord[]): NightSle
     const tb = b.wakeTime || b.date;
     return tb.localeCompare(ta);
   });
-  return all[0] || null;
+  return withMorningFeeling(all[0] || null);
+}
+
+function withMorningFeeling(sleep: NightSleepContext | null): NightSleepContext | null {
+  const checkin = loadDailyCheckin();
+  if (!checkin?.energyLevel) return sleep;
+  const overlay = {
+    feeling: checkin.energyLevel,
+    feelingLabel: feelingLabel(checkin.energyLevel),
+    mood: checkin.mood || undefined,
+  };
+  if (!sleep) {
+    return {
+      date: checkin.date,
+      source: 'checkin',
+      durationMinutes: 0,
+      remMinutes: 0,
+      deepMinutes: 0,
+      lightMinutes: 0,
+      awakeMinutes: 0,
+      ...overlay,
+    };
+  }
+  return { ...sleep, ...overlay };
 }
 
 export function formatSleepPromptBlock(sleep: NightSleepContext): string {
@@ -124,6 +151,9 @@ export function formatSleepPromptBlock(sleep: NightSleepContext): string {
     `REM ${sleep.remMinutes}m, deep ${sleep.deepMinutes}m, light ${sleep.lightMinutes}m, awake ${sleep.awakeMinutes}m`,
     sleep.efficiency != null ? `Efficiency ${sleep.efficiency}%` : '',
     sleep.score != null ? `Sleep score ${sleep.score}` : '',
+    sleep.feeling
+      ? `This morning they checked in as ${sleep.feelingLabel || sleep.feeling}${sleep.mood ? ` (mood: ${sleep.mood})` : ''}. Let waking mood colour interpretation.`
+      : '',
     'Use this as health context. Short or fragmented sleep may colour anxiety/nightmare themes; high REM often tracks with vivid or lucid imagery. Do not invent extra numbers.',
   ]
     .filter(Boolean)
