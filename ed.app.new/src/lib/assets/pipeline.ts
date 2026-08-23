@@ -20,6 +20,7 @@
  */
 
 import { generateDreamImage } from '../../modules/sleep/dreamAssetGenerator';
+import { supabase } from '../supabase/client';
 
 // ============================================================
 // TYPES
@@ -357,10 +358,72 @@ export async function pollTripoStatus(
 // PARALLAX VIDEO GENERATION
 // ============================================================
 
+function parseStorageObjectUrl(url: string): { bucket: string; path: string } | null {
+  try {
+    const parsed = new URL(url, typeof window !== 'undefined' ? window.location.origin : 'https://everdream.n1g3.com');
+    const match = parsed.pathname.match(
+      /\/storage\/v1\/object\/(?:public|sign|authenticated)\/([^/]+)\/(.+)/,
+    );
+    if (!match) return null;
+    return {
+      bucket: decodeURIComponent(match[1]),
+      path: decodeURIComponent(match[2]),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Pull a remote dream still into a blob URL so canvas video is not blocked by CORS. */
+export async function hydrateDrawableUrl(url: string): Promise<string> {
+  const trimmed = (url || '').trim();
+  if (!trimmed) throw new Error('Missing image');
+  if (trimmed.startsWith('data:') || trimmed.startsWith('blob:')) return trimmed;
+
+  try {
+    const res = await fetch(trimmed, { mode: 'cors', credentials: 'omit' });
+    if (res.ok) {
+      const blob = await res.blob();
+      if (blob.size > 0) return URL.createObjectURL(blob);
+    }
+  } catch {
+    /* storage download next */
+  }
+
+  const object = parseStorageObjectUrl(trimmed);
+  if (object) {
+    const { data, error } = await supabase.storage.from(object.bucket).download(object.path);
+    if (!error && data && data.size > 0) return URL.createObjectURL(data);
+  }
+
+  throw new Error('Could not load the dream image for video. Regenerate the image, then try again.');
+}
+
+function decodeImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      if (!img.naturalWidth) reject(new Error('Image decoded empty'));
+      else resolve(img);
+    };
+    img.onerror = () => reject(new Error('Failed to load image'));
+    img.src = src;
+  });
+}
+
+function pickRecorderMime(): string {
+  const candidates = [
+    'video/webm;codecs=vp9',
+    'video/webm;codecs=vp8',
+    'video/webm',
+    'video/mp4',
+  ];
+  return candidates.find((type) => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(type)) || '';
+}
+
 /**
- * Generate a parallax video from an image + depth map.
+ * Generate a parallax video from an image + optional depth map.
  * Uses canvas-based rendering (no external API needed).
- * Creates a smooth video with depth-aware camera movement.
  */
 export async function generateParallaxVideo(
   imageUrl: string,
@@ -379,110 +442,100 @@ export async function generateParallaxVideo(
     direction = 'circular',
   } = options;
 
+  if (typeof MediaRecorder === 'undefined' || typeof document === 'undefined') {
+    throw new Error('This browser cannot record a motion clip. Try Chrome or Edge on desktop.');
+  }
+
+  const mimeType = pickRecorderMime();
+  if (!mimeType) {
+    throw new Error('This browser cannot record a motion clip. Try Chrome or Edge on desktop.');
+  }
+
+  const localImage = await hydrateDrawableUrl(imageUrl);
+  let localDepth = localImage;
+  if (depthMapUrl && depthMapUrl !== imageUrl) {
+    try {
+      localDepth = await hydrateDrawableUrl(depthMapUrl);
+    } catch {
+      localDepth = localImage;
+    }
+  }
+
+  const img = await decodeImage(localImage);
+  if (localDepth !== localImage) {
+    await decodeImage(localDepth).catch(() => img);
+  }
+
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas not supported');
+
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+
+  const totalFrames = Math.max(1, Math.round(duration * fps));
+  const stream = canvas.captureStream(fps);
+  const recorder = new MediaRecorder(stream, { mimeType });
+  const chunks: Blob[] = [];
+
   return new Promise((resolve, reject) => {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    if (!ctx) { reject(new Error('Canvas not supported')); return; }
-
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    const depthImg = new Image();
-    depthImg.crossOrigin = 'anonymous';
-
-    let loaded = 0;
-    const onload = () => {
-      loaded++;
-      if (loaded < 2) return;
-
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-
-      // Get depth data for pixel-aware parallax
-      const depthCanvas = document.createElement('canvas');
-      depthCanvas.width = img.naturalWidth;
-      depthCanvas.height = img.naturalHeight;
-      const depthCtx = depthCanvas.getContext('2d');
-      if (depthCtx) {
-        depthCtx.drawImage(depthImg, 0, 0);
+    recorder.ondataavailable = (e) => {
+      if (e.data.size) chunks.push(e.data);
+    };
+    recorder.onerror = () => reject(new Error('Motion clip recording failed'));
+    recorder.onstop = () => {
+      const blob = new Blob(chunks, { type: mimeType.split(';')[0] });
+      if (!blob.size) {
+        reject(new Error('Motion clip was empty'));
+        return;
       }
-
-      const totalFrames = duration * fps;
-      const stream = canvas.captureStream(fps);
-
-      // Try webm first, fall back to other codecs
-      let mimeType = 'video/webm;codecs=vp9';
-      if (!MediaRecorder.isTypeSupported(mimeType)) {
-        mimeType = 'video/webm;codecs=vp8';
-        if (!MediaRecorder.isTypeSupported(mimeType)) {
-          mimeType = 'video/webm';
-        }
-      }
-
-      const recorder = new MediaRecorder(stream, { mimeType });
-      const chunks: Blob[] = [];
-
-      recorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
-      recorder.onstop = () => {
-        const blob = new Blob(chunks, { type: mimeType });
-        resolve(URL.createObjectURL(blob));
-      };
-
-      recorder.start();
-
-      // Render frames with depth-aware parallax
-      let frameIndex = 0;
-
-      const renderNextFrame = () => {
-        if (frameIndex >= totalFrames) {
-          recorder.stop();
-          return;
-        }
-
-        const t = frameIndex / totalFrames;
-        const angle = t * Math.PI * 2;
-
-        let offsetX = 0;
-        let offsetY = 0;
-        const maxOffsetX = amplitude * canvas.width;
-        const maxOffsetY = amplitude * canvas.height;
-
-        switch (direction) {
-          case 'horizontal':
-            offsetX = Math.sin(angle) * maxOffsetX;
-            break;
-          case 'vertical':
-            offsetY = Math.sin(angle) * maxOffsetY;
-            break;
-          case 'circular':
-            offsetX = Math.cos(angle) * maxOffsetX;
-            offsetY = Math.sin(angle) * maxOffsetY * 0.6;
-            break;
-        }
-
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        // Scale up slightly to allow for parallax movement without edge gaps
-        const scale = 1 + amplitude * 1.5;
-        const scaledW = canvas.width * scale;
-        const scaledH = canvas.height * scale;
-        const drawX = (canvas.width - scaledW) / 2 + offsetX;
-        const drawY = (canvas.height - scaledH) / 2 + offsetY;
-
-        ctx.drawImage(img, drawX, drawY, scaledW, scaledH);
-
-        frameIndex++;
-        requestAnimationFrame(renderNextFrame);
-      };
-
-      renderNextFrame();
+      resolve(URL.createObjectURL(blob));
     };
 
-    img.onload = onload;
-    depthImg.onload = onload;
-    img.onerror = () => reject(new Error('Failed to load image'));
-    depthImg.onerror = () => reject(new Error('Failed to load depth map'));
-    img.src = imageUrl;
-    depthImg.src = depthMapUrl;
+    try {
+      recorder.start();
+    } catch (err) {
+      reject(err instanceof Error ? err : new Error('Could not start recording'));
+      return;
+    }
+
+    let frameIndex = 0;
+    const renderNextFrame = () => {
+      if (frameIndex >= totalFrames) {
+        if (recorder.state === 'recording') recorder.stop();
+        return;
+      }
+
+      const t = frameIndex / totalFrames;
+      const angle = t * Math.PI * 2;
+      const maxOffsetX = amplitude * canvas.width;
+      const maxOffsetY = amplitude * canvas.height;
+      let offsetX = 0;
+      let offsetY = 0;
+      if (direction === 'horizontal') offsetX = Math.sin(angle) * maxOffsetX;
+      else if (direction === 'vertical') offsetY = Math.sin(angle) * maxOffsetY;
+      else {
+        offsetX = Math.cos(angle) * maxOffsetX;
+        offsetY = Math.sin(angle) * maxOffsetY * 0.6;
+      }
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const scale = 1 + amplitude * 1.5;
+      const scaledW = canvas.width * scale;
+      const scaledH = canvas.height * scale;
+      ctx.drawImage(
+        img,
+        (canvas.width - scaledW) / 2 + offsetX,
+        (canvas.height - scaledH) / 2 + offsetY,
+        scaledW,
+        scaledH,
+      );
+
+      frameIndex++;
+      requestAnimationFrame(renderNextFrame);
+    };
+
+    renderNextFrame();
   });
 }
 

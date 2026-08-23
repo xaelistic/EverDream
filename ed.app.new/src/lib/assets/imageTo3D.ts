@@ -105,9 +105,10 @@ export async function buildLocalDepthMap(
 
 /** Canvas luminance → grayscale depth (always available offline). */
 export async function generateLuminanceDepthMap(imageUrl: string): Promise<string> {
+  const { hydrateDrawableUrl } = await import('./pipeline');
+  const local = await hydrateDrawableUrl(imageUrl);
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.crossOrigin = 'anonymous';
     img.onload = () => {
       const canvas = document.createElement('canvas');
       const max = 512;
@@ -133,7 +134,7 @@ export async function generateLuminanceDepthMap(imageUrl: string): Promise<strin
       );
     };
     img.onerror = () => reject(new Error('Failed to load image for depth'));
-    img.src = imageUrl;
+    img.src = local;
   });
 }
 
