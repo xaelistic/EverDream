@@ -15,6 +15,9 @@ import {
   FileText,
   Mic,
   Play,
+  Quote,
+  Sparkles,
+  Compass,
   X,
 } from 'lucide-react';
 import { FEATURE_NFT_UI_ENABLED } from '../config/features';
@@ -567,63 +570,64 @@ export function DreamDetailScreen({
             </section>
           )}
 
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <span className={`${getCategoryBadgeClass(presented.category)} px-3 py-1 rounded-full text-xs font-semibold`}>
-                  {presented.category}
-                </span>
-                <span
-                  className="inline-flex items-center gap-1.5 text-sm text-ink"
-                  title={`Mood from the dream${detailDream.capturedEmotions ? ', face, and voice' : ''}`}
-                >
-                  <span className="text-2xl" aria-hidden>{getEmotionEmoji(presented.emotion)}</span>
-                  <span className="text-xs text-muted">{presented.emotionName}</span>
-                </span>
-              </div>
-              <div className="text-sm text-muted">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <span className={`${getCategoryBadgeClass(presented.category)} px-3 py-1 rounded-full text-xs font-semibold`}>
+                {presented.category}
+              </span>
+              <div className="text-sm text-muted mt-2">
                 {presented.when.primary}{presented.when.secondary ? ` · ${presented.when.secondary}` : ''}
               </div>
             </div>
-            {detailDream.moodValence !== undefined && (
-              <div className="flex flex-col items-center gap-1 rounded-2xl border border-line bg-parchment px-3 py-2">
-                <span className="text-[10px] uppercase tracking-wide text-muted">Valence</span>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-16 h-2 bg-line rounded-full overflow-hidden">
+            <div
+              className="shrink-0 min-w-[8.5rem] rounded-2xl border border-dusk/25 bg-gradient-to-br from-dusk/15 via-cream to-parchment px-3 py-2.5 shadow-paper"
+              title={`Emotion from the dream${detailDream.capturedEmotions ? ', face, and voice' : ''}`}
+            >
+              <p className="text-[10px] uppercase tracking-[0.18em] text-duskDeep font-semibold">Emotion</p>
+              <p className="mt-1 font-serif text-lg text-ink leading-tight">
+                <span className="mr-1.5" aria-hidden>{getEmotionEmoji(presented.emotion)}</span>
+                {presented.emotionName}
+              </p>
+              {detailDream.moodValence !== undefined && (
+                <div className="mt-2">
+                  <div className="h-1.5 bg-line rounded-full overflow-hidden">
                     <div
-                      className="h-full rounded-full transition-all"
+                      className="h-full rounded-full"
                       style={{
-                        width: `${((detailDream.moodValence + 1) / 2) * 100}%`,
+                        width: `${Math.max(12, Math.abs(detailDream.moodValence) * 100)}%`,
                         background: detailDream.moodValence >= 0
-                          ? 'linear-gradient(90deg, #5ec4a8, #4a9e86)'
-                          : 'linear-gradient(90deg, #e88fa0, #c86070)',
+                          ? 'linear-gradient(90deg, #6d8b74, #4f6654)'
+                          : 'linear-gradient(90deg, #c4bdd4, #6b5b95)',
                       }}
                     />
                   </div>
-                  <span className="text-xs font-semibold text-ink">
-                    {detailDream.moodValence >= 0 ? '+' : ''}
-                    {detailDream.moodValence.toFixed(1)}
-                  </span>
+                  <p className="mt-1 text-[10px] font-medium text-muted">
+                    {Math.abs(detailDream.moodValence) >= 0.55
+                      ? 'Strong'
+                      : Math.abs(detailDream.moodValence) >= 0.25
+                        ? 'Clear'
+                        : 'Soft'}
+                  </p>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
-          <section>
-            <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted mb-2">
+          <section className="rounded-2xl border border-line bg-parchment/50 px-4 py-3.5">
+            <h3 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted mb-2">
               Summary
             </h3>
             {summary && (
-              <p className="text-lg font-serif font-medium text-ink italic mb-3 leading-snug">
+              <p className="text-xl font-serif font-medium text-ink italic leading-snug">
                 “{summary}”
               </p>
             )}
             {detailDream.themes?.length > 0 && (
-              <div className="flex gap-2 flex-wrap">
+              <div className="flex gap-2 flex-wrap mt-3">
                 {detailDream.themes.slice(0, 6).map((theme) => (
                   <span
                     key={theme}
-                    className="text-[11px] text-muted bg-parchment border border-line px-2 py-0.5 rounded-full"
+                    className="text-[11px] font-medium text-duskDeep bg-dusk/10 border border-dusk/20 px-2.5 py-1 rounded-full"
                   >
                     {theme}
                   </span>
@@ -632,17 +636,19 @@ export function DreamDetailScreen({
             )}
           </section>
 
-          <section className="rounded-2xl border border-line bg-parchment/60 p-4">
-            <div className="flex items-center justify-between gap-2 mb-2">
-              <h3 className="font-semibold flex items-center gap-2 text-sm text-ink">
-                <Eye className="w-4 h-4 text-duskDeep" strokeWidth={1.75} />
+          <section className="rounded-3xl border border-dusk/25 bg-gradient-to-br from-[#f4f0fa] via-cream to-parchment p-5 space-y-5 shadow-paper">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="font-serif text-xl text-ink flex items-center gap-2.5">
+                <span className="inline-flex w-9 h-9 rounded-2xl bg-dusk/20 text-duskDeep items-center justify-center">
+                  <Eye className="w-4 h-4" strokeWidth={1.75} />
+                </span>
                 Analysis
               </h3>
               <button
                 type="button"
                 onClick={() => void runAnalysis()}
                 disabled={analyzing}
-                className="text-xs font-medium text-sageDark hover:text-ink disabled:opacity-50"
+                className="text-xs font-semibold px-3 py-1.5 rounded-full border border-sage/30 bg-sage/10 text-sageDark hover:bg-sage/20 disabled:opacity-50"
               >
                 {analyzing ? 'Analysing…' : analysisPending ? 'Run analysis' : 'Refresh'}
               </button>
@@ -651,32 +657,52 @@ export function DreamDetailScreen({
               <p className="text-sm text-muted">Reading the dream — this can take up to a minute.</p>
             )}
             {!analyzing && analysisPending && (
-              <p className="text-sm text-muted">
-                No analysis yet. Tap Run analysis to generate symbols, meaning, and scenes.
+              <p className="text-sm text-muted leading-relaxed">
+                No analysis yet. Tap Run analysis for meaning, symbols, and the pattern underneath.
               </p>
             )}
             {!analyzing && !analysisPending && analysisNarrative && analysisNarrative !== summary && (
-              <p className="text-sm mb-3 text-muted leading-relaxed whitespace-pre-wrap">{analysisNarrative}</p>
+              <p className="text-sm text-ink/80 leading-relaxed whitespace-pre-wrap">{analysisNarrative}</p>
             )}
             {!analyzing && !analysisPending && detailDream.interpretation?.meaning && (
-              <p className="text-sm mb-3 text-ink leading-relaxed">
-                {detailDream.interpretation.meaning}
-              </p>
+              <div className="rounded-2xl border border-line bg-cream p-4 shadow-paper">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-duskDeep font-semibold flex items-center gap-1.5 mb-2">
+                  <Quote className="w-3.5 h-3.5" strokeWidth={1.75} />
+                  Meaning
+                </p>
+                <p className="font-serif text-base text-ink leading-relaxed">
+                  {detailDream.interpretation.meaning}
+                </p>
+              </div>
             )}
             {Object.keys(detailDream.interpretation?.symbols || {}).length > 0 && (
-              <div className="space-y-2">
-                <div className="text-xs font-semibold uppercase tracking-wide text-muted">Symbols</div>
-                {Object.entries(detailDream.interpretation.symbols).map(([symbol, meaning]) => (
-                  <div key={symbol} className="text-xs text-ink">
-                    <span className="font-semibold capitalize">{symbol}:</span>{' '}
-                    <span className="text-muted">{meaning}</span>
-                  </div>
-                ))}
+              <div className="space-y-2.5">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-sageDark font-semibold flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5" strokeWidth={1.75} />
+                  Symbols
+                </p>
+                <div className="grid gap-2">
+                  {Object.entries(detailDream.interpretation.symbols).map(([symbol, meaning]) => (
+                    <div
+                      key={symbol}
+                      className="rounded-2xl border border-sage/25 bg-cream pl-3 pr-3 py-3 border-l-[3px] border-l-sage shadow-paper"
+                    >
+                      <p className="text-sm font-semibold capitalize text-sageDark">{symbol}</p>
+                      <p className="text-sm text-ink leading-relaxed mt-1">{meaning}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
             {detailDream.interpretation?.commonPattern && !analysisPending && (
-              <div className="mt-3 text-xs text-muted italic border-t border-line pt-3">
-                {detailDream.interpretation.commonPattern}
+              <div className="rounded-2xl border border-dusk/20 bg-dusk/10 px-4 py-3.5">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-duskDeep font-semibold flex items-center gap-1.5 mb-1.5">
+                  <Compass className="w-3.5 h-3.5" strokeWidth={1.75} />
+                  Pattern
+                </p>
+                <p className="text-sm text-ink leading-relaxed italic">
+                  {detailDream.interpretation.commonPattern}
+                </p>
               </div>
             )}
           </section>
