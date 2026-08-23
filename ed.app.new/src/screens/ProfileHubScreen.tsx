@@ -17,6 +17,8 @@ import {
   LogOut,
 } from 'lucide-react';
 import { CreditBalanceCard } from '../components/subscriptions/CreditBalanceCard';
+import { useSubscription } from '../hooks/use-subscription';
+import { planById } from '../lib/subscriptions/plans';
 import { useSkinFull } from '../contexts/SkinContext';
 import { useToast } from '../components/ui/Toast';
 import { useProfile } from '../hooks/useProfile';
@@ -55,6 +57,9 @@ export function ProfileHub({ onClose, navigate, onFriendAdded }: ProfileHubProps
   const { isPearl } = useSkinFull();
   const { addToast } = useToast();
   const { user: authUser, signOut } = useAuth();
+  const { tier, isAdmin } = useSubscription();
+  const plan = planById(isAdmin ? 'pro' : tier);
+  const levelLabel = isAdmin ? 'Admin' : plan.name;
   const {
     profile,
     loading,
@@ -224,6 +229,9 @@ export function ProfileHub({ onClose, navigate, onFriendAdded }: ProfileHubProps
           placeholder="Your pseudonym"
         />
         <p className="text-xs text-muted mt-1">@{profile.handle}</p>
+        <p className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-sage/30 bg-sage/10 px-3 py-1 text-xs font-semibold text-sageDark">
+          {levelLabel}
+        </p>
         {saving && <p className="text-xs text-sage mt-1">Saving...</p>}
 
         <button

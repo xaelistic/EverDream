@@ -78,8 +78,7 @@ export function MoreScreen({ skin, isThemed, navigate }: MoreScreenProps) {
             { label: 'Favourites', sub: 'Dreams you have starred', screen: 'favourites', icon: Star },
             { label: 'Insights', sub: 'Patterns & correlations', screen: 'dashboard', icon: Brain },
             { label: 'Import journal photos', sub: 'OCR from pictures', screen: 'import-photos', icon: Camera },
-            { label: 'Tokens', sub: 'Balance and top-up packs', screen: 'credits', icon: CreditCard },
-            { label: 'Upgrade', sub: 'Free, Plus and Pro — unlock a plan', screen: 'upgrade', icon: Award },
+            { label: 'Upgrade / buy tokens', sub: 'Plans, remaining credits, top-up packs', screen: 'billing', icon: CreditCard },
             { label: 'Sleep & wearables', sub: 'Sessions and sync', screen: 'wearables', icon: Watch },
             // Keepsakes hidden for now — not needed in current product surface
             ...(FEATURE_NFT_UI_ENABLED
