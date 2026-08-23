@@ -262,7 +262,7 @@ const DreamJournalApp = () => {
     () => dreams.find((d) => !d.isSample) ?? null,
     [dreams],
   );
-  const [filterCategory, setFilterCategory] = useState('all');
+
   const [favouriteIds, setFavouriteIds] = useState<string[]>([]);
   const [achievements, setAchievements] = useState<UnlockedAchievement[]>([]);
   const [showAchievement, setShowAchievement] = useState<{
@@ -1841,10 +1841,7 @@ const DreamJournalApp = () => {
     ];
   };
 
-  const filteredDreams = dreams.filter((dream) => {
-    const matchesCategory = filterCategory === 'all' || dream.category === filterCategory;
-    return matchesCategory;
-  });
+  const filteredDreams = dreams;
 
   const favouriteDreams = useMemo(
     () => dreams.filter((d) => favouriteIds.includes(d.id)),
@@ -1974,8 +1971,6 @@ const DreamJournalApp = () => {
         {route.screen === 'journal' && (
           <JournalScreen
             dreams={dreams}
-            filterCategory={filterCategory}
-            setFilterCategory={setFilterCategory}
             isLoadingDreams={isLoadingDreams}
             dreamError={dreamError}
             onDismissError={() => setDreamError(null)}
@@ -1998,8 +1993,6 @@ const DreamJournalApp = () => {
         {route.screen === 'favourites' && (
           <JournalScreen
             dreams={favouriteDreams}
-            filterCategory="all"
-            setFilterCategory={() => {}}
             isLoadingDreams={isLoadingDreams}
             dreamError={dreamError}
             onDismissError={() => setDreamError(null)}

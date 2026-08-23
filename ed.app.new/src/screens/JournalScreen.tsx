@@ -1,4 +1,4 @@
-import { Calendar, Shield, Star } from 'lucide-react';
+import { Shield, Star } from 'lucide-react';
 import type { ErrorBannerProps, LoadingOverlayProps } from '../components/ui';
 import { useSubscription } from '../hooks/use-subscription';
 import { presentDream } from '../lib/dreamClassify';
@@ -28,8 +28,6 @@ interface Dream {
 
 interface JournalScreenProps {
   dreams: Dream[];
-  filterCategory: string;
-  setFilterCategory: (category: string) => void;
   isLoadingDreams: boolean;
   dreamError: string | null;
   onDismissError: () => void;
@@ -42,7 +40,7 @@ interface JournalScreenProps {
   getEmotionEmoji: (emotion: string) => string;
   ErrorBanner: React.ComponentType<ErrorBannerProps>;
   LoadingOverlay: React.ComponentType<LoadingOverlayProps>;
-  /** When set, only show these dreams (e.g. favourites list) and hide the category filter */
+  /** When set, labels the list as a subset (e.g. favourites) */
   title?: string;
   subtitle?: string;
   hideFilter?: boolean;
@@ -50,8 +48,6 @@ interface JournalScreenProps {
 
 export function JournalScreen({
   dreams,
-  filterCategory,
-  setFilterCategory,
   isLoadingDreams,
   dreamError,
   onDismissError,
@@ -68,11 +64,6 @@ export function JournalScreen({
   subtitle = 'Browse everything you have captured.',
   hideFilter = false,
 }: JournalScreenProps) {
-  const filteredDreams = dreams.filter((dream) => {
-    const matchesCategory = filterCategory === 'all' || dream.category === filterCategory;
-    return matchesCategory;
-  });
-
   return (
     <div className="space-y-4">
       {/* Error Banner */}
@@ -84,31 +75,13 @@ export function JournalScreen({
         />
       )}
 
-      {!hideFilter && (
-        <div className="flex items-center justify-end mb-1">
-          <select
-            value={filterCategory}
-            onChange={(e) => setFilterCategory(e.target.value)}
-            className="bg-cream border border-line rounded-xl px-3 py-2.5 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-sage/35 shadow-paper shrink-0"
-          >
-            <option value="all">All Types</option>
-            <option value="peaceful">Peaceful</option>
-            <option value="lucid">Lucid</option>
-            <option value="nightmare">Nightmare</option>
-            <option value="adventure">Adventure</option>
-            <option value="anxiety">Anxiety</option>
-          </select>
-        </div>
-      )}
-
       <h2 className="font-serif text-2xl font-medium text-ink mb-1">{title}</h2>
       <p className="text-sm text-muted mb-4">{subtitle}</p>
 
       {/* Loading State */}
       {isLoadingDreams ? (
         <LoadingOverlay message="Loading your dreams..." />
-      ) : filteredDreams.length === 0 ? (
-        dreams.length === 0 ? (
+      ) : dreams.length === 0 ? (
           <div className="text-center py-16 px-6 border border-dashed border-line rounded-3xl bg-parchment/30">
             <p className="text-ink font-medium mb-2">
               {hideFilter ? 'No favourites yet' : 'No dreams yet'}
@@ -125,12 +98,9 @@ export function JournalScreen({
               )}
             </p>
           </div>
-        ) : (
-          <EmptyState icon={Calendar} message="No dreams match this filter" />
-        )
       ) : (
         <div className="space-y-3">
-          {filteredDreams.map((dream) => (
+          {dreams.map((dream) => (
             <DreamCard
               key={dream.id}
               dream={dream}
@@ -259,20 +229,6 @@ function DreamCard({
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-interface EmptyStateProps {
-  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
-  message: string;
-}
-
-function EmptyState({ icon: Icon, message }: EmptyStateProps) {
-  return (
-    <div className="text-center py-14 text-muted border border-dashed border-line rounded-3xl bg-parchment/35">
-      <Icon className="w-14 h-14 mx-auto mb-4 opacity-35 text-duskDeep" strokeWidth={1.25} />
-      <p className="text-ink font-medium">{message}</p>
     </div>
   );
 }
