@@ -42,7 +42,7 @@ function isNavActive(active: RouteScreen, screen: RouteScreen): boolean {
     return active === 'home' || active === 'reflection';
   }
   if (screen === 'more') {
-    return ['more', 'wearables', 'privacy', 'achievements', 'assets', 'import-photos', 'admin', 'settings', 'favourites', 'billing'].includes(active);
+    return ['more', 'wearables', 'privacy', 'achievements', 'assets', 'import-photos', 'admin', 'settings', 'favourites', 'billing', 'upgrade', 'credits'].includes(active);
   }
   return active === screen;
 }

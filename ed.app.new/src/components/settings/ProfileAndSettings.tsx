@@ -30,7 +30,7 @@ import { connectSocialProvider, disconnectSocialProvider } from '../../lib/socia
 import { isProviderLinkedInDb } from '../../lib/social/socialAccounts';
 import { useSocialAuth } from '../../hooks/use-social-auth';
 import type { SocialProviderId } from '../../lib/socialShare';
-import { BillingScreen } from '../../screens/BillingScreen';
+import { UpgradeScreen } from '../../screens/UpgradeScreen';
 
 // Safe localStorage helpers with try-catch wrappers
 function safeGetLocalStorage(key: string): string | null {
@@ -864,7 +864,7 @@ export default function ProfileAndSettings({ user, onClose }: ProfileAndSettings
     </div>
   );
 
-  const renderSubscriptionTab = () => <BillingScreen />;
+  const renderSubscriptionTab = () => <UpgradeScreen />;
 
   const renderPrivacyTab = () => (
     <div className="space-y-6">

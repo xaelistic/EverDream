@@ -22,6 +22,8 @@ export type RouteScreen =
   | 'video-journal'
   | 'education'
   | 'billing'
+  | 'upgrade'
+  | 'credits'
   | 'settings';
 
 export type AppRoute = {
@@ -64,6 +66,8 @@ function parseHash(): AppRoute {
     'video-journal',
     'education',
     'billing',
+    'upgrade',
+    'credits',
     'settings',
   ];
   if (screen === 'reflection') {

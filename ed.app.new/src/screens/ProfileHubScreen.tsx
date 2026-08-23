@@ -16,6 +16,7 @@ import {
   Loader2,
   LogOut,
 } from 'lucide-react';
+import { CreditBalanceCard } from '../components/subscriptions/CreditBalanceCard';
 import { useSkinFull } from '../contexts/SkinContext';
 import { useToast } from '../components/ui/Toast';
 import { useProfile } from '../hooks/useProfile';
@@ -234,6 +235,17 @@ export function ProfileHub({ onClose, navigate, onFriendAdded }: ProfileHubProps
           Share Profile
         </button>
       </div>
+
+      <CreditBalanceCard
+        onTopUp={() => {
+          onClose();
+          navigate('credits');
+        }}
+        onUpgrade={() => {
+          onClose();
+          navigate('upgrade');
+        }}
+      />
 
       <div className={`rounded-2xl border p-4 ${card}`}>
         <label className="text-xs uppercase tracking-wider text-muted font-medium">Bio</label>

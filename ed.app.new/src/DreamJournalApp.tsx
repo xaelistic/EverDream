@@ -86,6 +86,8 @@ import ShareModal from './components/dreams/ShareModal';
 import { VideoJournalScreen } from './screens/VideoJournalScreen';
 import { PrivacyScreen } from './screens/PrivacyScreen';
 import { BillingScreen } from './screens/BillingScreen';
+import { UpgradeScreen } from './screens/UpgradeScreen';
+import { CreditsScreen } from './screens/CreditsScreen';
 import { analyzeDream, type DreamAnalysis } from './lib/dream-analyzer';
 import { coerceNarrativeText, sanitizeDreamForUI } from './lib/normalizeDreamAnalysis';
 import OnboardingFlow from './components/onboarding/OnboardingFlow';
@@ -2268,7 +2270,18 @@ const DreamJournalApp = () => {
           />
         )}
 
-        {route.screen === 'billing' && <BillingScreen />}
+        {route.screen === 'billing' && (
+          <BillingScreen
+            onUpgrade={() => navigate('upgrade')}
+            onTopUp={() => navigate('credits')}
+          />
+        )}
+        {route.screen === 'upgrade' && (
+          <UpgradeScreen onBack={() => navigate('billing')} onTopUp={() => navigate('credits')} />
+        )}
+        {route.screen === 'credits' && (
+          <CreditsScreen onBack={() => navigate('billing')} onUpgrade={() => navigate('upgrade')} />
+        )}
 
         {route.screen === 'privacy' && (
           <PrivacyScreen
