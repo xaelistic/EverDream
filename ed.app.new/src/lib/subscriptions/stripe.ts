@@ -6,7 +6,90 @@ import { supabase } from '../supabase/client';
 import type { SubscriptionTier } from './types';
 
 export function isStripeConfigured(): boolean {
-  return Boolean(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY);
+  // Redirect Checkout uses the stripe-checkout edge function (secret on the server).
+  // A publishable key is only required for Stripe.js Elements, which we do not use.
+  return import.meta.env.VITE_STRIPE_DISABLED !== 'true';
+}
+
+const CHECKOUT_INTENT_KEY = 'ed_checkout_intent';
+
+export type CheckoutIntent = { plan?: 'plus' | 'pro'; pack?: string };
+
+function parseHashIntent(): CheckoutIntent {
+  if (typeof window === 'undefined') return {};
+  const hash = window.location.hash || '';
+  const qIndex = hash.indexOf('?');
+  if (qIndex < 0) return {};
+  const params = new URLSearchParams(hash.slice(qIndex + 1));
+  const planRaw = params.get('plan');
+  const pack = params.get('pack') || undefined;
+  const plan = planRaw === 'plus' || planRaw === 'pro' ? planRaw : undefined;
+  return { plan, pack };
+}
+
+function stripCheckoutParamsFromHash(): void {
+  if (typeof window === 'undefined') return;
+  const hash = window.location.hash || '';
+  const qIndex = hash.indexOf('?');
+  if (qIndex < 0) return;
+  const path = hash.slice(0, qIndex);
+  const params = new URLSearchParams(hash.slice(qIndex + 1));
+  if (!params.has('plan') && !params.has('pack')) return;
+  params.delete('plan');
+  params.delete('pack');
+  const rest = params.toString();
+  window.history.replaceState(
+    null,
+    '',
+    `${window.location.pathname}${window.location.search}${path}${rest ? `?${rest}` : ''}`,
+  );
+}
+
+function writeStoredIntent(intent: CheckoutIntent): void {
+  if (typeof window === 'undefined') return;
+  try {
+    if (!intent.plan && !intent.pack) {
+      sessionStorage.removeItem(CHECKOUT_INTENT_KEY);
+      return;
+    }
+    sessionStorage.setItem(CHECKOUT_INTENT_KEY, JSON.stringify(intent));
+  } catch {
+    /* private mode */
+  }
+}
+
+export function readCheckoutIntent(): CheckoutIntent {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = sessionStorage.getItem(CHECKOUT_INTENT_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as CheckoutIntent;
+    const plan = parsed.plan === 'plus' || parsed.plan === 'pro' ? parsed.plan : undefined;
+    const pack = typeof parsed.pack === 'string' && parsed.pack ? parsed.pack : undefined;
+    return { plan, pack };
+  } catch {
+    return {};
+  }
+}
+
+export function clearCheckoutIntent(): void {
+  writeStoredIntent({});
+}
+
+/** Persist ?plan= / ?pack= so login or OAuth does not drop a website buy link. */
+export function captureCheckoutIntent(): CheckoutIntent {
+  const fromHash = parseHashIntent();
+  if (fromHash.plan || fromHash.pack) {
+    writeStoredIntent(fromHash);
+    stripCheckoutParamsFromHash();
+    return fromHash;
+  }
+  return readCheckoutIntent();
+}
+
+/** Capture hash intent if present and return the stored plan/pack. Does not clear storage. */
+export function consumeCheckoutIntent(): CheckoutIntent {
+  return captureCheckoutIntent();
 }
 
 export async function startStripeCheckout(tier: 'plus' | 'pro'): Promise<void> {

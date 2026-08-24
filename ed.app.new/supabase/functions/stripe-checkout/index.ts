@@ -6,6 +6,8 @@ const ALLOWED_ORIGINS = [
   'https://everdream.n1g3.com',
   'https://everdream.app',
   'https://www.everdream.app',
+  'http://dmfej25dxvx42nhpcnro44us.185.249.74.204.sslip.io',
+  'https://dmfej25dxvx42nhpcnro44us.185.249.74.204.sslip.io',
   'http://localhost:5173',
   'http://localhost:4173',
   'http://localhost:3000',

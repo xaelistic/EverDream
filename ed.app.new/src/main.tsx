@@ -16,6 +16,7 @@ import './skins/noir.css';
 import { initEnvValidation } from './lib/env';
 import { authRedirectReady } from './lib/supabase/client';
 import { stripAuthParamsFromUrl, urlHasAuthArtifacts } from './lib/auth/urlCleanup';
+import { captureCheckoutIntent } from './lib/subscriptions/stripe';
 
 // Validate environment variables early (prints clear warnings/errors for missing
 // Supabase / API keys and throws on critical misconfiguration). This prevents
@@ -27,6 +28,9 @@ ensureBrowserStorage();
 // If the user landed with tokens already in the bar, scrub them as soon as the
 // session has been read — never leave JWTs in history/referrer/screenshots.
 async function boot() {
+  // Persist website buy links before OAuth/hash cleanup can drop ?plan= / ?pack=.
+  captureCheckoutIntent();
+
   try {
     await authRedirectReady;
   } catch (err) {

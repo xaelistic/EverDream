@@ -1,8 +1,14 @@
+import { useEffect, useRef } from 'react';
 import { ArrowLeft, Check, Minus } from 'lucide-react';
 import { useSubscription } from '../hooks/use-subscription';
 import { useBillingCheckout } from '../hooks/useBillingCheckout';
 import { PLAN_COMPARE, PLANS } from '../lib/subscriptions/plans';
 import { CreditBalanceCard } from '../components/subscriptions/CreditBalanceCard';
+import {
+  captureCheckoutIntent,
+  clearCheckoutIntent,
+  readCheckoutIntent,
+} from '../lib/subscriptions/stripe';
 
 type UpgradeScreenProps = {
   onBack?: () => void;
@@ -11,8 +17,23 @@ type UpgradeScreenProps = {
 
 export function UpgradeScreen({ onBack, onTopUp }: UpgradeScreenProps) {
   const { tier, isAdmin } = useSubscription();
-  const { busy, buyPlan, openPortal } = useBillingCheckout();
+  const { busy, buyPlan, openPortal, signedIn } = useBillingCheckout();
   const current = isAdmin ? 'pro' : tier;
+  const intentFired = useRef(false);
+
+  useEffect(() => {
+    captureCheckoutIntent();
+  }, []);
+
+  useEffect(() => {
+    if (intentFired.current || !signedIn) return;
+    const { plan } = readCheckoutIntent();
+    if (plan === 'plus' || plan === 'pro') {
+      intentFired.current = true;
+      clearCheckoutIntent();
+      void buyPlan(plan);
+    }
+  }, [buyPlan, signedIn]);
 
   return (
     <div className="space-y-6">
@@ -33,6 +54,9 @@ export function UpgradeScreen({ onBack, onTopUp }: UpgradeScreenProps) {
           Journals, analysis, and sleep tracking are free. Credits are spent when you paint an image,
           storyboard, or motion clip. Monthly credits reset; packs you buy stay until you use them.
         </p>
+        {!signedIn && (
+          <p className="text-sm text-duskDeep mt-3">Sign in to unlock a plan with Stripe.</p>
+        )}
       </div>
 
       <CreditBalanceCard compact onTopUp={onTopUp} />

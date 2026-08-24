@@ -1,10 +1,16 @@
 import { ArrowLeft, Sparkles } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useSubscription } from '../hooks/use-subscription';
 import { useBillingCheckout } from '../hooks/useBillingCheckout';
 import { CREDIT_PACKS } from '../lib/subscriptions/plans';
 import { CreditBalanceCard } from '../components/subscriptions/CreditBalanceCard';
-import { parseSubscriptionReturn, clearSubscriptionReturnParams } from '../lib/subscriptions/stripe';
+import {
+  parseSubscriptionReturn,
+  clearSubscriptionReturnParams,
+  captureCheckoutIntent,
+  clearCheckoutIntent,
+  readCheckoutIntent,
+} from '../lib/subscriptions/stripe';
 import { useToast } from '../components/ui/Toast';
 
 type CreditsScreenProps = {
@@ -14,8 +20,23 @@ type CreditsScreenProps = {
 
 export function CreditsScreen({ onBack, onUpgrade }: CreditsScreenProps) {
   const { refresh } = useSubscription();
-  const { busy, buyPack } = useBillingCheckout();
+  const { busy, buyPack, signedIn } = useBillingCheckout();
   const { addToast } = useToast();
+  const intentFired = useRef(false);
+
+  useEffect(() => {
+    captureCheckoutIntent();
+  }, []);
+
+  useEffect(() => {
+    if (intentFired.current || !signedIn) return;
+    const { pack } = readCheckoutIntent();
+    if (pack && CREDIT_PACKS.some((row) => row.id === pack)) {
+      intentFired.current = true;
+      clearCheckoutIntent();
+      void buyPack(pack);
+    }
+  }, [buyPack, signedIn]);
 
   useEffect(() => {
     const { status } = parseSubscriptionReturn();
@@ -48,6 +69,9 @@ export function CreditsScreen({ onBack, onUpgrade }: CreditsScreenProps) {
           One credit paints one image. Storyboards use one credit per scene. Packs never expire and sit
           on top of any monthly allotment.
         </p>
+        {!signedIn && (
+          <p className="text-sm text-duskDeep mt-3">Sign in to buy credits with Stripe.</p>
+        )}
       </div>
 
       <CreditBalanceCard onUpgrade={onUpgrade} />
