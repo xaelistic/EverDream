@@ -418,7 +418,48 @@ export const VR_PIPELINE_WORKFLOW = {
 // WORKFLOW SCHEDULE RECOMMENDATIONS
 // ============================================================
 
+export const DREAM_PIPELINE_CATCHUP_WORKFLOW = {
+  name: "Dream Pipeline Catch-up",
+  description: "Hourly: find dreams missing transcription, analysis, or image and generate them.",
+  trigger: "cron",
+  cronExpression: "0 * * * *",
+  nodes: [
+    {
+      name: "Hourly Cron",
+      type: "n8n-nodes-base.cron",
+      position: [250, 300],
+      parameters: {
+        triggerTimes: { item: [{ mode: "everyHour", minute: 0 }] },
+      },
+    },
+    {
+      name: "Complete Missing Pipeline Steps",
+      type: "n8n-nodes-base.httpRequest",
+      position: [500, 300],
+      parameters: {
+        method: "POST",
+        url: "={{ $env.SUPABASE_URL }}/functions/v1/complete-dream-pipeline",
+        sendHeaders: true,
+        headerParameters: {
+          parameters: [
+            { name: "Authorization", value: "Bearer {{ $env.PIPELINE_CRON_SECRET }}" },
+            { name: "x-cron-secret", value: "{{ $env.PIPELINE_CRON_SECRET }}" },
+            { name: "Content-Type", value: "application/json" },
+          ],
+        },
+        sendBody: true,
+        specifyBody: "json",
+        jsonBody: '{"source":"n8n-hourly"}',
+      },
+    },
+  ],
+};
+
 export const RECOMMENDED_SCHEDULES = {
+  dreamPipelineCatchup: {
+    cron: "0 * * * *",
+    description: "Fill missing dream transcription, analysis, and images",
+  },
   // Overnight batch processing (when server load is low)
   assetGeneration: {
     cron: "0 1 * * *", // 1 AM daily

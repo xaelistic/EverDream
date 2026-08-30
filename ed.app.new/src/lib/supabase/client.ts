@@ -143,6 +143,9 @@ export interface DreamRecord {
   is_deleted: boolean;
   local_created_at?: string;
   local_updated_at?: string;
+  pipeline_status?: Record<string, unknown>;
+  ai_metadata?: Record<string, unknown>;
+  media_storage_path?: string | null;
   created_at: string;
   updated_at: string;
   expires_at: string;

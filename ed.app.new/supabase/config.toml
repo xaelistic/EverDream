@@ -91,8 +91,14 @@ verify_jwt = true
 [functions.generate-image]
 verify_jwt = true
 
+[functions.generate-video]
+verify_jwt = true
+
 [functions.transcribe-audio]
 verify_jwt = true
+
+[functions.complete-dream-pipeline]
+verify_jwt = false
 
 [functions.social-token-sync]
 verify_jwt = true

@@ -13,25 +13,30 @@ import {
 } from 'lucide-react';
 import { useToast } from '../ui/Toast';
 import {
+  addFriendById,
   connectByFriendCode,
+  connectByHandle,
   createFriendInvite,
   friendRowFromHit,
   listFriendships,
   looksLikeFriendCode,
+  normalizeHandle,
   openInviteChannel,
   respondToFriendRequest,
   searchDreamers,
-  sendFriendRequest,
   type DreamerHit,
   type FriendRow,
   type InviteChannel,
 } from '../../lib/friends';
+import { slugifyHandle } from '../../lib/profileService';
 
 interface FriendsNetworkProps {
   card: string;
   isPearl: boolean;
   displayName: string;
+  handle?: string;
   friendCode: string;
+  onHandleChange?: (handle: string) => void;
   onFriendAdded?: () => void;
 }
 
@@ -39,7 +44,9 @@ export function FriendsNetwork({
   card,
   isPearl,
   displayName,
+  handle = '',
   friendCode,
+  onHandleChange,
   onFriendAdded,
 }: FriendsNetworkProps) {
   const { addToast } = useToast();
@@ -53,7 +60,14 @@ export function FriendsNetwork({
   const [loadingList, setLoadingList] = useState(true);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteBusy, setInviteBusy] = useState<InviteChannel | null>(null);
+  const [copiedHandle, setCopiedHandle] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
+  const [showCode, setShowCode] = useState(false);
+  const [handleDraft, setHandleDraft] = useState(handle.replace(/^@/, ''));
+
+  useEffect(() => {
+    setHandleDraft(handle.replace(/^@/, ''));
+  }, [handle]);
 
   const refresh = useCallback(async () => {
     try {
@@ -103,21 +117,25 @@ export function FriendsNetwork({
     });
   };
 
+  const finishAdd = async (friend: DreamerHit) => {
+    rememberFriend(friendRowFromHit(friend, 'accepted'));
+    addToast({ type: 'success', message: `${friend.displayName} is in your friends list.` });
+    onFriendAdded?.();
+    setQuery('');
+    setHits([]);
+    await refresh();
+  };
+
   const handleConnectCode = async (raw = code) => {
     if (!raw.trim()) {
-      addToast({ type: 'warning', message: 'Paste a friend code like DREAM-AB12CD.' });
+      addToast({ type: 'warning', message: 'Paste a friend code, or search a username above.' });
       return;
     }
     setCodeBusy(true);
     try {
       const friend = await connectByFriendCode(raw);
-      rememberFriend(friendRowFromHit(friend, 'accepted'));
-      addToast({ type: 'success', message: `${friend.displayName} is now in your friends list.` });
-      onFriendAdded?.();
+      await finishAdd(friend);
       setCode('');
-      setQuery('');
-      setHits([]);
-      await refresh();
     } catch (err) {
       addToast({ type: 'error', message: err instanceof Error ? err.message : 'Could not add that code.' });
     } finally {
@@ -128,19 +146,47 @@ export function FriendsNetwork({
   const handleAdd = async (hit: DreamerHit) => {
     setAddingId(hit.id);
     try {
-      if (looksLikeFriendCode(query)) {
-        await handleConnectCode(hit.friendCode || query);
+      if (looksLikeFriendCode(query) && hit.friendCode) {
+        await handleConnectCode(hit.friendCode);
         return;
       }
-      await sendFriendRequest(hit.id);
-      rememberFriend(friendRowFromHit(hit, 'pending'));
-      addToast({ type: 'success', message: `Request sent to @${hit.handle || hit.displayName}. They still need to accept.` });
-      onFriendAdded?.();
-      setQuery('');
-      setHits([]);
-      await refresh();
+      const friend = await addFriendById(hit.id);
+      await finishAdd(friend);
     } catch (err) {
-      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Could not send request.' });
+      addToast({ type: 'error', message: err instanceof Error ? err.message : 'Could not add that person.' });
+    } finally {
+      setAddingId(null);
+    }
+  };
+
+  const handleSearchSubmit = async () => {
+    const raw = query.trim();
+    if (normalizeHandle(raw).length < 2) {
+      addToast({ type: 'warning', message: 'Type a username like @luna.' });
+      return;
+    }
+    if (looksLikeFriendCode(raw)) {
+      await handleConnectCode(raw);
+      return;
+    }
+    const exact = hits.find((hit) => normalizeHandle(hit.handle || '') === normalizeHandle(raw));
+    if (exact) {
+      await handleAdd(exact);
+      return;
+    }
+    if (hits.length === 1) {
+      await handleAdd(hits[0]);
+      return;
+    }
+    setAddingId('search');
+    try {
+      const friend = await connectByHandle(raw);
+      await finishAdd(friend);
+    } catch (err) {
+      addToast({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'No one with that username. Pick someone from the list.',
+      });
     } finally {
       setAddingId(null);
     }
@@ -195,48 +241,73 @@ export function FriendsNetwork({
   const primary = isPearl ? 'bg-[var(--aqua-deep)] text-white' : 'bg-sage text-cream';
   const field = isPearl ? 'bg-white/60 border-[var(--glass-border)]' : 'bg-parchment border-line';
 
+  const myHandle = slugifyHandle(handleDraft || handle || displayName || 'dreamer');
+
   return (
     <div className="space-y-4">
       <div className={`rounded-2xl border p-4 ${card}`}>
-        <h4 className="font-medium text-ink mb-1">Add with a friend code</h4>
-        <p className="text-xs text-muted mb-3">This connects you immediately — they already shared their code with you.</p>
+        <h4 className="font-medium text-ink mb-1">Your username</h4>
+        <p className="text-xs text-muted mb-3">People find you with this. Share @username, not a code.</p>
         <div className="flex gap-2">
-          <input
-            value={code}
-            onChange={(e) => setCode(e.target.value.toUpperCase())}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') void handleConnectCode();
-            }}
-            placeholder="DREAM-AB12CD"
-            className={`flex-1 px-3 py-2 rounded-xl text-sm font-mono border outline-none ${field}`}
-          />
+          <div className={`flex-1 flex items-center rounded-xl border px-3 ${field}`}>
+            <span className="text-muted text-sm">@</span>
+            <input
+              value={handleDraft}
+              onChange={(e) => setHandleDraft(e.target.value.replace(/^@/, ''))}
+              onBlur={() => {
+                const next = slugifyHandle(handleDraft || displayName || 'dreamer');
+                setHandleDraft(next);
+                if (next && next !== handle) onHandleChange?.(next);
+              }}
+              placeholder="luna"
+              className="flex-1 bg-transparent py-2.5 text-sm outline-none"
+            />
+          </div>
           <button
             type="button"
-            disabled={codeBusy}
-            onClick={() => void handleConnectCode()}
-            className={`px-3 py-2 rounded-xl text-sm font-medium ${primary} disabled:opacity-50`}
+            onClick={async () => {
+              await navigator.clipboard.writeText(`@${myHandle}`);
+              setCopiedHandle(true);
+              addToast({ type: 'success', message: `@${myHandle} copied.` });
+              setTimeout(() => setCopiedHandle(false), 2000);
+            }}
+            className={`p-2 rounded-xl ${primary}`}
+            aria-label="Copy username"
           >
-            {codeBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Connect'}
+            {copiedHandle ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
           </button>
         </div>
       </div>
 
       <div className={`rounded-2xl border p-4 ${card}`}>
-        <h4 className="font-medium text-ink mb-1">Find by username</h4>
-        <p className="text-xs text-muted mb-3">Search @handle, display name, or a friend code.</p>
-        <div className={`flex items-center gap-2 rounded-xl border px-3 ${field}`}>
-          <Search className="w-4 h-4 text-muted shrink-0" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search @luna or DREAM-AB12"
-            className="flex-1 bg-transparent py-2.5 text-sm outline-none"
-          />
-          {searching && <Loader2 className="w-4 h-4 animate-spin text-muted" />}
+        <h4 className="font-medium text-ink mb-1">Add by username</h4>
+        <p className="text-xs text-muted mb-3">Search @handle or their name, then tap Add.</p>
+        <div className="flex gap-2">
+          <div className={`flex-1 flex items-center gap-2 rounded-xl border px-3 ${field}`}>
+            <Search className="w-4 h-4 text-muted shrink-0" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void handleSearchSubmit();
+              }}
+              placeholder="@luna"
+              className="flex-1 bg-transparent py-2.5 text-sm outline-none"
+            />
+            {searching && <Loader2 className="w-4 h-4 animate-spin text-muted" />}
+          </div>
+          <button
+            type="button"
+            disabled={addingId === 'search' || normalizeHandle(query).length < 2}
+            onClick={() => void handleSearchSubmit()}
+            className={`px-3 py-2 rounded-xl text-sm font-medium ${primary} disabled:opacity-50`}
+          >
+            {addingId === 'search' ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Add'}
+          </button>
         </div>
         {query.trim().length >= 2 && !searching && hits.length === 0 && (
           <p className="text-xs text-muted mt-3">
-            No one on EverDream matches that yet. Invite them below.
+            No one on EverDream has that username yet. Invite them below.
           </p>
         )}
         <div className="mt-3 space-y-2">
@@ -252,7 +323,7 @@ export function FriendsNetwork({
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-ink truncate">{hit.displayName}</p>
                 <p className="text-xs text-muted truncate">
-                  {hit.handle ? `@${hit.handle}` : hit.friendCode}
+                  {hit.handle ? `@${hit.handle}` : 'No username yet'}
                 </p>
               </div>
               <button
@@ -261,7 +332,7 @@ export function FriendsNetwork({
                 onClick={() => void handleAdd(hit)}
                 className={`px-3 py-1.5 rounded-xl text-xs font-medium ${primary} disabled:opacity-50`}
               >
-                {addingId === hit.id ? 'Sending…' : 'Add'}
+                {addingId === hit.id ? 'Adding…' : 'Add'}
               </button>
             </div>
           ))}
@@ -319,25 +390,57 @@ export function FriendsNetwork({
       </div>
 
       <div className={`rounded-2xl border p-4 ${card}`}>
-        <h4 className="font-medium text-ink mb-2">Your friend code</h4>
-        <div className="flex items-center gap-2">
-          <code className={`flex-1 px-3 py-2 rounded-xl text-sm font-mono ${isPearl ? 'bg-white/60' : 'bg-parchment'}`}>
-            {friendCode || '—'}
-          </code>
-          <button
-            type="button"
-            onClick={async () => {
-              if (!friendCode) return;
-              await navigator.clipboard.writeText(friendCode);
-              setCopiedCode(true);
-              addToast({ type: 'success', message: 'Friend code copied.' });
-              setTimeout(() => setCopiedCode(false), 2000);
-            }}
-            className={`p-2 rounded-xl ${primary}`}
-          >
-            {copiedCode ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => setShowCode((open) => !open)}
+          className="w-full flex items-center justify-between text-left"
+        >
+          <h4 className="font-medium text-ink">Have a friend code?</h4>
+          <span className="text-xs text-muted">{showCode ? 'Hide' : 'Show'}</span>
+        </button>
+        {showCode && (
+          <div className="mt-3 space-y-3">
+            <p className="text-xs text-muted">Optional. Username search is the usual way.</p>
+            <div className="flex gap-2">
+              <input
+                value={code}
+                onChange={(e) => setCode(e.target.value.toUpperCase())}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void handleConnectCode();
+                }}
+                placeholder="DREAM-AB12CD"
+                className={`flex-1 px-3 py-2 rounded-xl text-sm font-mono border outline-none ${field}`}
+              />
+              <button
+                type="button"
+                disabled={codeBusy}
+                onClick={() => void handleConnectCode()}
+                className={`px-3 py-2 rounded-xl text-sm font-medium ${primary} disabled:opacity-50`}
+              >
+                {codeBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Connect'}
+              </button>
+            </div>
+            {friendCode && (
+              <div className="flex items-center gap-2">
+                <code className={`flex-1 px-3 py-2 rounded-xl text-xs font-mono ${isPearl ? 'bg-white/60' : 'bg-parchment'}`}>
+                  Yours: {friendCode}
+                </code>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(friendCode);
+                    setCopiedCode(true);
+                    addToast({ type: 'success', message: 'Friend code copied.' });
+                    setTimeout(() => setCopiedCode(false), 2000);
+                  }}
+                  className={`p-2 rounded-xl ${primary}`}
+                >
+                  {copiedCode ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className={`rounded-2xl border p-4 ${card}`}>
@@ -397,7 +500,7 @@ export function FriendsNetwork({
             ))}
             {friends.length === 0 && (
               <p className="text-sm text-muted py-3 text-center">
-                No friends yet. Paste their DREAM- code above, search a username, or send an invite.
+                No friends yet. Search their @username above, or send an invite.
               </p>
             )}
           </div>

@@ -22,6 +22,13 @@ import {
 } from 'lucide-react';
 import { FEATURE_NFT_UI_ENABLED } from '../config/features';
 import DreamVisualizer from '../components/dreams/DreamVisualizer';
+import PipelineProgress from '../components/dreams/PipelineProgress';
+import {
+  deriveDreamPipelineStatus,
+  missingPipelineSteps,
+  pipelineProgressSteps,
+} from '../lib/dreamPipelineStatus';
+import { completeMissingPipelineSteps } from '../lib/dreamPipelineCatchup';
 import type { EmotionCapture } from '../components/face/FacialEmotionDetector';
 import { mediaStorageManager } from '../lib/mediaStorage';
 import { persistUserMedia, signedMediaUrl } from '../lib/mediaPersist';
@@ -33,13 +40,32 @@ import { deriveDreamTitle, presentDream } from '../lib/dreamClassify';
 import { dreamTellingFromTranscript } from '../lib/cleanDreamTranscript';
 import { analyzeDream } from '../lib/dream-analyzer';
 import { generateDreamImage } from '../modules/sleep/dreamAssetGenerator';
-import { generateParallaxVideo } from '../lib/assets/pipeline';
+import { generateDreamClip } from '../lib/dreamClip';
+import { combineImageQuality, inspectImageForVideo, qualityFailMessage, type ImageQualityReport } from '../lib/imageQuality';
+import { routeImageModel, routeVideoModel } from '../lib/modelRouting';
+import {
+  finishGenerationJob,
+  logQualityCheck,
+  recentNegativeVideoFeedback,
+  startGenerationJob,
+} from '../lib/generationTracking';
+import { AssetFeedback } from '../components/dreams/AssetFeedback';
+import {
+  classifyDreamLength,
+  storyboardPanelCount,
+  type DreamNarrativeLength,
+} from '../lib/dreamLength';
 import {
   analysisLooksPending,
-  detectDreamScenes,
   formatTranscriptParagraphs,
+  splitIntoPanels,
   type DreamScene,
 } from '../lib/dreamScenes';
+import {
+  assembleStoryboardComic,
+  captionStoryboardPanel,
+  storyboardPanelPrompt,
+} from '../lib/storyboardComic';
 import { canGenerateImage, recordImageGeneration } from '../lib/subscriptions/usageLimits';
 import type { DreamAsset } from '../modules/sleep/types';
 import { useToast } from '../components/ui/Toast';
@@ -104,11 +130,17 @@ interface Dream {
   sourceAudio?: string | null;
   audioFile?: string;
   scenes?: DreamScene[];
-  storyboardImages?: { url: string; title: string; prompt: string }[];
+  storyboardImages?: { url: string; title: string; prompt: string; caption?: string; stillUrl?: string }[];
+  storyboardComicUrl?: string | null;
+  narrativeLength?: DreamNarrativeLength;
   parallaxVideoUrl?: string | null;
+  clipQuality?: { score: number; verdict: string; reasons: string[] } | null;
+  lastClipJobId?: string | null;
+  lastClipModel?: string | null;
   title?: string;
   processingStatus?: 'processing' | 'complete' | 'failed';
   processingStep?: 'transcribe' | 'analyse' | 'image' | 'complete';
+  pipelineStatus?: import('../lib/dreamPipelineStatus').DreamPipelineStatus | null;
 }
 
 interface SimilarDream {
@@ -160,6 +192,9 @@ export function DreamDetailScreen({
   const [analyzing, setAnalyzing] = useState(false);
   const [storyboardBusy, setStoryboardBusy] = useState(false);
   const [videoBusy, setVideoBusy] = useState(false);
+  const [clipQuality, setClipQuality] = useState<ImageQualityReport | null>(null);
+  const [clipJobId, setClipJobId] = useState<string | null>(null);
+  const [clipModel, setClipModel] = useState<string | null>(null);
   const [storyboardError, setStoryboardError] = useState<string | null>(null);
   const [storyboardViewIndex, setStoryboardViewIndex] = useState<number | null>(null);
   const [videoError, setVideoError] = useState<string | null>(null);
@@ -192,13 +227,18 @@ export function DreamDetailScreen({
     detailDream.category,
     detailDream.themes,
   );
-  const scenes = useMemo(
-    () => (detailDream.scenes?.length ? detailDream.scenes : detectDreamScenes(transcript || analysisNarrative)),
-    [detailDream.scenes, transcript, analysisNarrative],
-  );
+  const narrativeLength: DreamNarrativeLength =
+    detailDream.narrativeLength ||
+    classifyDreamLength(transcript || analysisNarrative || detailDream.content || '');
+  const panelCount = storyboardPanelCount(narrativeLength);
+  const scenes = useMemo(() => {
+    if (panelCount && detailDream.scenes?.length === panelCount) return detailDream.scenes;
+    if (!panelCount) return [];
+    return splitIntoPanels(transcript || analysisNarrative, panelCount);
+  }, [detailDream.scenes, transcript, analysisNarrative, panelCount]);
   const isPremium = isAdmin || hasFeature('image_generation_unlimited');
-  const storyboardCost = Math.max(2, scenes.length);
-  const videoCost = 3;
+  const storyboardCost = panelCount || 0;
+  const videoCost = narrativeLength === 'long' ? 3 : 2;
 
   const spendCredits = (count: number): boolean => {
     if (isPremium) return true;
@@ -219,7 +259,10 @@ export function DreamDetailScreen({
     setAnalyzing(true);
     try {
       const analysis = await analyzeDream(transcript || analysisNarrative);
-      const nextScenes = detectDreamScenes(transcript || analysis.narrative || analysisNarrative);
+      const source = transcript || analysis.narrative || analysisNarrative;
+      const length = classifyDreamLength(source);
+      const panels = storyboardPanelCount(length);
+      const nextScenes = panels ? splitIntoPanels(source, panels) : [];
       onUpdateDream?.({
         category: analysis.category,
         themes: analysis.themes,
@@ -231,6 +274,7 @@ export function DreamDetailScreen({
         interpretation: analysis.interpretation,
         moodValence: analysis.valence,
         scenes: nextScenes,
+        narrativeLength: length,
         processingStatus: 'complete',
       });
       addToast({ type: 'success', message: 'Analysis is ready.' });
@@ -256,6 +300,12 @@ export function DreamDetailScreen({
     setRetrying(true);
     onUpdateDream({ processingStatus: 'processing', processingStep: 'transcribe' });
     try {
+      const missing = await completeMissingPipelineSteps(detailDream as unknown as Parameters<typeof completeMissingPipelineSteps>[0]);
+      if (missing) {
+        onUpdateDream(missing as Partial<Dream>);
+        addToast({ type: 'success', message: 'Missing analysis, image, or transcription is ready.' });
+        return;
+      }
       const next = await reprocessStuckMediaDream(detailDream as unknown as JournalMediaDream);
       if (!next) throw new Error('Could not find the saved recording to transcribe.');
       onUpdateDream(next as Partial<Dream>);
@@ -272,34 +322,118 @@ export function DreamDetailScreen({
   };
 
   useEffect(() => {
-    const stuckAudio =
-      (detailDream.captureMode === 'audio' || Boolean(detailDream.audioCapture)) &&
-      isStuckJournalDream(detailDream);
-    if (!stuckAudio || retriedIdRef.current === detailDream.id) return;
+    const pipelineNow = deriveDreamPipelineStatus(detailDream, detailDream.pipelineStatus);
+    const needsWork =
+      missingPipelineSteps(pipelineNow).length > 0 ||
+      ((detailDream.captureMode === 'audio' || Boolean(detailDream.audioCapture)) &&
+        isStuckJournalDream(detailDream));
+    if (!needsWork || retriedIdRef.current === detailDream.id) return;
     retriedIdRef.current = detailDream.id;
     void retryMediaProcessing();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- retry once per dream open
   }, [detailDream.id]);
 
+  const persistBlob = async (blob: Blob, kind: 'image' | 'video'): Promise<string | null> => {
+    try {
+      const stored = await persistUserMedia({ blob, kind, dreamId: detailDream.id });
+      return stored?.url || null;
+    } catch {
+      return null;
+    }
+  };
+
+  const persistMaybeDataUrl = async (url: string): Promise<string> => {
+    if (!url.startsWith('data:') && !url.startsWith('blob:')) return url;
+    try {
+      const blob = await (await fetch(url)).blob();
+      return (await persistBlob(blob, 'image')) || url;
+    } catch {
+      return url;
+    }
+  };
+
   const runStoryboard = async () => {
-    if (storyboardBusy || scenes.length < 2) return;
+    if (storyboardBusy || panelCount < 2) return;
     if (!spendCredits(storyboardCost)) return;
     setStoryboardBusy(true);
     setStoryboardError(null);
+    const imageRoute = routeImageModel({ intent: 'storyboard', quality: 'quality', noOverlayText: true });
+    const storyboardJobId = await startGenerationJob({
+      dreamId: detailDream.id,
+      kind: 'storyboard',
+      model: imageRoute.model,
+      routedReason: imageRoute.reason,
+      prompt: scenes.map((s) => s.prompt).join('\n'),
+    });
     try {
-      const frames: { url: string; title: string; prompt: string }[] = [];
+      const frames: {
+        url: string;
+        title: string;
+        prompt: string;
+        caption?: string;
+        stillUrl?: string;
+      }[] = [];
       for (const scene of scenes) {
         const asset = await generateDreamImage(
-          `${scene.prompt}, sequential storyboard panel, consistent dream characters, cinematic still`,
+          storyboardPanelPrompt(scene.prompt),
           'cinematic',
+          { quality: 'quality', noOverlayText: true },
         );
-        frames.push({ url: asset.url, title: scene.title, prompt: scene.prompt });
+        const stillUrl = await persistMaybeDataUrl(asset.url);
+        const caption = scene.caption || scene.summary;
+        let displayUrl = stillUrl;
+        try {
+          const captioned = await captionStoryboardPanel({
+            url: stillUrl,
+            title: scene.title,
+            caption,
+          });
+          displayUrl = (await persistBlob(captioned, 'image')) || stillUrl;
+        } catch (err) {
+          console.warn('[Storyboard] caption overlay failed:', err);
+        }
+        frames.push({
+          url: displayUrl,
+          stillUrl,
+          title: scene.title,
+          prompt: scene.prompt,
+          caption,
+        });
       }
-      onUpdateDream?.({ scenes, storyboardImages: frames });
+      let comicUrl: string | null = null;
+      try {
+        const comic = await assembleStoryboardComic(
+          frames.map((frame) => ({
+            url: frame.stillUrl || frame.url,
+            title: frame.title,
+            caption: frame.caption || frame.title,
+          })),
+          { title: detailDream.title || detailDream.nugget },
+        );
+        comicUrl = await persistBlob(comic, 'image');
+      } catch (err) {
+        console.warn('[Storyboard] comic assemble failed:', err);
+      }
+      await finishGenerationJob({
+        jobId: storyboardJobId,
+        status: 'completed',
+        resultUrl: comicUrl || frames[0]?.url,
+        model: imageRoute.model,
+      });
+      onUpdateDream?.({
+        scenes,
+        storyboardImages: frames,
+        storyboardComicUrl: comicUrl,
+        narrativeLength,
+      });
       setStoryboardViewIndex(0);
-      addToast({ type: 'success', message: `Storyboard ready — ${frames.length} scenes. Tap a panel to enlarge.` });
+      addToast({
+        type: 'success',
+        message: `${frames.length}-panel comic is ready. Tap a panel to enlarge.`,
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Storyboard generation failed.';
+      await finishGenerationJob({ jobId: storyboardJobId, status: 'failed', error: message });
       setStoryboardError(message);
       addToast({ type: 'error', message });
     } finally {
@@ -308,33 +442,89 @@ export function DreamDetailScreen({
   };
 
   const runVideo = async () => {
-    const still = detailDream.generatedImage?.url;
-    if (!still) {
-      addToast({ type: 'warning', message: 'Generate the summary image first, then we can animate it.' });
+    if (!storyboardFrames.length) {
+      addToast({ type: 'warning', message: 'Generate the storyboard first — the clip plays through those panels.' });
       return;
     }
-    if (!spendCredits(videoCost)) return;
     setVideoBusy(true);
     setVideoError(null);
+    let jobId: string | null = null;
     try {
-      const blobUrl = await generateParallaxVideo(still, still, {
-        duration: 6,
-        fps: 24,
-        amplitude: 0.1,
-        direction: 'circular',
-      });
-      let url = blobUrl;
-      try {
-        const blob = await fetch(blobUrl).then((r) => r.blob());
-        const stored = await persistUserMedia({ blob, kind: 'video', dreamId: detailDream.id });
-        if (stored?.url) url = stored.url;
-      } catch {
-        /* keep blob url for this session */
+      const stills = storyboardFrames
+        .map((frame) => frame.stillUrl || frame.url)
+        .filter((url) => /^https:\/\//i.test(url));
+      if (!stills.length) {
+        throw new Error('The storyboard stills need a public URL before we can animate them. Try generating the storyboard again.');
       }
-      onUpdateDream?.({ parallaxVideoUrl: url });
-      addToast({ type: 'success', message: 'Motion clip is ready.' });
+      setVideoError('Checking stills for clip quality…');
+      const reports = await Promise.all(stills.map((url) => inspectImageForVideo(url)));
+      const combined = combineImageQuality(reports);
+      setClipQuality(combined);
+      await logQualityCheck({
+        dreamId: detailDream.id,
+        assetKind: 'storyboard',
+        report: combined,
+      });
+      const recentNegativeVideo = await recentNegativeVideoFeedback();
+      const route = routeVideoModel({
+        imageQuality: combined,
+        length: narrativeLength,
+        recentNegativeVideo,
+      });
+      jobId = await startGenerationJob({
+        dreamId: detailDream.id,
+        kind: 'video',
+        model: route.model,
+        fallbackModel: route.fallback,
+        routedReason: route.reason,
+        qualityScore: combined.score,
+        qualityVerdict: combined.verdict,
+        qualityReport: combined,
+        prompt: scenes.map((s) => s.caption || s.summary).join(' / '),
+        sourceUrls: stills,
+      });
+      setClipJobId(jobId);
+      setClipModel(route.model);
+      if (route.blocked) {
+        await finishGenerationJob({ jobId, status: 'blocked', error: route.blockReason });
+        throw new Error(qualityFailMessage(combined));
+      }
+      if (!spendCredits(videoCost)) {
+        await finishGenerationJob({ jobId, status: 'blocked', error: 'insufficient-credits' });
+        return;
+      }
+      const clip = await generateDreamClip({
+        scenes,
+        narrative: analysisNarrative || transcript,
+        firstFrameUrl: stills[0],
+        lastFrameUrl: stills[stills.length - 1],
+        length: narrativeLength,
+        model: route.model,
+        duration: route.duration,
+        resolution: route.resolution,
+        dreamId: detailDream.id,
+        qualityScore: combined.score,
+        routedReason: route.reason,
+        onStatus: (message) => setVideoError(message),
+      });
+      await finishGenerationJob({
+        jobId,
+        status: 'completed',
+        resultUrl: clip.url,
+        costUsd: clip.costUsd,
+        model: clip.model || route.model,
+      });
+      onUpdateDream?.({
+        parallaxVideoUrl: clip.url,
+        clipQuality: { score: combined.score, verdict: combined.verdict, reasons: combined.reasons },
+        lastClipJobId: jobId,
+        lastClipModel: clip.model || route.model,
+      });
+      setVideoError(null);
+      addToast({ type: 'success', message: `Dream clip is ready · ${route.model.split('/')[1] || 'routed'}.` });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Video generation failed.';
+      await finishGenerationJob({ jobId, status: 'failed', error: message });
       setVideoError(message);
       addToast({ type: 'error', message });
     } finally {
@@ -433,6 +623,8 @@ export function DreamDetailScreen({
   const videoDuration = formatDuration(detailDream.videoCapture?.duration);
   const audioDuration = formatDuration(detailDream.audioCapture?.duration);
   const presented = presentDream(detailDream);
+  const pipeline = deriveDreamPipelineStatus(detailDream, detailDream.pipelineStatus);
+  const pipelineIncomplete = missingPipelineSteps(pipeline).length > 0;
 
   const storyboardFrames = useMemo(
     () => normalizeStoryboardFrames(detailDream.storyboardImages),
@@ -513,27 +705,38 @@ export function DreamDetailScreen({
         />
 
         <div className="space-y-4 p-5 sm:p-6 pt-4">
-          {(detailDream.processingStatus === 'failed' || retrying || (
-            isStuckJournalDream(detailDream) && (detailDream.captureMode === 'audio' || Boolean(detailDream.audioCapture))
-          )) && (
-            <div className="rounded-2xl border border-line bg-parchment/60 p-4 flex items-center justify-between gap-3">
-              <p className="text-sm text-muted">
-                {retrying
-                  ? 'Transcribing your recording…'
-                  : 'This audio journal is saved but not transcribed yet.'}
-              </p>
-              <button
-                type="button"
-                onClick={() => {
-                  retriedIdRef.current = null;
-                  void retryMediaProcessing();
-                }}
-                disabled={retrying}
-                className="shrink-0 text-xs font-medium px-3 py-1.5 rounded-full border border-line bg-cream hover:bg-parchment disabled:opacity-50"
-              >
-                {retrying ? 'Working…' : 'Retry transcription'}
-              </button>
-            </div>
+          {detailDream.generatedImage?.url && (
+            <AssetFeedback
+              dreamId={detailDream.id}
+              assetKind="still"
+              assetUrl={detailDream.generatedImage.url}
+            />
+          )}
+          {(pipelineIncomplete || retrying) && (
+            <>
+              <PipelineProgress
+                steps={pipelineProgressSteps(pipeline)}
+                title="Dream pipeline"
+              />
+              <div className="rounded-2xl border border-line bg-parchment/60 p-4 flex items-center justify-between gap-3">
+                <p className="text-sm text-muted">
+                  {retrying
+                    ? 'Filling in missing transcription, analysis, or image…'
+                    : 'Some steps are still missing. We retry automatically every hour, or you can run them now.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    retriedIdRef.current = null;
+                    void retryMediaProcessing();
+                  }}
+                  disabled={retrying}
+                  className="shrink-0 text-xs font-medium px-3 py-1.5 rounded-full border border-line bg-cream hover:bg-parchment disabled:opacity-50"
+                >
+                  {retrying ? 'Working…' : 'Generate missing'}
+                </button>
+              </div>
+            </>
           )}
 
           {(hasVideo || hasAudio) && (
@@ -737,15 +940,16 @@ export function DreamDetailScreen({
             </section>
           )}
 
-          {scenes.length >= 2 && (
+          {panelCount >= 2 && (
             <section className="rounded-2xl border border-line bg-cream p-4">
               <h3 className="font-semibold text-sm text-ink mb-1">Storyboard</h3>
               <p className="text-[11px] text-muted mb-3">
-                This dream looks like {scenes.length} scenes. Generate a comic-style sequence
+                {narrativeLength === 'long' ? 'Long dream' : 'Medium dream'} — {panelCount} comic panels
+                with captions drawn on the page (not by the image model)
                 {isPremium ? ' — included with your plan.' : ` — ${storyboardCost} image credits.`}
               </p>
               {storyboardFrames.length ? (
-                <div className="grid grid-cols-2 gap-2">
+                <div className={`grid gap-2 ${panelCount === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
                   {storyboardFrames.map((frame, index) => (
                     <button
                       key={`${frame.url}-${index}`}
@@ -760,7 +964,7 @@ export function DreamDetailScreen({
                       <img src={frame.url} alt="" className="w-full h-40 object-cover pointer-events-none" />
                       <span className="absolute inset-0" aria-hidden />
                       <span className="relative block px-2 py-1.5 text-[11px] text-ink font-medium bg-parchment/95">
-                        {index + 1}. {frame.title} · Open
+                        {index + 1}. {frame.title}
                       </span>
                     </button>
                   ))}
@@ -772,40 +976,69 @@ export function DreamDetailScreen({
                   disabled={storyboardBusy}
                   className="w-full bg-parchment hover:bg-sage/15 border border-line text-ink py-2.5 rounded-xl text-sm font-medium disabled:opacity-50"
                 >
-                  {storyboardBusy ? 'Painting scenes…' : 'Generate storyboard'}
+                  {storyboardBusy ? 'Painting panels…' : `Generate ${panelCount}-panel comic`}
                 </button>
               )}
               {storyboardError && <p className="mt-2 text-xs text-duskDeep">{storyboardError}</p>}
+              {storyboardFrames.length > 0 && (
+                <AssetFeedback
+                  dreamId={detailDream.id}
+                  assetKind="storyboard"
+                  assetUrl={detailDream.storyboardComicUrl || storyboardFrames[0]?.url}
+                />
+              )}
             </section>
           )}
 
+          {storyboardFrames.length >= 2 && (
           <section className="rounded-2xl border border-line bg-cream p-4">
-            <h3 className="font-semibold text-sm text-ink mb-1">Dream video</h3>
+            <h3 className="font-semibold text-sm text-ink mb-1">Dream clip</h3>
             <p className="text-[11px] text-muted mb-3">
-              Animate the summary image into a short motion clip
-              {isPremium ? ' — included with your plan.' : ` — ${videoCost} image credits.`}
+              {storyboardFrames.length
+                ? `A short clip that plays through the ${storyboardFrames.length} storyboard beats — not a moving camera on a photo.`
+                : 'Generate the storyboard first. The clip uses those panels as the first and last frames.'}
+              {isPremium ? ' Included with your plan.' : ` ${videoCost} image credits.`}
             </p>
+            {(clipQuality || detailDream.clipQuality) && (
+              <p className="text-[11px] text-muted mb-2">
+                Stills scored {(clipQuality || detailDream.clipQuality)?.score}/100
+                {' · '}
+                {(clipQuality || detailDream.clipQuality)?.verdict}
+                {(clipQuality || detailDream.clipQuality)?.reasons?.length
+                  ? ` · ${(clipQuality || detailDream.clipQuality)?.reasons?.join(', ')}`
+                  : ''}
+              </p>
+            )}
             {detailDream.parallaxVideoUrl ? (
               <video
                 src={detailDream.parallaxVideoUrl}
                 controls
                 playsInline
-                loop
                 className="w-full rounded-xl bg-ink max-h-64"
-                poster={detailDream.generatedImage?.url}
+                poster={storyboardFrames[0]?.stillUrl || storyboardFrames[0]?.url || detailDream.generatedImage?.url}
               />
             ) : (
               <button
                 type="button"
                 onClick={() => void runVideo()}
-                disabled={videoBusy || !detailDream.generatedImage?.url}
+                disabled={videoBusy || storyboardFrames.length < 2}
                 className="w-full bg-parchment hover:bg-sage/15 border border-line text-ink py-2.5 rounded-xl text-sm font-medium disabled:opacity-50"
               >
-                {videoBusy ? 'Rendering clip…' : 'Generate video'}
+                {videoBusy ? (videoError || 'Rendering clip…') : 'Generate clip'}
               </button>
             )}
-            {videoError && <p className="mt-2 text-xs text-duskDeep">{videoError}</p>}
+            {videoError && !videoBusy && <p className="mt-2 text-xs text-duskDeep">{videoError}</p>}
+            {detailDream.parallaxVideoUrl && (
+              <AssetFeedback
+                dreamId={detailDream.id}
+                jobId={clipJobId || detailDream.lastClipJobId}
+                assetKind="video"
+                assetUrl={detailDream.parallaxVideoUrl}
+                model={clipModel || detailDream.lastClipModel || undefined}
+              />
+            )}
           </section>
+          )}
 
           {detailDream.captureMode === 'photo' && (
             <div className="rounded-2xl border border-sage/20 bg-sage/5 px-4 py-2.5 flex items-center gap-2 text-sm text-sageDark">
@@ -994,7 +1227,7 @@ export function DreamDetailScreen({
 
 function normalizeStoryboardFrames(
   raw: Dream['storyboardImages'],
-): { url: string; title: string; prompt: string }[] {
+): { url: string; title: string; prompt: string; caption?: string; stillUrl?: string }[] {
   if (!Array.isArray(raw)) return [];
   return raw
     .map((frame, index) => {
@@ -1004,7 +1237,9 @@ function normalizeStoryboardFrames(
         url,
         title: String(frame.title || `Scene ${index + 1}`),
         prompt: String(frame.prompt || ''),
+        caption: frame.caption,
+        stillUrl: frame.stillUrl,
       };
     })
-    .filter((frame): frame is { url: string; title: string; prompt: string } => Boolean(frame));
+    .filter((frame) => Boolean(frame)) as { url: string; title: string; prompt: string; caption?: string; stillUrl?: string }[];
 }

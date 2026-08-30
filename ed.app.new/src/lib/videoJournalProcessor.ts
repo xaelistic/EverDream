@@ -11,6 +11,7 @@
 import { transcribeAudio as transcribeWithWhisper } from './transcriptionWhisper';
 import { analyzeDream, type DreamAnalysis } from './dream-analyzer';
 import { detectDreamScenes, type DreamScene } from './dreamScenes';
+import { classifyDreamLength, type DreamNarrativeLength } from './dreamLength';
 import { normalizeCategory, normalizeEmotion, deriveDreamTitle } from './dreamClassify';
 import { cleanDreamTranscript, dreamTellingFromTranscript } from './cleanDreamTranscript';
 import { guessAudioMime, resolveJournalAudioBlob, resolveJournalVideoBlob } from './audioJournal';
@@ -681,6 +682,7 @@ export async function processTextJournal(
   analysis: DreamAnalysis;
   generatedImage: VideoJournalDream['generatedImage'];
   scenes: DreamScene[];
+  narrativeLength: DreamNarrativeLength;
 }> {
   const trimmed = text.trim();
   onStep?.('analyse');
@@ -688,7 +690,9 @@ export async function processTextJournal(
   analysis.category = normalizeCategory(analysis.category, trimmed, analysis.valence);
   analysis.emotion = normalizeEmotion(analysis.emotion, { text: trimmed, valence: analysis.valence });
   analysis.nugget = deriveDreamTitle(analysis.nugget, analysis.narrative || trimmed);
-  const scenes = detectDreamScenes(trimmed || analysis.narrative);
+  const source = trimmed || analysis.narrative;
+  const narrativeLength = classifyDreamLength(source);
+  const scenes = detectDreamScenes(source);
   onStep?.('image');
   let generatedImage: VideoJournalDream['generatedImage'] = null;
   try {
@@ -705,5 +709,5 @@ export async function processTextJournal(
   } catch (error) {
     console.warn('[text_journal] image gen failed:', error);
   }
-  return { analysis, generatedImage, scenes };
+  return { analysis, generatedImage, scenes, narrativeLength };
 }

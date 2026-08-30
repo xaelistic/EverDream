@@ -468,7 +468,9 @@ export function ProfileHub({ onClose, navigate, onFriendAdded }: ProfileHubProps
       card={card}
       isPearl={isPearl}
       displayName={profile.displayName}
+      handle={profile.handle}
       friendCode={profile.friendCode}
+      onHandleChange={(next) => updateField('handle', next)}
       onFriendAdded={onFriendAdded}
     />
   );

@@ -571,10 +571,11 @@ export function blobToPreviewUrl(blob: Blob): string {
   return URL.createObjectURL(blob);
 }
 
-export async function shareImageBlob(
+export async function shareFileBlob(
   blob: Blob,
   filename: string,
   title: string,
+  text = 'Shared from EverDream · everdream.app 🌙',
 ): Promise<'shared' | 'downloaded'> {
   const type = blob.type || 'image/png';
   const file = new File([blob], filename, { type });
@@ -588,7 +589,7 @@ export async function shareImageBlob(
       await navigator.share({
         files: [file],
         title,
-        text: 'Shared from EverDream',
+        text,
       });
       return 'shared';
     } catch (err) {
@@ -618,4 +619,25 @@ export async function shareCard(
     dream: 'My Dream',
   };
   return shareImageBlob(blob, filename, titles[kind]);
+}
+
+export async function shareImageBlob(
+  blob: Blob,
+  filename: string,
+  title: string,
+): Promise<'shared' | 'downloaded'> {
+  return shareFileBlob(blob, filename, title);
+}
+
+export async function shareVideoBlob(
+  blob: Blob,
+  filename: string,
+  title: string,
+): Promise<'shared' | 'downloaded'> {
+  return shareFileBlob(
+    blob,
+    filename,
+    title,
+    `"${title}" — a dream clip from EverDream 🌙 everdream.app`,
+  );
 }

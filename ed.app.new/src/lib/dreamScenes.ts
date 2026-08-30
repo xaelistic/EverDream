@@ -1,14 +1,13 @@
 import { cleanDreamTranscript } from './cleanDreamTranscript';
+import { classifyDreamLength, storyboardPanelCount } from './dreamLength';
 
 export interface DreamScene {
   id: string;
   title: string;
   summary: string;
   prompt: string;
+  caption?: string;
 }
-
-const SCENE_CUE =
-  /(?:^|[.!?]\s+)(then|suddenly|later|next|after that|afterwards|meanwhile|eventually|the scene (?:changed|shifted)|i (?:found|was suddenly|ended up))/i;
 
 export function formatTranscriptParagraphs(text: string): string {
   const cleaned = cleanDreamTranscript(text).replace(/\r\n/g, '\n').replace(/[ \t]+\n/g, '\n').trim();
@@ -37,36 +36,74 @@ export function formatTranscriptParagraphs(text: string): string {
   return paragraphs.join('\n\n');
 }
 
+const PANEL_TITLES: Record<2 | 3, string[]> = {
+  2: ['Opening', 'Turn'],
+  3: ['Opening', 'Middle', 'Close'],
+};
+
+function sentencesOf(text: string): string[] {
+  return text
+    .replace(/\n+/g, ' ')
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function captionFrom(chunk: string): string {
+  const cleaned = chunk.replace(/\s+/g, ' ').trim();
+  if (cleaned.length <= 90) return cleaned;
+  const cut = cleaned.slice(0, 87);
+  const at = cut.lastIndexOf(' ');
+  return `${(at > 40 ? cut.slice(0, at) : cut).trim()}…`;
+}
+
+function sceneFromChunk(chunk: string, index: number, titles: string[]): DreamScene {
+  const text = chunk.replace(/\s+/g, ' ').trim();
+  return {
+    id: `scene-${index + 1}`,
+    title: titles[index] || `Scene ${index + 1}`,
+    summary: text.slice(0, 180),
+    prompt: text.slice(0, 420),
+    caption: captionFrom(text),
+  };
+}
+
+/** Split a dream telling into exactly 2 or 3 comic panels. */
+export function splitIntoPanels(text: string, count: 2 | 3): DreamScene[] {
+  const source = cleanDreamTranscript(text || '').trim();
+  if (!source) return [];
+  const titles = PANEL_TITLES[count];
+  const sentences = sentencesOf(source);
+  const chunks: string[] = [];
+
+  if (sentences.length >= count) {
+    const size = Math.ceil(sentences.length / count);
+    for (let i = 0; i < count; i++) {
+      const part = sentences.slice(i * size, i === count - 1 ? sentences.length : (i + 1) * size).join(' ');
+      if (part) chunks.push(part);
+    }
+  } else {
+    const size = Math.ceil(source.length / count);
+    for (let i = 0; i < count; i++) {
+      const start = i * size;
+      const end = i === count - 1 ? source.length : (i + 1) * size;
+      const slice = source.slice(start, end).trim();
+      if (slice) chunks.push(slice);
+    }
+  }
+
+  while (chunks.length < count && chunks.length > 0) {
+    chunks.push(chunks[chunks.length - 1]);
+  }
+
+  return chunks.slice(0, count).map((chunk, index) => sceneFromChunk(chunk, index, titles));
+}
+
 export function detectDreamScenes(text: string): DreamScene[] {
   const source = (text || '').trim();
-  if (source.length < 80) return [];
-
-  const paragraphs = formatTranscriptParagraphs(source)
-    .split(/\n\n/)
-    .map((p) => p.trim())
-    .filter((p) => p.length > 40);
-
-  let chunks = paragraphs;
-  if (chunks.length < 2) {
-    const parts = source.split(SCENE_CUE).map((p) => p.trim()).filter((p) => p.length > 40);
-    if (parts.length >= 2) chunks = parts;
-  }
-
-  if (chunks.length < 2 && source.length > 500) {
-    const mid = Math.floor(source.length / 2);
-    const split = source.lastIndexOf('. ', mid);
-    const at = split > 80 ? split + 1 : mid;
-    chunks = [source.slice(0, at).trim(), source.slice(at).trim()].filter((p) => p.length > 40);
-  }
-
-  if (chunks.length < 2) return [];
-
-  return chunks.slice(0, 6).map((chunk, index) => ({
-    id: `scene-${index + 1}`,
-    title: `Scene ${index + 1}`,
-    summary: chunk.slice(0, 180),
-    prompt: chunk.slice(0, 420),
-  }));
+  const panels = storyboardPanelCount(classifyDreamLength(source));
+  if (!panels) return [];
+  return splitIntoPanels(source, panels);
 }
 
 export function analysisLooksPending(meaning?: string, category?: string, themes?: string[]): boolean {

@@ -26,8 +26,29 @@ export interface FriendRow {
 
 export type InviteChannel = 'email' | 'whatsapp' | 'sms' | 'twitter' | 'native' | 'copy';
 
+export function normalizeHandle(value: string): string {
+  return value.trim().replace(/^@+/, '').toLowerCase();
+}
+
 function slugQuery(value: string): string {
-  return value.trim().replace(/^@/, '');
+  return normalizeHandle(value);
+}
+
+function hitFromRpc(row: {
+  id?: string;
+  handle?: string | null;
+  display_name?: string | null;
+  avatar_url?: string | null;
+  friend_code?: string | null;
+  status?: string | null;
+}): DreamerHit {
+  return {
+    id: String(row.id || ''),
+    handle: row.handle || null,
+    displayName: row.display_name || row.handle || 'Dreamer',
+    avatarUrl: row.avatar_url || null,
+    friendCode: row.friend_code || null,
+  };
 }
 
 function profileIdFromRow(row: Record<string, unknown> | null): string | null {
@@ -48,20 +69,61 @@ export async function searchDreamers(raw: string): Promise<DreamerHit[]> {
   if (error) throw new Error(error.message);
   const me = await getProfile();
   return (data || [])
-    .map((row: {
-      id: string;
-      handle?: string | null;
-      display_name?: string | null;
-      avatar_url?: string | null;
-      friend_code?: string | null;
-    }) => ({
-      id: row.id,
-      handle: row.handle || null,
-      displayName: row.display_name || row.handle || 'Dreamer',
-      avatarUrl: row.avatar_url || null,
-      friendCode: row.friend_code || null,
-    }))
-    .filter((hit: DreamerHit) => hit.id !== me?.id);
+    .map(hitFromRpc)
+    .filter((hit: DreamerHit) => hit.id && hit.id !== me?.id);
+}
+
+export async function addFriendById(profileId: string): Promise<DreamerHit> {
+  const { data, error } = await supabase.rpc('add_friend', { target: profileId });
+  if (!error) {
+    const row = Array.isArray(data) ? data[0] : data;
+    if (row?.id) return hitFromRpc(row);
+  }
+  if (error && !/function|does not exist|schema cache|404/i.test(error.message)) {
+    throw new Error(error.message.replace(/^.*ERROR:\s*/i, ''));
+  }
+
+  const requesterId = await myProfileId();
+  if (!requesterId) throw new Error('Profile not found. Sign out and back in.');
+  const { error: insertError } = await supabase.from('friendships').insert({
+    requester_id: requesterId,
+    addressee_id: profileId,
+    status: 'accepted',
+  });
+  if (insertError && !/duplicate|unique/i.test(insertError.message)) {
+    throw new Error(insertError.message);
+  }
+  if (insertError) {
+    await supabase
+      .from('friendships')
+      .update({ status: 'accepted', updated_at: new Date().toISOString() })
+      .or(
+        `and(requester_id.eq.${requesterId},addressee_id.eq.${profileId}),and(requester_id.eq.${profileId},addressee_id.eq.${requesterId})`,
+      );
+  }
+  const { data: people } = await supabase.rpc('get_dreamers', { ids: [profileId] });
+  const person = Array.isArray(people) ? people[0] : people;
+  if (!person?.id) throw new Error('Could not add that person.');
+  return hitFromRpc(person);
+}
+
+export async function connectByHandle(username: string): Promise<DreamerHit> {
+  const cleaned = normalizeHandle(username);
+  if (cleaned.length < 2) throw new Error('Enter a username like @luna.');
+  const { data, error } = await supabase.rpc('connect_by_handle', { username: cleaned });
+  if (!error) {
+    const row = Array.isArray(data) ? data[0] : data;
+    if (row?.id) return hitFromRpc(row);
+  }
+  if (error && !/function|does not exist|schema cache|404/i.test(error.message)) {
+    throw new Error(error.message.replace(/^.*ERROR:\s*/i, ''));
+  }
+  const hits = await searchDreamers(cleaned);
+  const exact = hits.find((hit) => normalizeHandle(hit.handle || '') === cleaned);
+  if (exact) return addFriendById(exact.id);
+  if (hits.length === 1) return addFriendById(hits[0].id);
+  if (hits.length > 1) throw new Error('Several people match that. Pick one from the search results.');
+  throw new Error(`No one has the username @${cleaned}.`);
 }
 
 export async function sendFriendRequest(addresseeId: string): Promise<void> {

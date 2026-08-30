@@ -41,6 +41,8 @@ interface GenerateImageRequest {
   referenceImage?: string;
   model?: string;
   look?: string;
+  noOverlayText?: boolean;
+  needsReadableText?: boolean;
 }
 
 interface GenerationResult {
@@ -117,11 +119,27 @@ function corsHeaders(req: Request): Record<string, string> {
   };
 }
 
-function buildEnhancedPrompt(prompt: string, style: string, look?: string): string {
+function buildEnhancedPrompt(
+  prompt: string,
+  style: string,
+  look?: string,
+  flags?: { noOverlayText?: boolean; needsReadableText?: boolean },
+): string {
   const styleDesc = STYLE_MAP[style] || STYLE_MAP.dreamlike;
   const lookPart = look && look.trim() ? look.trim() : '';
   const finish = finishVariation(`${prompt}|${style}|${lookPart}`);
-  return [prompt.trim(), styleDesc, lookPart, finish].filter(Boolean).join(', ');
+  const parts = [prompt.trim(), styleDesc, lookPart, finish];
+  if (flags?.noOverlayText) {
+    parts.push(
+      'clean cinematic still with no captions, titles, subtitles, speech bubbles, watermarks, UI, or overlay lettering',
+    );
+  }
+  if (flags?.needsReadableText) {
+    parts.push(
+      'any in-world writing (signs, notes, labels) is short correctly spelled English, large and fully legible, never garbled letters',
+    );
+  }
+  return parts.filter(Boolean).join(', ');
 }
 
 function jsonResponse(
@@ -280,17 +298,24 @@ function successResponse(
   );
 }
 
-function resolveOpenRouterModel(quality?: string, requested?: string): string {
+function resolveOpenRouterModel(
+  quality?: string,
+  requested?: string,
+  needsReadableText?: boolean,
+): string {
   const cheap =
     Deno.env.get('OPENROUTER_IMAGE_MODEL') || DEFAULT_OPENROUTER_MODEL;
   const premium =
     Deno.env.get('OPENROUTER_IMAGE_MODEL_QUALITY') ||
     DEFAULT_OPENROUTER_QUALITY_MODEL;
+  const textModel =
+    Deno.env.get('OPENROUTER_IMAGE_MODEL_TEXT') || premium;
 
   // Only allow an explicit override if it looks like an OpenRouter slug.
   if (requested && /^[\w.-]+\/[\w.-]+$/.test(requested)) {
     return requested;
   }
+  if (needsReadableText) return textModel;
   return quality === 'quality' ? premium : cheap;
 }
 
@@ -324,12 +349,13 @@ async function generateWithOpenRouter(
   requestedModel?: string,
   referenceImage?: string,
   look?: string,
+  flags?: { noOverlayText?: boolean; needsReadableText?: boolean },
 ): Promise<GenerationResult> {
   const apiKey = Deno.env.get('OPENROUTER_API_KEY');
   if (!apiKey) throw new Error('OPENROUTER_API_KEY not set');
 
-  const model = resolveOpenRouterModel(quality, requestedModel);
-  const enhancedPrompt = buildEnhancedPrompt(prompt, style, look);
+  const model = resolveOpenRouterModel(quality, requestedModel, flags?.needsReadableText);
+  const enhancedPrompt = buildEnhancedPrompt(prompt, style, look, flags);
   const aspectRatio = aspectRatioFromSize(width, height);
   const inputReferences = parseReference(referenceImage);
 
@@ -448,11 +474,12 @@ async function generateWithHuggingFace(
   width: number,
   height: number,
   look?: string,
+  flags?: { noOverlayText?: boolean; needsReadableText?: boolean },
 ): Promise<GenerationResult> {
   const apiKey = Deno.env.get('HF_INFERENCE_API_KEY');
   if (!apiKey) throw new Error('HF_INFERENCE_API_KEY not set');
 
-  const enhancedPrompt = buildEnhancedPrompt(prompt, style, look);
+  const enhancedPrompt = buildEnhancedPrompt(prompt, style, look, flags);
 
   const response = await fetchWithTimeout(HF_API_URL, {
     method: 'POST',
@@ -503,11 +530,12 @@ async function generateWithFalAI(
   width: number,
   height: number,
   look?: string,
+  flags?: { noOverlayText?: boolean; needsReadableText?: boolean },
 ): Promise<GenerationResult> {
   const apiKey = Deno.env.get('FAL_AI_KEY');
   if (!apiKey) throw new Error('FAL_AI_KEY not set');
 
-  const enhancedPrompt = buildEnhancedPrompt(prompt, style, look);
+  const enhancedPrompt = buildEnhancedPrompt(prompt, style, look, flags);
 
   const response = await fetchWithTimeout(FAL_API_URL, {
     method: 'POST',
@@ -583,7 +611,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
       referenceImage,
       model: requestedModel,
       look,
+      noOverlayText,
+      needsReadableText,
     } = body;
+    const promptFlags = { noOverlayText, needsReadableText };
 
     if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
       return errorResponse(
@@ -618,6 +649,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         requestedModel,
         referenceImage,
         look,
+        promptFlags,
       );
       console.log(
         `[generate-image] OpenRouter succeeded model=${result.model} cost=${result.cost_usd ?? 'n/a'}`,
@@ -632,7 +664,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     // 2. Fal AI
     try {
       console.log('[generate-image] Trying Fal AI...');
-      const result = await generateWithFalAI(prompt, style, w, h, look);
+      const result = await generateWithFalAI(prompt, style, w, h, look, promptFlags);
       console.log('[generate-image] Fal AI succeeded');
       return successResponse(result, outputFormat, headers);
     } catch (err) {
@@ -644,7 +676,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     // 3. Hugging Face (free) + one retry if the model is loading
     try {
       console.log('[generate-image] Trying Hugging Face...');
-      const result = await generateWithHuggingFace(prompt, style, w, h, look);
+      const result = await generateWithHuggingFace(prompt, style, w, h, look, promptFlags);
       console.log('[generate-image] Hugging Face succeeded');
       return successResponse(result, outputFormat, headers);
     } catch (err) {
@@ -656,7 +688,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         console.log('[generate-image] Waiting for HF model to load...');
         await delay(5000);
         try {
-          const retryResult = await generateWithHuggingFace(prompt, style, w, h, look);
+          const retryResult = await generateWithHuggingFace(prompt, style, w, h, look, promptFlags);
           console.log('[generate-image] Hugging Face succeeded on retry');
           return successResponse(retryResult, outputFormat, headers);
         } catch (retryErr) {

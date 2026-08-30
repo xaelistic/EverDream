@@ -57,6 +57,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
       requiredSecrets: ['HF_INFERENCE_API_KEY'],
       missingSecrets: [],
     },
+    {
+      name: 'complete-dream-pipeline',
+      configured: true,
+      requiredSecrets: ['OPENROUTER_API_KEY'],
+      missingSecrets: [],
+    },
+    {
+      name: 'generate-video',
+      configured: true,
+      requiredSecrets: ['OPENROUTER_API_KEY'],
+      missingSecrets: [],
+    },
   ];
 
   // Check each function's secrets

@@ -114,7 +114,7 @@ import {
 } from './lib/nightSleep';
 import { persistWearableRecords } from './lib/wearableService';
 import { mergeJournalDreams } from './lib/audioJournal';
-import { isStuckJournalDream, reprocessStuckMediaDream } from './lib/stuckDreamProcessor';
+import { startDreamPipelineCatchup } from './lib/dreamPipelineCatchup';
 import { 
   updateUserProfileFromDream, 
   enrichAnalysisWithProfile, 
@@ -219,14 +219,22 @@ const DreamJournalApp = () => {
     title?: string;
     processingStatus?: 'processing' | 'complete' | 'failed';
     processingStep?: 'transcribe' | 'analyse' | 'image' | 'complete';
+    pipelineStatus?: import('./lib/dreamPipelineStatus').DreamPipelineStatus | null;
     moodValence?: number;
     sourcePhotos?: string[];
     audioFile?: string;
-    scenes?: { id: string; title: string; summary: string; prompt: string }[];
-    storyboardImages?: { url: string; title: string; prompt: string }[];
+    scenes?: { id: string; title: string; summary: string; prompt: string; caption?: string }[];
+    storyboardImages?: { url: string; title: string; prompt: string; caption?: string; stillUrl?: string }[];
+    storyboardComicUrl?: string | null;
+    narrativeLength?: 'short' | 'medium' | 'long';
+    clipQuality?: { score: number; verdict: string; reasons: string[] } | null;
+    lastClipJobId?: string | null;
+    lastClipModel?: string | null;
   };
 
   const [dreams, setDreams] = useState<Dream[]>([]);
+  const dreamsRef = useRef<Dream[]>([]);
+  dreamsRef.current = dreams;
   const [isRecording, setIsRecording] = useState(false);
   const [currentEntry, setCurrentEntry] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -612,37 +620,8 @@ const DreamJournalApp = () => {
           } catch (err) {
             console.warn('[App] Local dream backfill failed:', err);
           }
-          try {
-            const stored = await window.storage?.get('dreams');
-            const local = stored?.value ? (JSON.parse(stored.value) as Dream[]) : [];
-            for (const dream of local) {
-              if (!isStuckJournalDream(dream)) continue;
-              try {
-                const nextDream = await reprocessStuckMediaDream(dream);
-                if (!nextDream) continue;
-                const patched = { ...dream, ...nextDream } as Dream;
-                setDreams((prev) => {
-                  const next = prev.map((d) => (d.id === dream.id ? patched : d));
-                  saveDreamsToStorage(next).catch(console.error);
-                  return next;
-                });
-                syncDreamToSupabase(patched).catch(console.error);
-              } catch (err) {
-                console.warn('[App] Stuck dream reprocess failed:', dream.id, err);
-                setDreams((prev) => {
-                  const next = prev.map((d) =>
-                    d.id === dream.id
-                      ? { ...d, processingStatus: 'failed' as const, processingStep: 'transcribe' as const }
-                      : d,
-                  );
-                  saveDreamsToStorage(next).catch(console.error);
-                  return next;
-                });
-              }
-            }
-          } catch (err) {
-            console.warn('[App] Stuck dream reprocess failed:', err);
-          }
+          /* Incomplete transcription / analysis / image is handled by the
+             hourly pipeline catch-up listener started below. */
         });
       } else {
         console.log('[App] Supabase not configured — local mode only');
@@ -772,6 +751,30 @@ const DreamJournalApp = () => {
       return next;
     });
   };
+
+  useEffect(() => {
+    const stop = startDreamPipelineCatchup({
+      getDreams: () => dreamsRef.current.filter((dream) => !dream.isSample),
+      applyDream: (id, patch) => {
+        let nextDream: Dream | undefined;
+        setDreams((prev) => {
+          const next = prev.map((dream) => {
+            if (dream.id !== id) return dream;
+            nextDream = { ...dream, ...patch } as Dream;
+            return nextDream;
+          });
+          saveDreamsToStorage(next).catch(console.error);
+          return next;
+        });
+        if (nextDream) {
+          syncDreamToSupabase(nextDream).catch((err: unknown) => {
+            console.warn('[PipelineCatchup] sync failed:', err);
+          });
+        }
+      },
+    });
+    return stop;
+  }, []);
 
   const applyNightSleep = <T extends Dream>(dream: T): T => {
     const night = latestNightSleep(wearableData);
@@ -2342,7 +2345,7 @@ const DreamJournalApp = () => {
 
               (async () => {
                 try {
-                  const { analysis, generatedImage, scenes } = await processTextJournal(sourceText, (step) => {
+                  const { analysis, generatedImage, scenes, narrativeLength } = await processTextJournal(sourceText, (step) => {
                     patchDreamById(dreamId, { processingStatus: 'processing', processingStep: step });
                   });
                   let image = generatedImage;
@@ -2365,9 +2368,10 @@ const DreamJournalApp = () => {
                     title: analysis.nugget,
                     generatedImage: image,
                     scenes,
-                    processingStatus: 'complete',
-                    processingStep: 'complete',
-                  };
+                    narrativeLength,
+                    processingStatus: 'complete' as const,
+                    processingStep: 'complete' as const,
+                  } as Dream;
                   setDreams((prev) => {
                     const next = prev.map((d) => (d.id === dreamId ? finalDream : d));
                     saveDreamsToStorage(next).catch(console.error);

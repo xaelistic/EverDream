@@ -122,5 +122,12 @@ describe('dreamsRecord audio hydrate', () => {
     expect(audio?.path).toBe('user/audio-1.webm');
     expect(audio?.mediaId).toBe('media-9');
     expect(hydrated.mediaStoragePath).toBe('user/audio-1.webm');
+    expect(hydrated.pipelineStatus?.audio_captured).toBe('done');
+    expect(hydrated.pipelineStatus?.transcription).toBe('pending');
+    expect(row.pipeline_status).toMatchObject({
+      audio_captured: 'done',
+      transcription: 'pending',
+      image: 'pending',
+    });
   });
 });

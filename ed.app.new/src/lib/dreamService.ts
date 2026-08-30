@@ -49,6 +49,7 @@ export interface DreamData {
   mediaStoragePath?: string | null;
   processingStatus?: string;
   processingStep?: string;
+  pipelineStatus?: import('./dreamPipelineStatus').DreamPipelineStatus | null;
   date?: string;
 }
 
@@ -156,6 +157,7 @@ function dreamToRecord(dream: DreamData, userId: string) {
     mediaStoragePath: dream.mediaStoragePath,
     processingStatus: dream.processingStatus,
     processingStep: dream.processingStep,
+    pipelineStatus: dream.pipelineStatus,
     generatedImage: dream.generatedImage || (dream.imageUrl
       ? {
           url: dream.imageUrl,
@@ -207,6 +209,7 @@ function recordToDream(record: Record<string, unknown>): DreamData {
     mediaStoragePath: hydrated.mediaStoragePath || null,
     processingStatus: hydrated.processingStatus,
     processingStep: hydrated.processingStep,
+    pipelineStatus: hydrated.pipelineStatus,
   };
 }
 

@@ -8,6 +8,12 @@ import {
   stopBacklogRetryLoop,
 } from '../../lib/backlogRetry';
 import { getQueuedTaskCount } from '../../lib/taskBacklog';
+import {
+  getPipelineCatchupIntervalMs,
+  getPipelineCatchupLastRun,
+  isPipelineCatchupRunning,
+  runDreamPipelineCatchup,
+} from '../../lib/dreamPipelineCatchup';
 
 interface CronJob {
   id: string;
@@ -43,6 +49,17 @@ export default function CronManager() {
           description: 'Retries failed transcription and analysis tasks every 15 minutes',
         },
         {
+          id: 'dream-pipeline',
+          name: 'Dream Pipeline Catch-up',
+          intervalMs: getPipelineCatchupIntervalMs(),
+          status: isPipelineCatchupRunning() ? 'running' : 'stopped',
+          lastRun: getPipelineCatchupLastRun() || lastManualRun,
+          nextRun: isPipelineCatchupRunning()
+            ? new Date(Date.now() + getPipelineCatchupIntervalMs()).toISOString()
+            : null,
+          description: 'Hourly: checks each dream and generates missing transcription, analysis, or image',
+        },
+        {
           id: 'media-cleanup',
           name: 'Media Storage Cleanup',
           intervalMs: 24 * 60 * 60 * 1000,
@@ -72,6 +89,10 @@ export default function CronManager() {
   const handleRunNow = async (jobId: string) => {
     if (jobId === 'backlog-retry') {
       await retryPendingTasks();
+      setLastManualRun(new Date().toISOString());
+    }
+    if (jobId === 'dream-pipeline') {
+      await runDreamPipelineCatchup();
       setLastManualRun(new Date().toISOString());
     }
   };
@@ -118,16 +139,18 @@ export default function CronManager() {
                 {job.nextRun ? new Date(job.nextRun).toLocaleTimeString() : '—'}
               </div>
             </div>
-            {job.id === 'backlog-retry' && (
+            {(job.id === 'backlog-retry' || job.id === 'dream-pipeline') && (
               <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleToggle(job.id)}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs bg-white/10 text-white/60 hover:bg-white/20"
-                >
-                  {job.status === 'running' ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
-                  {job.status === 'running' ? 'Stop' : 'Start'}
-                </button>
+                {job.id === 'backlog-retry' && (
+                  <button
+                    type="button"
+                    onClick={() => handleToggle(job.id)}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs bg-white/10 text-white/60 hover:bg-white/20"
+                  >
+                    {job.status === 'running' ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
+                    {job.status === 'running' ? 'Stop' : 'Start'}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => handleRunNow(job.id)}

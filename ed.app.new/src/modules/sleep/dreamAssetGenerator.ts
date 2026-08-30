@@ -59,14 +59,35 @@ function assetFromEdge(data: EdgeImageResponse, prompt: string, style: string): 
   };
 }
 
-async function generateViaEdgeFunction(prompt: string, style: string, look?: string): Promise<DreamAsset> {
+export interface GenerateImageOptions {
+  quality?: 'cheap' | 'quality';
+  noOverlayText?: boolean;
+  needsReadableText?: boolean;
+}
+
+async function generateViaEdgeFunction(
+  prompt: string,
+  style: string,
+  look?: string,
+  options?: GenerateImageOptions,
+): Promise<DreamAsset> {
   const spent = await consumeImageCredits(1, 'image_generation');
   if (!spent.ok) {
     throw new Error(`Out of image credits (${spent.remaining} left). Buy a pack or upgrade on Plan & credits.`);
   }
 
   const supabase = getSupabase();
-  const body = { prompt, style, look, width: 1024, height: 1024, format: 'json' as const };
+  const body = {
+    prompt,
+    style,
+    look,
+    width: 1024,
+    height: 1024,
+    format: 'json' as const,
+    quality: options?.quality,
+    noOverlayText: options?.noOverlayText,
+    needsReadableText: options?.needsReadableText,
+  };
 
   try {
     if (supabase) {
@@ -173,7 +194,11 @@ async function generateWithOllama(prompt: string, style: string = 'dreamlike'): 
   };
 }
 
-export async function generateDreamImage(prompt: string, style = 'auto'): Promise<DreamAsset> {
+export async function generateDreamImage(
+  prompt: string,
+  style = 'auto',
+  options?: GenerateImageOptions,
+): Promise<DreamAsset> {
   const text = (prompt || '').trim();
   if (text.length < 3) {
     throw new Error('Need a bit more dream text before an image can be generated.');
@@ -184,6 +209,13 @@ export async function generateDreamImage(prompt: string, style = 'auto'): Promis
   const moodCue = feelingImageCue(loadDailyCheckin()?.energyLevel);
   const withMood = moodCue ? `${text}. ${moodCue}` : text;
   const tasted = applyTasteToPrompt(withMood);
+  const needsReadableText =
+    options?.needsReadableText ??
+    /\b(sign|letter|writing|note|book|label|words?|text)\b/i.test(text);
+  const imageOptions: GenerateImageOptions = {
+    ...options,
+    needsReadableText: options?.noOverlayText ? false : needsReadableText,
+  };
 
   console.log('[AssetGen] recipe', recipe.id, 'style', chosenStyle);
 
@@ -201,7 +233,7 @@ export async function generateDreamImage(prompt: string, style = 'auto'): Promis
     }
   }
 
-  const asset = await generateViaEdgeFunction(tasted, chosenStyle, recipe.fragment);
+  const asset = await generateViaEdgeFunction(tasted, chosenStyle, recipe.fragment, imageOptions);
   return {
     ...asset,
     style: `${chosenStyle}:${recipe.id}`,

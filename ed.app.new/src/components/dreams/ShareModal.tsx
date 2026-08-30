@@ -16,11 +16,15 @@ import {
   dreamToShareInput,
   generateDreamCard,
   shareImageBlob,
+  shareVideoBlob,
   blobToPreviewUrl,
   blobToDataUrl,
   SHARE_FORMATS,
   type ShareCardFormat,
 } from '../../lib/shareCard';
+import { assembleStoryboardComic } from '../../lib/storyboardComic';
+
+type ShareAssetKind = 'still' | 'storyboard' | 'video';
 
 export interface ShareModalProps {
   dream: Dream | ShareableDream | Record<string, unknown> | null;
@@ -42,6 +46,7 @@ const CHANNELS: Array<{
 
 export default function ShareModal({ dream, isOpen, onClose, onShared }: ShareModalProps) {
   const [format, setFormat] = useState<ShareCardFormat>('whatsapp');
+  const [assetKind, setAssetKind] = useState<ShareAssetKind>('still');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
   const [loading, setLoading] = useState(false);
@@ -74,6 +79,14 @@ export default function ShareModal({ dream, isOpen, onClose, onShared }: ShareMo
     : null;
   const imageUrl = shareable ? getDreamImageUrl(shareable) : null;
   const spec = SHARE_FORMATS[format];
+  const raw = (dream || {}) as Record<string, unknown>;
+  const storyboardComicUrl = typeof raw.storyboardComicUrl === 'string' ? raw.storyboardComicUrl : '';
+  const storyboardImages = Array.isArray(raw.storyboardImages)
+    ? (raw.storyboardImages as Array<{ url?: string; stillUrl?: string; title?: string; caption?: string; prompt?: string }>)
+    : [];
+  const clipUrl = typeof raw.parallaxVideoUrl === 'string' ? raw.parallaxVideoUrl : '';
+  const hasStoryboard = Boolean(storyboardComicUrl || storyboardImages.length);
+  const hasClip = Boolean(clipUrl);
 
   useEffect(() => {
     if (!isOpen) {
@@ -84,6 +97,7 @@ export default function ShareModal({ dream, isOpen, onClose, onShared }: ShareMo
       setPreviewBlob(null);
       setStatus(null);
       setFormat('whatsapp');
+      setAssetKind('still');
     }
   }, [isOpen]);
 
@@ -104,7 +118,30 @@ export default function ShareModal({ dream, isOpen, onClose, onShared }: ShareMo
       generatedImage: imageUrl ? { url: imageUrl } : undefined,
     });
 
-    generateDreamCard(input, format)
+    const build = async (): Promise<Blob> => {
+      if (assetKind === 'video') {
+        const response = await fetch(clipUrl);
+        if (!response.ok) throw new Error('Could not load clip');
+        return response.blob();
+      }
+      if (assetKind === 'storyboard') {
+        if (storyboardComicUrl) {
+          const response = await fetch(storyboardComicUrl);
+          if (response.ok) return response.blob();
+        }
+        return assembleStoryboardComic(
+          storyboardImages.map((frame, index) => ({
+            url: frame.stillUrl || frame.url || '',
+            title: frame.title || `Scene ${index + 1}`,
+            caption: frame.caption || frame.prompt || frame.title || '',
+          })).filter((frame) => frame.url),
+          { title: presented?.title || shareable.title },
+        );
+      }
+      return generateDreamCard(input, format);
+    };
+
+    build()
       .then((blob) => {
         if (cancelled) return;
         setPreviewUrl((prev) => {
@@ -123,7 +160,7 @@ export default function ShareModal({ dream, isOpen, onClose, onShared }: ShareMo
     return () => {
       cancelled = true;
     };
-  }, [isOpen, shareable, imageUrl, format, presented?.title, presented?.emotion, presented?.category]);
+  }, [isOpen, shareable, imageUrl, format, assetKind, clipUrl, storyboardComicUrl, presented?.title, presented?.emotion, presented?.category]);
 
   const handleShareVia = useCallback(async () => {
     if (!shareable || !payload) return;
@@ -133,11 +170,21 @@ export default function ShareModal({ dream, isOpen, onClose, onShared }: ShareMo
 
     try {
       if (previewBlob) {
+        const date = new Date(shareable.date).toISOString().split('T')[0];
+        const title = presented?.title || shareable.title || 'My Dream';
+        if (assetKind === 'video') {
+          const result = await shareVideoBlob(previewBlob, `everdream-clip-${date}.mp4`, title);
+          setStatus(result === 'shared' ? 'Choose an app — branded clip from EverDream.' : 'Saved the clip — share from your gallery.');
+          onShared?.();
+          if (result === 'shared') setTimeout(onClose, 500);
+          return;
+        }
         const ext = previewBlob.type.includes('jpeg') || previewBlob.type.includes('jpg') ? 'jpg' : 'png';
+        const kind = assetKind === 'storyboard' ? 'storyboard' : format;
         const result = await shareImageBlob(
           previewBlob,
-          `everdream-${format}-${new Date(shareable.date).toISOString().split('T')[0]}.${ext}`,
-          presented?.title || shareable.title || 'My Dream',
+          `everdream-${kind}-${date}.${ext}`,
+          title,
         );
         setStatus(
           result === 'shared'
@@ -168,7 +215,7 @@ export default function ShareModal({ dream, isOpen, onClose, onShared }: ShareMo
     } finally {
       setSharing(false);
     }
-  }, [shareable, payload, previewBlob, format, presented?.title, onClose, onShared]);
+  }, [shareable, payload, previewBlob, format, assetKind, presented?.title, onClose, onShared]);
 
   const handleCopyLink = useCallback(async () => {
     if (!shareable || !payload) return;
@@ -241,6 +288,29 @@ export default function ShareModal({ dream, isOpen, onClose, onShared }: ShareMo
         </div>
 
         <div className="p-5 space-y-5">
+          {(hasStoryboard || hasClip) && (
+            <div className="flex gap-2">
+              {([
+                { id: 'still' as const, label: 'Still', show: true },
+                { id: 'storyboard' as const, label: 'Storyboard', show: hasStoryboard },
+                { id: 'video' as const, label: 'Clip', show: hasClip },
+              ]).filter((item) => item.show).map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setAssetKind(item.id)}
+                  className={`flex-1 rounded-xl border px-2 py-2 text-xs font-semibold ${
+                    assetKind === item.id
+                      ? 'border-sage bg-sage/10 text-ink'
+                      : 'border-line bg-parchment text-muted'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          )}
+          {assetKind !== 'video' && (
           <div className="grid grid-cols-2 gap-2">
             {CHANNELS.map((channel) => {
               const Icon = channel.icon;
@@ -264,16 +334,17 @@ export default function ShareModal({ dream, isOpen, onClose, onShared }: ShareMo
               );
             })}
           </div>
+          )}
 
           <div className="rounded-[1.75rem] border border-line bg-parchment p-3 shadow-paper">
             <p className="text-[10px] uppercase tracking-[0.18em] text-muted mb-2 text-center">
-              {spec.label} preview
+              {assetKind === 'video' ? 'Clip preview' : assetKind === 'storyboard' ? 'Comic preview' : `${spec.label} preview`}
             </p>
             <div
               className="mx-auto w-full rounded-2xl overflow-hidden border-2 border-sage/20 bg-sage/5 relative"
               style={{
-                maxWidth: format === 'story' ? 200 : format === 'link' ? '100%' : 260,
-                aspectRatio: spec.aspect,
+                maxWidth: assetKind === 'video' ? 260 : format === 'story' ? 200 : format === 'link' ? '100%' : 260,
+                aspectRatio: assetKind === 'video' ? '1 / 1' : spec.aspect,
               }}
             >
               {loading && (
@@ -281,7 +352,9 @@ export default function ShareModal({ dream, isOpen, onClose, onShared }: ShareMo
                   <Loader2 className="w-8 h-8 text-sage animate-spin" />
                 </div>
               )}
-              {previewUrl && !loading ? (
+              {previewUrl && !loading && assetKind === 'video' ? (
+                <video src={previewUrl} controls playsInline className="w-full h-full object-cover bg-ink" />
+              ) : previewUrl && !loading ? (
                 <img
                   src={previewUrl}
                   alt={`${spec.label} share card`}
@@ -297,7 +370,9 @@ export default function ShareModal({ dream, isOpen, onClose, onShared }: ShareMo
               ) : null}
             </div>
             <p className="text-center text-xs text-muted mt-3">
-              Watermarked card — not the raw dream image
+              {assetKind === 'video'
+                ? 'Dream clip with EverDream in the share caption'
+                : 'Watermarked EverDream card — not the raw file'}
             </p>
           </div>
 
@@ -311,7 +386,9 @@ export default function ShareModal({ dream, isOpen, onClose, onShared }: ShareMo
               <span className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-paper border bg-sage text-cream border-sage hover:bg-sageDark">
                 {sharing ? <Loader2 className="w-6 h-6 animate-spin" /> : <Share2 className="w-6 h-6" strokeWidth={1.75} />}
               </span>
-              <span className="text-[11px] font-medium text-ink text-center leading-tight">Share card</span>
+              <span className="text-[11px] font-medium text-ink text-center leading-tight">
+                {assetKind === 'video' ? 'Share clip' : assetKind === 'storyboard' ? 'Share comic' : 'Share card'}
+              </span>
             </button>
             <button
               type="button"
@@ -331,8 +408,11 @@ export default function ShareModal({ dream, isOpen, onClose, onShared }: ShareMo
           )}
 
           <p className="text-center text-[11px] text-muted leading-relaxed px-2">
-            WhatsApp uses a 4:5 card: image on top, dark caption panel underneath
-            so the title stays readable. Story is 9:16, Facebook is 1:1.
+            {assetKind === 'storyboard'
+              ? 'The comic page is assembled in EverDream so captions stay readable, with our mark at the foot.'
+              : assetKind === 'video'
+                ? 'Shares the short dream clip, not a sliding still. Caption includes EverDream.'
+                : 'WhatsApp uses a 4:5 card: image on top, dark caption panel underneath so the title stays readable. Story is 9:16, Facebook is 1:1.'}
           </p>
         </div>
       </div>

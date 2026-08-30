@@ -6,6 +6,13 @@
  * Client ids like "dream-1755-abc" are invalid UUIDs and were rejected.
  */
 
+import {
+  deriveDreamPipelineStatus,
+  normalizePipelineStatus,
+  rollupProcessingFields,
+  type DreamPipelineStatus,
+} from './dreamPipelineStatus';
+
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -86,9 +93,16 @@ export interface JournalDreamLike {
   mediaStoragePath?: string | null;
   processingStatus?: string;
   processingStep?: string;
+  pipelineStatus?: DreamPipelineStatus | null;
   title?: string;
   scenes?: unknown;
-  storyboardImages?: { url: string; title: string; prompt: string }[];
+  storyboardImages?: { url: string; title: string; prompt: string; caption?: string; stillUrl?: string }[];
+  storyboardComicUrl?: string | null;
+  narrativeLength?: 'short' | 'medium' | 'long';
+  parallaxVideoUrl?: string | null;
+  clipQuality?: { score: number; verdict: string; reasons: string[] } | null;
+  lastClipJobId?: string | null;
+  lastClipModel?: string | null;
 }
 
 export function toDreamsUpsertRow(dream: JournalDreamLike, profileId: string): Record<string, unknown> {
@@ -101,6 +115,8 @@ export function toDreamsUpsertRow(dream: JournalDreamLike, profileId: string): R
   ).slice(0, 20000);
   const themes = (Array.isArray(dream.themes) ? dream.themes.map(String) : []).slice(0, 3);
   const imageUrl = compactImageUrl(dream.generatedImage?.url);
+  const pipelineStatus = deriveDreamPipelineStatus(dream, dream.pipelineStatus);
+  const rollup = rollupProcessingFields(pipelineStatus);
 
   return {
     id: cloudIdForDream(dream.id),
@@ -135,6 +151,7 @@ export function toDreamsUpsertRow(dream: JournalDreamLike, profileId: string): R
     is_deleted: false,
     local_created_at: dream.date || new Date().toISOString(),
     local_updated_at: new Date().toISOString(),
+    pipeline_status: pipelineStatus,
     ai_metadata: {
       local_id: dream.id,
       video_capture: dream.videoCapture || null,
@@ -144,9 +161,16 @@ export function toDreamsUpsertRow(dream: JournalDreamLike, profileId: string): R
       sleep_data: dream.sleepData || null,
       scenes: (dream as { scenes?: unknown }).scenes || null,
       storyboard: (dream as { storyboardImages?: unknown }).storyboardImages || null,
+      storyboard_comic_url: dream.storyboardComicUrl || null,
+      narrative_length: dream.narrativeLength || null,
+      parallax_video_url: dream.parallaxVideoUrl || null,
+      clip_quality: dream.clipQuality || null,
+      last_clip_job_id: dream.lastClipJobId || null,
+      last_clip_model: dream.lastClipModel || null,
       has_inline_image: Boolean(dream.generatedImage?.url?.startsWith('data:')),
-      processing_status: dream.processingStatus || null,
-      processing_step: dream.processingStep || null,
+      processing_status: dream.processingStatus || rollup.processingStatus,
+      processing_step: dream.processingStep || rollup.processingStep,
+      pipeline_status: pipelineStatus,
       title: dream.title || null,
     },
   };
@@ -161,8 +185,15 @@ interface DreamsAiMetadata {
   sleep_data?: unknown;
   scenes?: unknown;
   storyboard?: unknown;
+  storyboard_comic_url?: string | null;
+  narrative_length?: 'short' | 'medium' | 'long' | null;
+  parallax_video_url?: string | null;
+  clip_quality?: { score: number; verdict: string; reasons: string[] } | null;
+  last_clip_job_id?: string | null;
+  last_clip_model?: string | null;
   processing_status?: string | null;
   processing_step?: string | null;
+  pipeline_status?: DreamPipelineStatus | null;
   title?: string | null;
 }
 
@@ -175,8 +206,11 @@ export function fromDreamsRow(record: Record<string, unknown>): JournalDreamLike
   const content = String(record.content || '');
   const narrative = typeof record.narrative === 'string' ? record.narrative : content;
   const imageUrl = typeof record.generated_image_url === 'string' ? record.generated_image_url : null;
+  const pipelineStatus =
+    normalizePipelineStatus(record.pipeline_status) ||
+    normalizePipelineStatus(meta.pipeline_status);
 
-  return {
+  const hydratedCore = {
     id: meta.local_id || String(record.id || ''),
     date: String(record.local_created_at || record.timestamp || record.created_at || new Date().toISOString()),
     content,
@@ -207,13 +241,34 @@ export function fromDreamsRow(record: Record<string, unknown>): JournalDreamLike
     mediaStoragePath: (typeof record.media_storage_path === 'string' && record.media_storage_path) || null,
     processingStatus: meta.processing_status || undefined,
     processingStep: meta.processing_step || undefined,
+    pipelineStatus,
     title: meta.title || (typeof record.nugget === 'string' ? record.nugget : undefined),
     scenes: Array.isArray(meta.scenes) ? meta.scenes : undefined,
     storyboardImages: normalizeStoryboard(meta.storyboard),
+    storyboardComicUrl: typeof meta.storyboard_comic_url === 'string' ? meta.storyboard_comic_url : undefined,
+    narrativeLength: meta.narrative_length || undefined,
+    parallaxVideoUrl: typeof meta.parallax_video_url === 'string' ? meta.parallax_video_url : undefined,
+    clipQuality: meta.clip_quality || undefined,
+    lastClipJobId: meta.last_clip_job_id || undefined,
+    lastClipModel: meta.last_clip_model || undefined,
+  };
+  const derived = deriveDreamPipelineStatus(hydratedCore, pipelineStatus);
+  const rollup = rollupProcessingFields(derived);
+  return {
+    ...hydratedCore,
+    pipelineStatus: derived,
+    processingStatus: hydratedCore.processingStatus || rollup.processingStatus,
+    processingStep: hydratedCore.processingStep || rollup.processingStep,
   };
 }
 
-function normalizeStoryboard(raw: unknown): { url: string; title: string; prompt: string }[] | undefined {
+function normalizeStoryboard(raw: unknown): {
+  url: string;
+  title: string;
+  prompt: string;
+  caption?: string;
+  stillUrl?: string;
+}[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   const frames = raw
     .map((item, index) => {
@@ -225,8 +280,12 @@ function normalizeStoryboard(raw: unknown): { url: string; title: string; prompt
         url,
         title: String(row.title || `Scene ${index + 1}`),
         prompt: String(row.prompt || ''),
+        caption: typeof row.caption === 'string' ? row.caption : undefined,
+        stillUrl: typeof row.stillUrl === 'string' ? row.stillUrl : undefined,
       };
     })
-    .filter((frame): frame is { url: string; title: string; prompt: string } => Boolean(frame));
-  return frames.length ? frames : undefined;
+    .filter((frame) => Boolean(frame));
+  return frames.length
+    ? (frames as { url: string; title: string; prompt: string; caption?: string; stillUrl?: string }[])
+    : undefined;
 }

@@ -10,6 +10,7 @@ import {
   type VideoJournalInput,
   type AudioJournalInput,
 } from './videoJournalProcessor';
+import { deriveDreamPipelineStatus, rollupProcessingFields } from './dreamPipelineStatus';
 
 export type DreamProcessingStatus = 'processing' | 'complete' | 'failed';
 
@@ -62,6 +63,13 @@ export function createVideoStub(input: {
     },
     captureMode: 'video',
     processingStatus: 'processing',
+    processingStep: 'transcribe',
+    pipelineStatus: deriveDreamPipelineStatus({
+      captureMode: 'video',
+      content: 'Processing your video journal…',
+      processingStatus: 'processing',
+      videoCapture: { url: input.videoUrl, mediaId: input.mediaId },
+    }),
     videoCapture: {
       url: input.videoUrl,
       capturedAt: new Date().toISOString(),
@@ -106,6 +114,13 @@ export function createAudioStub(input: {
     },
     captureMode: 'audio',
     processingStatus: 'processing',
+    processingStep: 'transcribe',
+    pipelineStatus: deriveDreamPipelineStatus({
+      captureMode: 'audio',
+      content: 'Processing your audio journal…',
+      processingStatus: 'processing',
+      audioCapture: { url: input.audioUrl, mediaId: input.mediaId },
+    }),
     audioCapture: {
       url: input.audioUrl,
       capturedAt: new Date().toISOString(),
@@ -135,6 +150,12 @@ export function createTextStub(text: string, fileName?: string): ProcessingDream
     },
     captureMode: 'text',
     processingStatus: 'processing',
+    processingStep: 'analyse',
+    pipelineStatus: deriveDreamPipelineStatus({
+      captureMode: 'text',
+      content: text.trim(),
+      processingStatus: 'processing',
+    }),
     sourceFile: fileName,
     isSample: false,
   };
@@ -144,19 +165,23 @@ export async function runVideoProcessing(
   input: VideoJournalInput,
 ): Promise<Partial<ProcessingDreamStub>> {
   const { dream } = await processVideoJournal(input);
-  return { ...dream, processingStatus: 'complete' };
+  const pipelineStatus = deriveDreamPipelineStatus({ ...dream, processingStatus: 'complete' });
+  const rollup = rollupProcessingFields(pipelineStatus);
+  return { ...dream, ...rollup, pipelineStatus };
 }
 
 export async function runAudioProcessing(
   input: AudioJournalInput,
 ): Promise<Partial<ProcessingDreamStub>> {
   const { dream } = await processAudioJournal(input);
-  return { ...dream, processingStatus: 'complete' };
+  const pipelineStatus = deriveDreamPipelineStatus({ ...dream, processingStatus: 'complete' });
+  const rollup = rollupProcessingFields(pipelineStatus);
+  return { ...dream, ...rollup, pipelineStatus };
 }
 
 export async function runTextProcessing(text: string): Promise<Partial<ProcessingDreamStub>> {
-  const { analysis, generatedImage, scenes } = await processTextJournal(text.trim());
-  return {
+  const { analysis, generatedImage, scenes, narrativeLength } = await processTextJournal(text.trim());
+  const patch = {
     content: text.trim(),
     category: analysis.category,
     themes: analysis.themes,
@@ -168,6 +193,10 @@ export async function runTextProcessing(text: string): Promise<Partial<Processin
     moodValence: analysis.valence,
     generatedImage,
     scenes,
-    processingStatus: 'complete',
+    narrativeLength,
+    captureMode: 'text',
   };
+  const pipelineStatus = deriveDreamPipelineStatus(patch);
+  const rollup = rollupProcessingFields(pipelineStatus);
+  return { ...patch, ...rollup, pipelineStatus };
 }

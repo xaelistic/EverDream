@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { friendCodeFromProfileId, looksLikeFriendCode } from './friendCode';
 import { inviteMessage } from './friendsInvite';
+import { normalizeHandle } from './friends';
 
 describe('friend invites', () => {
   it('builds a shareable invite that includes the landing URL', () => {
@@ -25,5 +26,13 @@ describe('friend codes', () => {
     expect(looksLikeFriendCode('dream-01cf9f')).toBe(true);
     expect(looksLikeFriendCode('nigel_russell')).toBe(false);
     expect(looksLikeFriendCode('ab')).toBe(false);
+  });
+});
+
+describe('usernames', () => {
+  it('normalises @handles for search and add', () => {
+    expect(normalizeHandle('@Luna')).toBe('luna');
+    expect(normalizeHandle('  @@nigel_russell  ')).toBe('nigel_russell');
+    expect(normalizeHandle('Ada')).toBe('ada');
   });
 });
