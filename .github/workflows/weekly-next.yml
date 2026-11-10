@@ -1,0 +1,42 @@
+name: Weekly next steps
+
+on:
+  schedule:
+    # Monday 08:00 UTC
+    - cron: '0 8 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  discord:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Post next steps to Discord
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "DISCORD_WEBHOOK_URL is not set. The weekly post stays off until that repo secret exists."
+            exit 0
+          fi
+          python3 - <<'PY'
+          import json, os, urllib.request
+          text = open("docs/WEEKLY_NEXT.md", encoding="utf-8").read().strip()
+          if len(text) > 1900:
+              text = text[:1890] + "…"
+          body = json.dumps({"content": text}).encode()
+          req = urllib.request.Request(
+              os.environ["DISCORD_WEBHOOK_URL"],
+              data=body,
+              headers={
+                  "Content-Type": "application/json",
+                  "User-Agent": "EverDreamWeekly",
+              },
+          )
+          with urllib.request.urlopen(req) as res:
+              print("discord", res.status)
+          PY
