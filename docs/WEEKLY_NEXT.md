@@ -1,7 +1,7 @@
 EverDream — what to do next
 Live: https://everdream.n1g3.com
 
-1. Close the old credit hole. Signed-in users can still call refund_image_credits and consume_image_credits. Revoke those from anon and authenticated. Keep the new server debit.
+1. Done. Users can no longer call consume_image_credits, refund_image_credits, or grant_purchased_credits. Charges and pack grants stay on the server.
 
 2. Use the live app this week. Record by voice, make a still, a comic page, and a clip. Note what feels wrong.
 

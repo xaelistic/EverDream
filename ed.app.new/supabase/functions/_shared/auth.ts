@@ -99,7 +99,14 @@ export async function debitCaller(caller: BillableCaller, amount: number, reason
     };
   }
 
-  const { data, error } = await caller.client.rpc('consume_image_credits', { amount, reason });
+  const admin = adminClient();
+  const profileId = await profileIdForUser(caller);
+  if (!admin || !profileId) return { ok: false, remaining: 0, message: 'Profile not found' };
+  const { data, error } = await admin.rpc('consume_image_credits_for_profile', {
+    target_profile: profileId,
+    amount,
+    reason,
+  });
   if (error) return { ok: false, remaining: 0, message: error.message };
   const row = Array.isArray(data) ? data[0] : data;
   return {
