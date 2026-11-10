@@ -114,3 +114,9 @@ verify_jwt = false
 
 [functions.social-oauth-tiktok]
 verify_jwt = false
+
+[functions.website-signup]
+verify_jwt = false
+
+[functions.social-oauth-discord]
+verify_jwt = false

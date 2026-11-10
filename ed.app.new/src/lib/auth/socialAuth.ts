@@ -98,6 +98,34 @@ export async function startSpotifyOAuth(intent: SocialAuthIntent = 'link'): Prom
   return { ok: true, url: data.authUrl };
 }
 
+async function invokeErrorMessage(error: unknown, fallback: string): Promise<string> {
+  const context = (error as { context?: { json?: () => Promise<{ error?: string }> } } | null)?.context;
+  if (context && typeof context.json === 'function') {
+    try {
+      const body = await context.json();
+      if (typeof body?.error === 'string' && body.error) return body.error;
+    } catch {
+      /* response body already consumed */
+    }
+  }
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
+export async function startDiscordOAuth(intent: SocialAuthIntent = 'link'): Promise<{ ok: boolean; url?: string; message?: string }> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) {
+    return { ok: false, message: 'Sign in first to connect Discord.' };
+  }
+
+  const { data, error } = await supabase.functions.invoke('social-oauth-discord', {
+    body: { action: 'start', intent },
+  });
+
+  if (error) return { ok: false, message: await invokeErrorMessage(error, 'Could not start Discord.') };
+  if (!data?.authUrl) return { ok: false, message: data?.error || 'Discord OAuth URL not returned.' };
+  return { ok: true, url: data.authUrl };
+}
+
 export async function startTikTokOAuth(intent: SocialAuthIntent = 'link'): Promise<{ ok: boolean; url?: string; message?: string }> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.access_token) {

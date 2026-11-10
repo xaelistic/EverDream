@@ -62,6 +62,27 @@ export function useSocialAuth() {
         return;
       }
 
+      if (social === 'discord_linked') {
+        await refreshAccounts();
+        if (!mounted) return;
+        addToast({ type: 'success', message: 'Discord connected.' });
+        setLastMessage('discord_linked');
+        clearSocialOAuthParams();
+        return;
+      }
+
+      if (social === 'discord_taken') {
+        addToast({ type: 'error', message: 'That Discord account is already linked to another EverDream profile.' });
+        clearSocialOAuthParams();
+        return;
+      }
+
+      if (social === 'discord_error') {
+        addToast({ type: 'error', message: 'Discord connection was cancelled or failed. Try again.' });
+        clearSocialOAuthParams();
+        return;
+      }
+
       if (!isSocialOAuthCallback()) return;
 
       setSyncing(true);

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   User,
   Sparkles,
@@ -23,6 +23,9 @@ import { useSkinFull } from '../contexts/SkinContext';
 import { useToast } from '../components/ui/Toast';
 import { useProfile } from '../hooks/useProfile';
 import { useAuth } from '../hooks/use-auth';
+import { startDiscordOAuth } from '../lib/auth/socialAuth';
+import { fetchLinkedSocialAccounts } from '../lib/social/socialAccounts';
+import { supabase } from '../lib/supabase/client';
 import { slugifyHandle, avatarBelongsToUser, type InterestSource } from '../lib/profileService';
 import {
   isSocialLinked,
@@ -37,6 +40,14 @@ interface ProfileHubProps {
   navigate: (screen: RouteScreen) => void;
   /** Fired when user successfully sends a friend request (achievements) */
   onFriendAdded?: () => void;
+}
+
+function DiscordMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="currentColor">
+      <path d="M19.27 5.33A17.4 17.4 0 0 0 15.88 4l-.22.4a16.1 16.1 0 0 1 3.8 1.48 15.4 15.4 0 0 0-13.9 0A16 16 0 0 1 8.34 4L8.12 4a17.4 17.4 0 0 0-3.4 1.33C1.7 9.02.9 12.6 1.1 16.14A17.6 17.6 0 0 0 6.4 18.5l.5-.84a11.4 11.4 0 0 1-1.8-.86l.45-.34c3.46 1.6 7.22 1.6 10.64 0l.45.34c-.57.34-1.17.63-1.8.86l.5.84a17.6 17.6 0 0 0 5.3-2.36c.5-4.2-.84-7.74-2.37-10.81ZM8.7 14.3c-.98 0-1.78-.9-1.78-2s.78-2 1.78-2 1.8.9 1.8 2-.8 2-1.8 2Zm6.6 0c-.98 0-1.78-.9-1.78-2s.78-2 1.78-2 1.8.9 1.8 2-.8 2-1.8 2Z" />
+    </svg>
+  );
 }
 
 function sourceBadge(source: InterestSource | undefined): { label: string; className: string } | null {
@@ -83,6 +94,22 @@ export function ProfileHub({ onClose, navigate, onFriendAdded }: ProfileHubProps
   const [showAddGoal, setShowAddGoal] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [socialBusy, setSocialBusy] = useState<SocialInterestSource | null>(null);
+  const [discordLinked, setDiscordLinked] = useState(false);
+  const [discordName, setDiscordName] = useState<string | null>(null);
+  const [discordBusy, setDiscordBusy] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    fetchLinkedSocialAccounts().then((rows) => {
+      if (!mounted) return;
+      const discord = rows.find((row) => row.provider === 'discord' && row.status === 'active');
+      setDiscordLinked(Boolean(discord));
+      setDiscordName(discord?.display_name || discord?.username || null);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [profile]);
 
   const card = isPearl ? 'border-[var(--glass-border)] bg-[var(--glass-bg)]' : 'border-line bg-cream';
 
@@ -110,6 +137,45 @@ export function ProfileHub({ onClose, navigate, onFriendAdded }: ProfileHubProps
       });
     } finally {
       setSocialBusy(null);
+    }
+  };
+
+  const handleDiscord = async () => {
+    setDiscordBusy(true);
+    try {
+      if (discordLinked) {
+        const rows = await fetchLinkedSocialAccounts();
+        const discord = rows.find((row) => row.provider === 'discord');
+        if (discord) {
+          const { error } = await supabase.from('social_accounts').delete().eq('id', discord.id);
+          if (error) throw new Error(error.message);
+        }
+        setDiscordLinked(false);
+        setDiscordName(null);
+        addToast({ type: 'info', message: 'Discord disconnected.' });
+        return;
+      }
+
+      const result = await startDiscordOAuth('link');
+      if (!result.ok || !result.url) {
+        const raw = result.message || 'Could not start Discord.';
+        const configured = /not configured|503|DISCORD_CLIENT/i.test(raw);
+        addToast({
+          type: 'error',
+          message: configured
+            ? 'Discord sign-in is not connected on this server yet.'
+            : raw,
+        });
+        return;
+      }
+      window.location.assign(result.url);
+    } catch (err) {
+      addToast({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'Could not update Discord.',
+      });
+    } finally {
+      setDiscordBusy(false);
     }
   };
 
@@ -383,6 +449,31 @@ export function ProfileHub({ onClose, navigate, onFriendAdded }: ProfileHubProps
             );
           })}
         </div>
+        <button
+          type="button"
+          disabled={discordBusy || !!socialBusy}
+          onClick={() => void handleDiscord()}
+          className={`mt-2 w-full flex items-center gap-3 rounded-xl border p-3 text-left transition ${
+            discordLinked ? 'border-sage/40 bg-sage/5' : 'border-line hover:bg-parchment/60'
+          }`}
+        >
+          <span className="w-10 h-10 rounded-full flex items-center justify-center bg-[#5865F2]/15 text-[#5865F2] shrink-0">
+            {discordBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <DiscordMark className="w-4 h-4" />}
+          </span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-sm font-medium text-ink">Discord</span>
+            <span className="block text-[11px] text-muted">
+              {discordName ? `Linked as ${discordName}` : 'Link the Discord account you use with EverDream'}
+            </span>
+          </span>
+          <span
+            className={`text-[11px] font-semibold px-2.5 py-1 rounded-full shrink-0 ${
+              discordLinked ? 'bg-sage text-cream' : 'bg-parchment text-muted'
+            }`}
+          >
+            {discordLinked ? 'Connected' : 'Connect'}
+          </span>
+        </button>
         <button
           type="button"
           onClick={() => {

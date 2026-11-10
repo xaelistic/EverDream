@@ -68,9 +68,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     await admin.from('sleep_sessions').delete().eq('user_id', profile.id);
     await admin.from('wearable_connections').delete().eq('user_id', profile.id);
+    const { error: signupError } = await admin.from('website_signups').delete().eq('profile_id', profile.id);
+    if (signupError) return json({ error: 'Could not delete the website signup.' }, 500, headers);
 
     const { error: profileDeleteError } = await admin.from('profiles').delete().eq('id', profile.id);
     if (profileDeleteError) return json({ error: 'Could not delete the profile.' }, 500, headers);
+  }
+
+  const email = typeof caller.user.email === 'string' ? caller.user.email.trim().toLowerCase() : '';
+  if (email) {
+    const { error: emailSignupError } = await admin.from('website_signups').delete().eq('email', email);
+    if (emailSignupError) return json({ error: 'Could not delete the website signup.' }, 500, headers);
   }
 
   const { error: authError } = await admin.auth.admin.deleteUser(caller.user.id);
