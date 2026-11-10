@@ -286,9 +286,11 @@ GRANT EXECUTE ON FUNCTION public.invoke_complete_dream_pipeline() TO postgres, s
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
-    PERFORM cron.unschedule('complete-dream-pipeline-hourly');
-  EXCEPTION WHEN OTHERS THEN
-    NULL;
+    BEGIN
+      PERFORM cron.unschedule('complete-dream-pipeline-hourly');
+    EXCEPTION WHEN OTHERS THEN
+      NULL;
+    END;
   END IF;
 END $$;
 

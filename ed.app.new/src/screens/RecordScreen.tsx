@@ -385,9 +385,6 @@ function UploadCapturePanel({
           </div>
         )}
 
-        <p className="text-xs text-muted text-center">
-          PDF import coming soon — for now save as .txt or paste in Text mode.
-        </p>
       </div>
     </div>
   );

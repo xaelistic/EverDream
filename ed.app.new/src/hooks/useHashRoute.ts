@@ -61,7 +61,6 @@ function parseHash(): AppRoute {
     'assets',
     'more',
     'favourites',
-    'import-photos',
     'admin',
     'video-journal',
     'education',
@@ -76,6 +75,9 @@ function parseHash(): AppRoute {
 
   if (screen === 'settings') {
     return { screen: 'billing', dreamId: null, shareSlug: null };
+  }
+  if (screen === 'import-photos') {
+    return { screen: 'more', dreamId: null, shareSlug: null };
   }
   if (allowed.includes(screen)) {
     return { screen, dreamId: null, shareSlug: null };

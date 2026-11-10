@@ -66,7 +66,7 @@ import {
   captionStoryboardPanel,
   storyboardPanelPrompt,
 } from '../lib/storyboardComic';
-import { canGenerateImage, recordImageGeneration } from '../lib/subscriptions/usageLimits';
+import { getCreditBalance } from '../lib/subscriptions/creditService';
 import type { DreamAsset } from '../modules/sleep/types';
 import { useToast } from '../components/ui/Toast';
 
@@ -186,7 +186,7 @@ export function DreamDetailScreen({
   isFavourite = false,
   onToggleFavourite,
 }: DreamDetailScreenProps) {
-  const { isAdmin, tier, hasFeature } = useSubscription();
+  const { isAdmin } = useSubscription();
   const { addToast } = useToast();
   const [showTranscript, setShowTranscript] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
@@ -236,21 +236,19 @@ export function DreamDetailScreen({
     if (!panelCount) return [];
     return splitIntoPanels(transcript || analysisNarrative, panelCount);
   }, [detailDream.scenes, transcript, analysisNarrative, panelCount]);
-  const isPremium = isAdmin || hasFeature('image_generation_unlimited');
   const storyboardCost = panelCount || 0;
   const videoCost = narrativeLength === 'long' ? 3 : 2;
 
-  const spendCredits = (count: number): boolean => {
-    if (isPremium) return true;
-    const check = canGenerateImage(tier);
-    if (check.remaining < count) {
+  const ensureCredits = async (count: number): Promise<boolean> => {
+    if (isAdmin || count < 1) return true;
+    const balance = await getCreditBalance();
+    if (balance.source === 'db' && balance.totalRemaining < count) {
       addToast({
         type: 'warning',
-        message: `Need ${count} image credits (${check.remaining} left this month). Plus includes storyboard and video.`,
+        message: `Need ${count} image credits (${balance.totalRemaining} left). Buy a pack or upgrade on Plan & credits.`,
       });
       return false;
     }
-    for (let i = 0; i < count; i++) recordImageGeneration();
     return true;
   };
 
@@ -322,6 +320,7 @@ export function DreamDetailScreen({
   };
 
   useEffect(() => {
+    if (detailDream.processingStatus === 'processing') return;
     const pipelineNow = deriveDreamPipelineStatus(detailDream, detailDream.pipelineStatus);
     const needsWork =
       missingPipelineSteps(pipelineNow).length > 0 ||
@@ -331,7 +330,7 @@ export function DreamDetailScreen({
     retriedIdRef.current = detailDream.id;
     void retryMediaProcessing();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- retry once per dream open
-  }, [detailDream.id]);
+  }, [detailDream.id, detailDream.processingStatus]);
 
   const persistBlob = async (blob: Blob, kind: 'image' | 'video'): Promise<string | null> => {
     try {
@@ -354,10 +353,10 @@ export function DreamDetailScreen({
 
   const runStoryboard = async () => {
     if (storyboardBusy || panelCount < 2) return;
-    if (!spendCredits(storyboardCost)) return;
+    if (!(await ensureCredits(storyboardCost))) return;
     setStoryboardBusy(true);
     setStoryboardError(null);
-    const imageRoute = routeImageModel({ intent: 'storyboard', quality: 'quality', noOverlayText: true });
+    const imageRoute = routeImageModel({ intent: 'storyboard', noOverlayText: true });
     const storyboardJobId = await startGenerationJob({
       dreamId: detailDream.id,
       kind: 'storyboard',
@@ -377,7 +376,7 @@ export function DreamDetailScreen({
         const asset = await generateDreamImage(
           storyboardPanelPrompt(scene.prompt),
           'cinematic',
-          { quality: 'quality', noOverlayText: true },
+          { quality: 'cheap', noOverlayText: true },
         );
         const stillUrl = await persistMaybeDataUrl(asset.url);
         const caption = scene.caption || scene.summary;
@@ -412,7 +411,9 @@ export function DreamDetailScreen({
         );
         comicUrl = await persistBlob(comic, 'image');
       } catch (err) {
+        const assembleMessage = err instanceof Error ? err.message : 'Could not assemble the comic page.';
         console.warn('[Storyboard] comic assemble failed:', err);
+        setStoryboardError(assembleMessage);
       }
       await finishGenerationJob({
         jobId: storyboardJobId,
@@ -428,12 +429,41 @@ export function DreamDetailScreen({
       });
       setStoryboardViewIndex(0);
       addToast({
-        type: 'success',
-        message: `${frames.length}-panel comic is ready. Tap a panel to enlarge.`,
+        type: comicUrl ? 'success' : 'warning',
+        message: comicUrl
+          ? `${frames.length}-panel comic is ready. Tap a panel to enlarge.`
+          : 'Panels saved. The comic page could not be assembled — use Rebuild page.',
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Storyboard generation failed.';
       await finishGenerationJob({ jobId: storyboardJobId, status: 'failed', error: message });
+      setStoryboardError(message);
+      addToast({ type: 'error', message });
+    } finally {
+      setStoryboardBusy(false);
+    }
+  };
+
+  const rebuildComicPage = async () => {
+    const frames = detailDream.storyboardImages || [];
+    if (storyboardBusy || frames.length < 2) return;
+    setStoryboardBusy(true);
+    setStoryboardError(null);
+    try {
+      const comic = await assembleStoryboardComic(
+        frames.map((frame) => ({
+          url: frame.stillUrl || frame.url,
+          title: frame.title,
+          caption: frame.caption || frame.title,
+        })),
+        { title: detailDream.title || detailDream.nugget },
+      );
+      const comicUrl = await persistBlob(comic, 'image');
+      if (!comicUrl) throw new Error('Could not save the comic page.');
+      onUpdateDream?.({ storyboardComicUrl: comicUrl });
+      addToast({ type: 'success', message: 'Comic page is ready.' });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not assemble the comic page.';
       setStoryboardError(message);
       addToast({ type: 'error', message });
     } finally {
@@ -489,7 +519,7 @@ export function DreamDetailScreen({
         await finishGenerationJob({ jobId, status: 'blocked', error: route.blockReason });
         throw new Error(qualityFailMessage(combined));
       }
-      if (!spendCredits(videoCost)) {
+      if (!(await ensureCredits(videoCost))) {
         await finishGenerationJob({ jobId, status: 'blocked', error: 'insufficient-credits' });
         return;
       }
@@ -630,6 +660,9 @@ export function DreamDetailScreen({
     () => normalizeStoryboardFrames(detailDream.storyboardImages),
     [detailDream.storyboardImages],
   );
+  const finishedClipUrl = detailDream.parallaxVideoUrl && /^https:\/\//i.test(detailDream.parallaxVideoUrl)
+    ? detailDream.parallaxVideoUrl
+    : '';
   const openStoryboardFrame = storyboardViewIndex != null ? storyboardFrames[storyboardViewIndex] : null;
 
   useEffect(() => {
@@ -946,7 +979,7 @@ export function DreamDetailScreen({
               <p className="text-[11px] text-muted mb-3">
                 {narrativeLength === 'long' ? 'Long dream' : 'Medium dream'} — {panelCount} comic panels
                 with captions drawn on the page (not by the image model)
-                {isPremium ? ' — included with your plan.' : ` — ${storyboardCost} image credits.`}
+                {isAdmin ? ' — admin accounts are not charged.' : ` — ${storyboardCost} image credits.`}
               </p>
               {storyboardFrames.length ? (
                 <div className={`grid gap-2 ${panelCount === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
@@ -979,6 +1012,16 @@ export function DreamDetailScreen({
                   {storyboardBusy ? 'Painting panels…' : `Generate ${panelCount}-panel comic`}
                 </button>
               )}
+              {storyboardFrames.length > 0 && !detailDream.storyboardComicUrl && (
+                <button
+                  type="button"
+                  onClick={() => void rebuildComicPage()}
+                  disabled={storyboardBusy}
+                  className="mt-3 w-full bg-parchment hover:bg-sage/15 border border-line text-ink py-2.5 rounded-xl text-sm font-medium disabled:opacity-50"
+                >
+                  {storyboardBusy ? 'Building page…' : 'Rebuild page'}
+                </button>
+              )}
               {storyboardError && <p className="mt-2 text-xs text-duskDeep">{storyboardError}</p>}
               {storyboardFrames.length > 0 && (
                 <AssetFeedback
@@ -997,7 +1040,7 @@ export function DreamDetailScreen({
               {storyboardFrames.length
                 ? `A short clip that plays through the ${storyboardFrames.length} storyboard beats — not a moving camera on a photo.`
                 : 'Generate the storyboard first. The clip uses those panels as the first and last frames.'}
-              {isPremium ? ' Included with your plan.' : ` ${videoCost} image credits.`}
+              {isAdmin ? ' Admin accounts are not charged.' : ` ${videoCost} image credits.`}
             </p>
             {(clipQuality || detailDream.clipQuality) && (
               <p className="text-[11px] text-muted mb-2">
@@ -1009,9 +1052,9 @@ export function DreamDetailScreen({
                   : ''}
               </p>
             )}
-            {detailDream.parallaxVideoUrl ? (
+            {finishedClipUrl ? (
               <video
-                src={detailDream.parallaxVideoUrl}
+                src={finishedClipUrl}
                 controls
                 playsInline
                 className="w-full rounded-xl bg-ink max-h-64"
@@ -1028,12 +1071,12 @@ export function DreamDetailScreen({
               </button>
             )}
             {videoError && !videoBusy && <p className="mt-2 text-xs text-duskDeep">{videoError}</p>}
-            {detailDream.parallaxVideoUrl && (
+            {finishedClipUrl && (
               <AssetFeedback
                 dreamId={detailDream.id}
                 jobId={clipJobId || detailDream.lastClipJobId}
                 assetKind="video"
-                assetUrl={detailDream.parallaxVideoUrl}
+                assetUrl={finishedClipUrl}
                 model={clipModel || detailDream.lastClipModel || undefined}
               />
             )}

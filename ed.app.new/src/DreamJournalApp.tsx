@@ -52,11 +52,10 @@ import {
   saveFavouriteIds,
   toggleFavouriteId,
 } from './lib/favourites';
-import PhotoUploadFlow from './components/photo-upload/PhotoUploadFlow';
-import type { ExtractedDreamEntry } from './components/photo-upload/PhotoUploadFlow';
+
 import { generateDreamImage } from './modules/sleep/dreamAssetGenerator';
 import { recordTasteSignal } from './lib/imageTaste';
-import { generateParallaxVideo } from './lib/assets/pipeline';
+
 import type { EmotionCapture } from './components/face/FacialEmotionDetector';
 import {
   transcribeAudio as transcribeWithWhisper,
@@ -1355,19 +1354,7 @@ const DreamJournalApp = () => {
 
     if (settings.imageGeneration) {
       generateDreamImageAsync(analysis).then(async (generatedImage) => {
-        let parallaxVideoUrl = null;
-        if (generatedImage?.url && !generatedImage.url.startsWith('data:')) {
-          try {
-            parallaxVideoUrl = await generateParallaxVideo(
-              generatedImage.url,
-              generatedImage.url,
-              { duration: 5, fps: 24, amplitude: 0.1, direction: 'circular' },
-            );
-          } catch (err) {
-            console.warn('[SaveDream] Parallax video generation failed:', err);
-          }
-        }
-        const withImage = { ...newDream, generatedImage, parallaxVideoUrl };
+        const withImage = { ...newDream, generatedImage, parallaxVideoUrl: null };
         setDreams((prev) => {
           const next = prev.map((d) => (d.id === dreamId ? withImage : d));
           saveDreamsToStorage(next).catch(console.error);
@@ -1412,81 +1399,6 @@ const DreamJournalApp = () => {
     });
     setTimeout(() => setShowAchievement(null), 3000);
     console.log('[SaveDream] Save complete!');
-  };
-
-  // Handle extracted dream entries from photo upload
-  const handleDreamsExtracted = async (entries: ExtractedDreamEntry[]) => {
-    const currentDreams = dreams;
-    const newDreams: typeof currentDreams = [];
-
-    for (const entry of entries) {
-      const dreamId = generateDreamId();
-      const userId = 'user_' + Math.random().toString(36).substr(2, 9);
-      const sleepData = generateMockSleepData();
-      const analysis = entry.analysis;
-
-      // Generate image if enabled
-      let generatedImage = null;
-      if (settings.imageGeneration && analysis) {
-        try {
-          generatedImage = await generateDreamImageAsync(analysis);
-        } catch (err) {
-          console.error('Image generation failed for photo import:', err);
-        }
-      }
-
-      const newDream = {
-        id: dreamId,
-        date: entry.dreamDate || new Date().toISOString(),
-        content: entry.editedText,
-        category: analysis?.category || 'uncategorized',
-        themes: analysis?.themes || [],
-        emotion: analysis?.emotion || 'neutral',
-        symbols: analysis?.symbols || [],
-        narrative: analysis?.narrative || entry.editedText,
-        nugget: analysis?.nugget || entry.editedText.substring(0, 100),
-        interpretation: analysis?.interpretation || {
-          symbols: {},
-          meaning: 'Analysis unavailable',
-          commonPattern: '',
-        },
-        sleepData,
-        generatedImage,
-        watermark: createWatermark(userId, dreamId),
-        assetMetadata: calculateAssetMetadata({
-          themes: analysis?.themes || [],
-          narrative: analysis?.narrative || entry.editedText,
-        }),
-        sourcePhotos: entry.photoIds,
-        captureMode: 'photo' as const,
-        context: contextData,
-        isSample: false,
-      };
-
-      newDreams.push(newDream);
-    }
-
-    const updatedDreams = [...newDreams, ...currentDreams.filter((d: any) => !d.isSample)];
-    setDreams(updatedDreams);
-    await saveDreamsToStorage(updatedDreams);
-    await checkAchievements(updatedDreams);
-
-    // Sync imported dreams to Supabase (non-blocking)
-    for (const nd of newDreams) {
-      syncDreamToSupabase(nd).catch((err: unknown) => {
-        console.warn('[PhotoImport] Supabase sync error:', err);
-      });
-    }
-
-    setShowAchievement({
-      id: 'photo_import',
-      title: `${newDreams.length} dream${newDreams.length !== 1 ? 's' : ''} imported`,
-      description: 'From your journal photos',
-      icon: '📸',
-    });
-    setTimeout(() => setShowAchievement(null), 3000);
-
-    navigate('journal');
   };
 
   const cancelDream = () => {
@@ -1708,20 +1620,40 @@ const DreamJournalApp = () => {
     }
   };
 
-  // Full data deletion (GDPR Right to be Forgotten)
   const deleteAllUserData = async () => {
-    if (!confirm('⚠️ DELETE ALL DATA?\n\nThis will permanently delete:\n• All dreams and assets\n• All metadata and analysis\n• Wearable data\n• Settings and preferences\n• NFT watermarks\n\nThis action CANNOT be undone and complies with GDPR Article 17 (Right to Erasure).\n\nType DELETE to confirm.')) {
+    if (!confirm('Delete this account and its dreams?\n\nThis removes cloud dreams, sleep sessions, wearable connections, and the login, then clears this device.\n\nThis cannot be undone.')) {
       return;
     }
 
-    const confirmation = prompt('Type DELETE to confirm permanent deletion:');
+    const confirmation = prompt('Type DELETE to confirm:');
     if (confirmation !== 'DELETE') {
       addToast({ type: 'info', message: 'Deletion cancelled.' });
       return;
     }
 
+    let cloudDeleted = false;
     try {
-      // Delete all stored data
+      const { data, error } = await supabaseClient.functions.invoke('delete-account', { body: {} });
+      const payload = data as { ok?: boolean; error?: string } | null;
+      if (error || payload?.ok === false) {
+        let detail = payload?.error || '';
+        const context = (error as { context?: { json?: () => Promise<{ error?: string }> } } | null)?.context;
+        if (!detail && context?.json) {
+          try {
+            const body = await context.json();
+            detail = body?.error || '';
+          } catch {
+            /* ignore */
+          }
+        }
+        addToast({
+          type: 'error',
+          message: `${detail || 'Cloud account deletion failed.'} Nothing on this device was cleared.`,
+        });
+        return;
+      }
+      cloudDeleted = true;
+
       await window.storage.delete('dreams');
       await window.storage.delete('wearableData');
       await window.storage.delete('achievements');
@@ -1736,20 +1668,23 @@ const DreamJournalApp = () => {
       await window.storage.delete('sleep_privacy_consent');
       await window.storage.delete('sleep_completed_sessions');
 
-      // Reset state
       setDreams([]);
       setWearableData([]);
       setAchievements([]);
       setAudioFiles([]);
       setHasAcceptedTerms(false);
-      
-      addToast({ type: 'success', message: 'All data deleted. Your data has been permanently removed from storage.' });
-      
-      // Show terms again for fresh start
+      await supabaseClient.auth.signOut();
+
+      addToast({ type: 'success', message: 'Account deleted and this device was cleared.' });
       setShowTerms(true);
     } catch (error) {
       console.error('Deletion error:', error);
-      addToast({ type: 'error', message: 'Error during deletion. Some data may remain.' });
+      addToast({
+        type: 'error',
+        message: cloudDeleted
+          ? 'The cloud account was deleted, but this device could not be fully cleared.'
+          : 'Deletion failed. Cloud data and this device were left as they were.',
+      });
     }
   };
 
@@ -1945,9 +1880,13 @@ const DreamJournalApp = () => {
             sleep={
               reflectionSleepData
                 ? {
-                    durationMinutes: reflectionSleepData.sleepDuration,
-                    quality: reflectionSleepData.quality || reflectionSleepData.sleepQuality,
-                    remMinutes: reflectionSleepData.estimatedREM,
+                    durationMinutes: ('durationMinutes' in reflectionSleepData ? reflectionSleepData.durationMinutes : undefined)
+                      || ('sleepDuration' in reflectionSleepData ? reflectionSleepData.sleepDuration : undefined),
+                    quality: ('score' in reflectionSleepData ? reflectionSleepData.score : undefined)
+                      || ('quality' in reflectionSleepData ? reflectionSleepData.quality : undefined)
+                      || ('sleepQuality' in reflectionSleepData ? reflectionSleepData.sleepQuality : undefined),
+                    remMinutes: ('remMinutes' in reflectionSleepData ? reflectionSleepData.remMinutes : undefined)
+                      || ('estimatedREM' in reflectionSleepData ? reflectionSleepData.estimatedREM : undefined),
                     source: reflectionSleepData.source,
                   }
                 : null
@@ -2176,37 +2115,6 @@ const DreamJournalApp = () => {
               <h2 className="font-serif text-2xl font-medium text-ink">Wearables</h2>
               <p className="text-sm text-muted mt-1">Connect your sleep devices for automatic tracking</p>
             </div>
-
-            {/* Quick test helper for wearable integrations */}
-            <button
-              type="button"
-              onClick={() => {
-                const today = new Date();
-                const sampleRecords = Array.from({ length: 5 }).map((_, i) => {
-                  const d = new Date(today.getTime() - i * 86400000);
-                  const dateStr = d.toISOString().split('T')[0];
-                  return {
-                    date: dateStr,
-                    bedtime: new Date(d.getTime() - 8 * 3600 * 1000).toISOString(),
-                    wakeTime: d.toISOString(),
-                    durationMinutes: 450 + Math.floor(Math.random() * 60),
-                    remMinutes: 80 + Math.floor(Math.random() * 30),
-                    deepMinutes: 70 + Math.floor(Math.random() * 25),
-                    lightMinutes: 200,
-                    awakeMinutes: 20,
-                    efficiency: 85 + Math.floor(Math.random() * 10),
-                    score: 75 + Math.floor(Math.random() * 20),
-                    source: ['oura', 'fitbit', 'garmin'][i % 3] as any,
-                  };
-                });
-                setWearableData(sampleRecords);
-                window.storage?.set?.('wearableData', JSON.stringify(sampleRecords)).catch(() => {});
-                addToast({ type: 'success', message: 'Loaded sample wearable data for testing integrations.' });
-              }}
-              className="text-xs px-3 py-1 rounded-full border border-line bg-parchment hover:bg-cream text-muted"
-            >
-              Load sample data (test integrations)
-            </button>
 
             {/* Wearable connection settings */}
             <WearableSettings
@@ -2700,15 +2608,6 @@ const DreamJournalApp = () => {
         />
       )}
 
-      {/* Photo import flow */}
-      {route.screen === 'import-photos' && (
-        <PhotoUploadFlow
-          onClose={() => navigate('more')}
-          onDreamsExtracted={handleDreamsExtracted}
-          analyzeDream={analyzeDream}
-        />
-      )}
-
       {/* Dream entry */}
       {route.screen === 'dream' && detailDream && (
         <DreamDetailScreen
@@ -2792,7 +2691,7 @@ const DreamJournalApp = () => {
             <div className="rounded-2xl border border-line bg-cream p-6 text-center text-muted">
               <Shield className="w-8 h-8 mx-auto mb-3 text-muted" strokeWidth={1.5} />
               <p className="font-medium text-ink mb-1">Admin access required</p>
-              <p className="text-sm">Sign in with <code className="text-xs">admin@everdream.test</code> to view analytics.</p>
+              <p className="text-sm">This dashboard is only available to an admin account.</p>
             </div>
           )}
         </div>

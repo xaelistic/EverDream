@@ -9,7 +9,11 @@
  *
  * Request body: raw audio bytes
  * Headers: Content-Type, X-Language, X-Filename
+ *
+ * Requires a signed-in user or the service role. The anon key is rejected.
+ * Transcription does not spend image credits.
  */
+import { requireUserOrService } from '../_shared/auth.ts';
 
 interface TranscriptionResult {
   text: string;
@@ -193,6 +197,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method !== 'POST') {
     return errorResponse('Method not allowed. Use POST.', 405, cors);
   }
+
+  const caller = await requireUserOrService(req);
+  if (!caller.ok) return errorResponse(caller.error, caller.status, cors);
 
   try {
     const audioBytes = await req.arrayBuffer();

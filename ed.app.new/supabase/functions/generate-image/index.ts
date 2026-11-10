@@ -1,20 +1,14 @@
 /**
- * Supabase Edge Function: generate-image v4
+ * Supabase Edge Function: generate-image
  *
- * Multi-provider image generation with OpenRouter as the primary path
- * (SPEC-14). Returns JSON by default so the client can show source + cost.
- *
- * Provider priority:
- *   1. OpenRouter (primary — Flux image models)
- *   2. Fal AI (paid fallback)
- *   3. Hugging Face Inference (free-tier fallback)
+ * OpenRouter only. A signed-in user (or the service role naming a profile)
+ * is charged 1 image credit before the provider call. Failures refund it.
+ * The public anon key is rejected.
  *
  * Secrets (`supabase secrets set`):
- *   OPENROUTER_API_KEY              required for the primary path
+ *   OPENROUTER_API_KEY              required
  *   OPENROUTER_IMAGE_MODEL          optional, default black-forest-labs/flux.2-klein-4b
  *   OPENROUTER_IMAGE_MODEL_QUALITY  optional quality-tier model
- *   FAL_AI_KEY                      optional
- *   HF_INFERENCE_API_KEY            optional
  *
  * Request body:
  *   {
@@ -30,6 +24,7 @@
  * JSON success:
  *   { imageUrl, source, model, cost_usd, prompt, width, height }
  */
+import { debitCaller, refundCaller, requireBillableCaller } from '../_shared/auth.ts';
 
 interface GenerateImageRequest {
   prompt?: string;
@@ -57,9 +52,6 @@ interface GenerationResult {
   height: number;
 }
 
-const HF_API_URL =
-  'https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0';
-const FAL_API_URL = 'https://fal.ai/api/fal-ai/fast-sdxl';
 const OPENROUTER_IMAGES_URL = 'https://openrouter.ai/api/v1/images';
 
 // Cheapest production-quality OpenRouter image model as of 2026-08-13.
@@ -466,120 +458,6 @@ async function generateWithOpenRouter(
   throw new Error('OpenRouter image missing b64_json and url');
 }
 
-// ── Provider: Hugging Face (free fallback) ───────────────────
-
-async function generateWithHuggingFace(
-  prompt: string,
-  style: string,
-  width: number,
-  height: number,
-  look?: string,
-  flags?: { noOverlayText?: boolean; needsReadableText?: boolean },
-): Promise<GenerationResult> {
-  const apiKey = Deno.env.get('HF_INFERENCE_API_KEY');
-  if (!apiKey) throw new Error('HF_INFERENCE_API_KEY not set');
-
-  const enhancedPrompt = buildEnhancedPrompt(prompt, style, look, flags);
-
-  const response = await fetchWithTimeout(HF_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      inputs: enhancedPrompt,
-      parameters: {
-        negative_prompt: 'blurry, low quality, distorted, ugly, watermark, text',
-        num_inference_steps: 30,
-        guidance_scale: 7.5,
-        width,
-        height,
-      },
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    if (response.status === 503) {
-      throw new Error('Hugging Face model is loading, please try again');
-    }
-    throw new Error(`Hugging Face failed: ${response.status} - ${errorText}`);
-  }
-
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  const contentType = response.headers.get('content-type') || 'image/jpeg';
-
-  return {
-    imageUrl: toDataUrl(bytes, contentType),
-    contentType,
-    bytes,
-    source: 'huggingface',
-    model: 'stabilityai/stable-diffusion-xl-base-1.0',
-    prompt: enhancedPrompt,
-    width,
-    height,
-  };
-}
-
-// ── Provider: Fal AI (paid fallback) ─────────────────────────
-
-async function generateWithFalAI(
-  prompt: string,
-  style: string,
-  width: number,
-  height: number,
-  look?: string,
-  flags?: { noOverlayText?: boolean; needsReadableText?: boolean },
-): Promise<GenerationResult> {
-  const apiKey = Deno.env.get('FAL_AI_KEY');
-  if (!apiKey) throw new Error('FAL_AI_KEY not set');
-
-  const enhancedPrompt = buildEnhancedPrompt(prompt, style, look, flags);
-
-  const response = await fetchWithTimeout(FAL_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      prompt: enhancedPrompt,
-      image_size: { width, height },
-      num_inference_steps: 25,
-      guidance_scale: 7.5,
-      negative_prompt: 'blurry, low quality, distorted, ugly, watermark',
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`Fal AI returned ${response.status}`);
-  }
-
-  const data = await response.json();
-  const imageUrl = data.images?.[0]?.url;
-  if (!imageUrl) throw new Error('Fal AI returned no image URL');
-
-  const imageResponse = await fetchWithTimeout(imageUrl, { method: 'GET' });
-  if (!imageResponse.ok) {
-    throw new Error(`Failed to fetch Fal AI image: ${imageResponse.status}`);
-  }
-
-  const bytes = new Uint8Array(await imageResponse.arrayBuffer());
-  const contentType = imageResponse.headers.get('content-type') || 'image/jpeg';
-
-  return {
-    imageUrl: toDataUrl(bytes, contentType),
-    contentType,
-    bytes,
-    source: 'fal',
-    model: 'fal-ai/fast-sdxl',
-    prompt: enhancedPrompt,
-    width,
-    height,
-  };
-}
-
 // ── Handler ──────────────────────────────────────────────────
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -593,13 +471,20 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return errorResponse('Method not allowed. Use POST.', 405, headers);
   }
 
+  const caller = await requireBillableCaller(req);
+  if ('error' in caller) {
+    return errorResponse(caller.error, caller.status, headers);
+  }
+
+  let body: GenerateImageRequest;
   try {
-    let body: GenerateImageRequest;
-    try {
-      body = await req.json();
-    } catch {
-      return errorResponse('Invalid JSON body', 400, headers);
-    }
+    body = await req.json();
+  } catch {
+    return errorResponse('Invalid JSON body', 400, headers);
+  }
+
+  let charged = false;
+  try {
 
     const {
       prompt,
@@ -637,6 +522,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const outputFormat = format === 'binary' ? 'binary' : 'json';
     const errors: string[] = [];
 
+    const debit = await debitCaller(caller, 1, 'image_generation');
+    if (!debit.ok) {
+      return errorResponse(
+        `Out of image credits (${debit.remaining} left). Buy a pack or upgrade on Plan & credits.`,
+        402,
+        headers,
+      );
+    }
+    charged = debit.message !== 'admin';
+
     // 1. OpenRouter — primary
     try {
       console.log('[generate-image] Trying OpenRouter...');
@@ -661,46 +556,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
       errors.push(`openrouter: ${msg}`);
     }
 
-    // 2. Fal AI
-    try {
-      console.log('[generate-image] Trying Fal AI...');
-      const result = await generateWithFalAI(prompt, style, w, h, look, promptFlags);
-      console.log('[generate-image] Fal AI succeeded');
-      return successResponse(result, outputFormat, headers);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.warn('[generate-image] Fal AI failed:', msg);
-      errors.push(`fal-ai: ${msg}`);
-    }
-
-    // 3. Hugging Face (free) + one retry if the model is loading
-    try {
-      console.log('[generate-image] Trying Hugging Face...');
-      const result = await generateWithHuggingFace(prompt, style, w, h, look, promptFlags);
-      console.log('[generate-image] Hugging Face succeeded');
-      return successResponse(result, outputFormat, headers);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.warn('[generate-image] Hugging Face failed:', msg);
-      errors.push(`huggingface: ${msg}`);
-
-      if (msg.includes('loading')) {
-        console.log('[generate-image] Waiting for HF model to load...');
-        await delay(5000);
-        try {
-          const retryResult = await generateWithHuggingFace(prompt, style, w, h, look, promptFlags);
-          console.log('[generate-image] Hugging Face succeeded on retry');
-          return successResponse(retryResult, outputFormat, headers);
-        } catch (retryErr) {
-          const retryMsg =
-            retryErr instanceof Error ? retryErr.message : String(retryErr);
-          console.warn('[generate-image] Hugging Face retry failed:', retryMsg);
-          errors.push(`huggingface-retry: ${retryMsg}`);
-        }
-      }
-    }
-
-    console.error('[generate-image] All providers failed:', errors);
+    console.error('[generate-image] OpenRouter failed:', errors);
+    if (charged) await refundCaller(caller, 1, 'image_generation_failed');
     return errorResponse(
       'Image generation is currently unavailable. Please try again later.',
       502,
@@ -708,6 +565,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     );
   } catch (err) {
     console.error('[generate-image] Unexpected error:', err);
+    if (charged) await refundCaller(caller, 1, 'image_generation_failed');
     return errorResponse(
       'An unexpected error occurred during image generation.',
       500,

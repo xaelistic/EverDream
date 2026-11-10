@@ -212,10 +212,20 @@ async function analyzeDream(text: string): Promise<Record<string, unknown>> {
   return payload.analysis;
 }
 
-async function generateImage(prompt: string): Promise<{ url: string; prompt?: string; source?: string; style?: string }> {
+async function generateImage(
+  prompt: string,
+  profileId: string,
+): Promise<{ url: string; prompt?: string; source?: string; style?: string }> {
+  const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+  if (!key || !profileId) throw new Error('generate-image requires the service role and a profile');
   const response = await fetch(`${functionsBase()}/generate-image`, {
     method: 'POST',
-    headers: { ...serviceHeaders(), 'Content-Type': 'application/json' },
+    headers: {
+      Authorization: `Bearer ${key}`,
+      apikey: key,
+      'Content-Type': 'application/json',
+      'x-everdream-profile-id': profileId,
+    },
     body: JSON.stringify({
       prompt,
       style: 'dreamlike',
@@ -303,13 +313,18 @@ async function processDream(dream: DreamRow, actions: WorkItem['actions'], admin
       String(working.narrative || working.nugget || working.content || '').trim();
     if (actions.includes('image') && imagePrompt.length >= 10) {
       stamp('image', 'running');
-      const image = await generateImage(imagePrompt);
-      patch.generated_image_url = image.url;
-      patch.generated_image_prompt = image.prompt || imagePrompt;
-      patch.generated_image_style = image.style || 'dreamlike';
-      patch.generated_image_source = image.source || 'openrouter';
-      completed.push('image');
-      stamp('image', 'done');
+      try {
+        const image = await generateImage(imagePrompt, dream.user_id);
+        patch.generated_image_url = image.url;
+        patch.generated_image_prompt = image.prompt || imagePrompt;
+        patch.generated_image_style = image.style || 'dreamlike';
+        patch.generated_image_source = image.source || 'openrouter';
+        completed.push('image');
+        stamp('image', 'done');
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : String(err);
+        stamp('image', 'error');
+      }
     }
   } catch (err) {
     lastError = err instanceof Error ? err.message : String(err);

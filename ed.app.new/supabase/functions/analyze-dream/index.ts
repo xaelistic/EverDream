@@ -13,7 +13,11 @@
  * Secrets:
  *   OPENROUTER_API_KEY
  *   OPENROUTER_ANALYSIS_MODEL (optional)
+ *
+ * Requires a signed-in user or the service role. The anon key is rejected.
+ * Analysis does not spend image credits.
  */
+import { requireUserOrService } from '../_shared/auth.ts';
 
 interface DreamAnalysis {
   category: string;
@@ -433,6 +437,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method !== 'POST') {
     return jsonResponse({ error: 'Method not allowed. Use POST.' }, 405, headers);
   }
+
+  const caller = await requireUserOrService(req);
+  if (!caller.ok) return jsonResponse({ error: caller.error }, caller.status, headers);
 
   try {
     let body: AnalyzeRequestBody;

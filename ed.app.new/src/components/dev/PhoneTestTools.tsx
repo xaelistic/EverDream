@@ -32,19 +32,11 @@ declare global {
  * For true native notifications + more device APIs (background, rich actions),
  * we should add Capacitor (or migrate toward Expo). Let me know if you want that next.
  */
-const TEST_ACCOUNTS = [
-  { label: 'Admin (pro)', email: 'admin@everdream.test', password: 'EverDream!Test2026' },
-  { label: 'Free tier', email: 'free@everdream.test', password: 'EverDream!Test2026' },
-  { label: 'Plus tier', email: 'plus@everdream.test', password: 'EverDream!Test2026' },
-  { label: 'Pro tier', email: 'pro@everdream.test', password: 'EverDream!Test2026' },
-] as const;
-
 export default function PhoneTestTools() {
-  const { user, signIn, signOut } = useAuth();
-  const { tierLabel, isAdmin, refresh: refreshSubscription } = useSubscription();
+  const { user } = useAuth();
+  const { tierLabel, isAdmin } = useSubscription();
   const [log, setLog] = useState<string[]>([]);
   const [isOpen, setIsOpen] = useState(false);
-  const [authBusy, setAuthBusy] = useState(false);
 
   if (!import.meta.env.DEV) return null;
 
@@ -235,24 +227,6 @@ export default function PhoneTestTools() {
 
   const clearLog = () => setLog([]);
 
-  const loginAs = async (email: string, password: string) => {
-    setAuthBusy(true);
-    try {
-      if (user && !user.isAnonymous) {
-        await signOut();
-      }
-      const { error } = await signIn(email, password);
-      if (error) throw error;
-      await refreshSubscription();
-      addLog(`✅ Signed in as ${email}`);
-    } catch (err: any) {
-      addLog(`❌ Login failed: ${err?.message || 'unknown error'}`);
-      addLog('   Run: npm run seed:admin (with Supabase configured)');
-    } finally {
-      setAuthBusy(false);
-    }
-  };
-
   const forceOnboarding = () => {
     localStorage.removeItem('everdream_onboarded');
     localStorage.setItem('forceOnboarding', '1');
@@ -314,16 +288,6 @@ export default function PhoneTestTools() {
           </div>
 
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-            {TEST_ACCOUNTS.map((acct) => (
-              <button
-                key={acct.email}
-                onClick={() => loginAs(acct.email, acct.password)}
-                disabled={authBusy}
-                style={btnStyle}
-              >
-                {acct.label}
-              </button>
-            ))}
             <button onClick={forceOnboarding} style={btnStyle}>Force onboarding</button>
             <button onClick={() => { window.location.hash = '#/admin'; addLog('→ #/admin'); }} style={btnStyle}>Admin dash</button>
           </div>

@@ -7,7 +7,11 @@
  *
  * Default model: bytedance/seedance-2.0-fast (strong I2V, cheap).
  * Override: OPENROUTER_VIDEO_MODEL
+ *
+ * A signed-in user (or the service role naming a profile) is charged when a
+ * new job is submitted. Polls do not charge again. A failed job refunds once.
  */
+import { attachJobKey, debitCaller, refundCaller, requireBillableCaller } from '../_shared/auth.ts';
 
 const OPENROUTER_VIDEOS = 'https://openrouter.ai/api/v1/videos';
 const DEFAULT_MODEL = 'bytedance/seedance-2.0-fast';
@@ -144,13 +148,25 @@ async function persistVideo(bytes: Uint8Array, contentType: string): Promise<str
   return `${publicBase}/storage/v1/object/public/public-assets/${path}`;
 }
 
-async function downloadClip(url: string): Promise<{ bytes: Uint8Array; type: string; storedUrl: string }> {
-  const response = await fetch(url, { headers: authHeaders() });
-  if (!response.ok) throw new Error(`Video download failed (${response.status})`);
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  const type = response.headers.get('content-type') || 'video/mp4';
-  const stored = await persistVideo(bytes, type);
-  return { bytes, type, storedUrl: stored || url };
+function videoCreditCost(duration?: number, resolution?: string): number {
+  const seconds = Number(duration) || 6;
+  if (seconds >= 8 || resolution === '1080p') return 3;
+  return 2;
+}
+
+/** Fetch the CDN asset without the OpenRouter bearer token. */
+async function downloadClip(url: string): Promise<string> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return url;
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    const type = response.headers.get('content-type') || 'video/mp4';
+    const stored = await persistVideo(bytes, type);
+    return stored || url;
+  } catch (err) {
+    console.warn('[generate-video] clip download failed, returning provider URL', err);
+    return url;
+  }
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -159,6 +175,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method !== 'POST') {
     return jsonResponse({ error: 'Method not allowed. Use POST.' }, 405, headers);
   }
+
+  const caller = await requireBillableCaller(req);
+  if ('error' in caller) return jsonResponse({ error: caller.error }, caller.status, headers);
 
   const apiKey = Deno.env.get('OPENROUTER_API_KEY');
   if (!apiKey) return jsonResponse({ error: 'OPENROUTER_API_KEY is not set' }, 500, headers);
@@ -170,27 +189,46 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return jsonResponse({ error: 'Invalid JSON body' }, 400, headers);
   }
 
+  let charged = false;
+  let refundAmount = 0;
+  let refundKey: string | null = null;
+
+  const refundFailedJob = async (jobKey: string | null, amount: number) => {
+    if (amount < 1) return;
+    await refundCaller(caller, amount, 'video_generation_failed', jobKey);
+  };
+
   try {
     if (body.jobId || body.pollingUrl) {
-      const pollingUrl = body.pollingUrl || `${OPENROUTER_VIDEOS}/${body.jobId}`;
+      const jobFromBody = typeof body.jobId === 'string' && /^[A-Za-z0-9_-]{4,}$/.test(body.jobId)
+        ? body.jobId
+        : '';
+      const pollingUrl = jobFromBody
+        ? `${OPENROUTER_VIDEOS}/${jobFromBody}`
+        : (typeof body.pollingUrl === 'string' && body.pollingUrl.startsWith(`${OPENROUTER_VIDEOS}/`)
+          ? body.pollingUrl
+          : '');
+      if (!pollingUrl) return jsonResponse({ error: 'Unknown video job.' }, 400, headers);
       const status = await pollJob(pollingUrl, MAX_WAIT_MS);
+      const jobId = status.id || body.jobId || null;
       if (status.status === 'completed' && status.unsigned_urls?.[0]) {
-        const clip = await downloadClip(status.unsigned_urls[0]);
+        const videoUrl = await downloadClip(status.unsigned_urls[0]);
         return jsonResponse({
           status: 'completed',
-          videoUrl: clip.storedUrl,
+          videoUrl,
           source: 'openrouter',
           model: status.model || Deno.env.get('OPENROUTER_VIDEO_MODEL') || DEFAULT_MODEL,
           cost_usd: status.usage?.cost ?? null,
-          jobId: status.id || body.jobId,
+          jobId,
         }, 200, headers);
       }
-      if (status.status === 'failed') {
+      if (status.status === 'failed' || status.status === 'cancelled') {
+        await refundFailedJob(jobFromBody || jobId, videoCreditCost(body.duration, body.resolution));
         return jsonResponse({ status: 'failed', error: status.error || 'Video generation failed' }, 502, headers);
       }
       return jsonResponse({
         status: status.status || 'processing',
-        jobId: status.id || body.jobId,
+        jobId,
         pollingUrl,
       }, 202, headers);
     }
@@ -204,6 +242,16 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
 
     const duration = Math.min(10, Math.max(4, Number(body.duration) || 6));
+    const resolution = body.resolution === '1080p' ? '1080p' : '720p';
+    refundAmount = videoCreditCost(duration, resolution);
+    const debit = await debitCaller(caller, refundAmount, 'video_generation');
+    if (!debit.ok) {
+      return jsonResponse({
+        error: `Out of image credits (${debit.remaining} left). Buy a pack or upgrade on Plan & credits.`,
+      }, 402, headers);
+    }
+    charged = debit.message !== 'admin';
+
     const requested = typeof body.model === 'string' ? body.model : '';
     const model = MODEL_ALLOWLIST.includes(requested)
       ? requested
@@ -227,7 +275,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       model,
       prompt: clipPrompt(prompt),
       duration,
-      resolution: body.resolution || '720p',
+      resolution,
       aspect_ratio: body.aspectRatio || '1:1',
       generate_audio: false,
       frame_images: frameImages,
@@ -249,6 +297,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
         });
         const retried = await retry.json().catch(() => ({})) as JobStatus;
         if (!retry.ok || !retried.id) {
+          if (charged) await refundFailedJob(null, refundAmount);
+          charged = false;
           const detail = typeof submitted.error === 'string'
             ? submitted.error
             : submitted.error?.message || `OpenRouter video failed (${submit.status})`;
@@ -256,6 +306,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
         }
         Object.assign(submitted, retried);
       } else {
+        if (charged) await refundFailedJob(null, refundAmount);
+        charged = false;
         const detail = typeof submitted.error === 'string'
           ? submitted.error
           : submitted.error?.message || `OpenRouter video failed (${submit.status})`;
@@ -263,20 +315,24 @@ Deno.serve(async (req: Request): Promise<Response> => {
       }
     }
 
+    refundKey = submitted.id || null;
+    if (refundKey) await attachJobKey(caller, 'video_generation', refundKey);
     const pollingUrl = submitted.polling_url || `${OPENROUTER_VIDEOS}/${submitted.id}`;
     const status = await pollJob(pollingUrl, MAX_WAIT_MS);
     if (status.status === 'completed' && status.unsigned_urls?.[0]) {
-      const clip = await downloadClip(status.unsigned_urls[0]);
+      const videoUrl = await downloadClip(status.unsigned_urls[0]);
       return jsonResponse({
         status: 'completed',
-        videoUrl: clip.storedUrl,
+        videoUrl,
         source: 'openrouter',
         model: status.model || model,
         cost_usd: status.usage?.cost ?? null,
         jobId: status.id || submitted.id,
       }, 200, headers);
     }
-    if (status.status === 'failed') {
+    if (status.status === 'failed' || status.status === 'cancelled') {
+      if (charged) await refundFailedJob(status.id || refundKey, refundAmount);
+      charged = false;
       return jsonResponse({ status: 'failed', error: status.error || 'Video generation failed' }, 502, headers);
     }
 
@@ -284,8 +340,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
       status: 'processing',
       jobId: submitted.id,
       pollingUrl,
+      duration,
+      resolution,
     }, 202, headers);
   } catch (err) {
+    if (charged) await refundFailedJob(refundKey, refundAmount);
     const message = err instanceof Error ? err.message : String(err);
     return jsonResponse({ error: message }, 500, headers);
   }

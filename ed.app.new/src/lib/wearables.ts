@@ -123,9 +123,9 @@ export async function fetchOuraSleep(auth: WearableAuth, startDate: string, endD
             : day.light_sleep_duration
               ? Math.round(day.light_sleep_duration / 60)
               : 0,
-          awakeMinutes: session?.awake || 20,
-          efficiency: session?.efficiency || day.efficiency || 85,
-          score: day.score || 75,
+          awakeMinutes: session?.awake ? Math.round(Number(session.awake) / 60) : 0,
+          efficiency: session?.efficiency || day.efficiency || 0,
+          score: typeof day.score === 'number' ? day.score : 0,
           heartRateAvg: session?.hr_average,
           heartRateMin: session?.hr_lowest,
           hrv: session?.rmssd,
@@ -183,7 +183,7 @@ export async function fetchFitbitSleep(auth: WearableAuth, startDate: string, en
           lightMinutes,
           awakeMinutes,
           efficiency: sleep.efficiency || Math.round((sleep.timeInBed - awakeMinutes * 60) / sleep.timeInBed * 100),
-          score: sleep.isMainSleep ? 75 : 50,
+          score: typeof sleep.efficiency === 'number' ? sleep.efficiency : 0,
           heartRateAvg: sleep.restingHeartRate,
           source: 'fitbit',
         });
@@ -535,8 +535,10 @@ export async function fetchAppleHealthSleep(auth: WearableAuth, startDate: strin
           deepMinutes,
           lightMinutes,
           awakeMinutes,
-          efficiency: Math.round(((durationMinutes - awakeMinutes) / durationMinutes) * 100),
-          score: 75,
+          efficiency: durationMinutes
+            ? Math.round(((durationMinutes - awakeMinutes) / durationMinutes) * 100)
+            : 0,
+          score: 0,
           source: 'apple_health',
         });
       }
@@ -1196,7 +1198,7 @@ export async function fetchSonySleep(auth: WearableAuth, startDate: string, endD
           remMinutes: entry.rem_minutes || 90,
           deepMinutes: entry.deep_minutes || 70,
           lightMinutes: entry.light_minutes || 240,
-          awakeMinutes: entry.awake_minutes || 20,
+          awakeMinutes: Number(entry.awake_minutes) || 0,
           efficiency: entry.efficiency || 80,
           score: entry.sleep_score || 70,
           source: 'sony',

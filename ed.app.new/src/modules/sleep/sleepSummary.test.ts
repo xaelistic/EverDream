@@ -21,6 +21,8 @@ describe('mapWearableSleepToSummary', () => {
     expect(summary?.totalSleepMinutes).toBeGreaterThan(300);
     expect(summary?.stageMinutes.rem).toBe(88);
     expect(summary?.signalsSource).toBe('wearable');
+    expect(summary?.movementIndex).toBe(0);
+    expect(summary?.snoreIndex).toBe(0);
   });
 
   it('returns null when the wearable record has no duration', () => {

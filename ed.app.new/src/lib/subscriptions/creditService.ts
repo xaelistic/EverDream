@@ -108,6 +108,23 @@ export async function consumeImageCredits(
   return { ok: true, remaining: remaining - amount, message: 'local' };
 }
 
+export async function readEdgeFunctionError(error: unknown, data?: unknown): Promise<string> {
+  if (data && typeof data === 'object' && 'error' in data) {
+    const message = (data as { error?: unknown }).error;
+    if (typeof message === 'string' && message) return message;
+  }
+  const context = (error as { context?: { json?: () => Promise<unknown> } } | null)?.context;
+  if (context && typeof context.json === 'function') {
+    try {
+      const body = await context.json() as { error?: unknown };
+      if (typeof body?.error === 'string' && body.error) return body.error;
+    } catch {
+      /* response body already read */
+    }
+  }
+  return error instanceof Error ? error.message : 'Request failed';
+}
+
 export async function refundImageCredits(amount: number, reason = 'refund'): Promise<void> {
   try {
     await supabase.rpc('refund_image_credits', { amount, reason });

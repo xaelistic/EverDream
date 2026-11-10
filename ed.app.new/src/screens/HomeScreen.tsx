@@ -2,7 +2,16 @@ import { Moon, Sparkles, BookOpen, ChevronRight, BedDouble, PenLine, Check } fro
 import { coerceNarrativeText } from '../lib/normalizeDreamAnalysis';
 import { presentDream } from '../lib/dreamClassify';
 import { ENERGY_LEVELS, type EnergyLevel } from '../lib/dailyCheckin';
-import type { WearableSleepRecord } from '../lib/wearables';
+type HomeSleepNight = {
+  durationMinutes?: number;
+  remMinutes?: number;
+  score?: number;
+  source?: string;
+  sleepDuration?: number;
+  estimatedREM?: number;
+  quality?: number;
+  sleepQuality?: number;
+};
 import type { DailyQuote } from '../lib/dailyContent';
 import { getDailyQuoteCard } from '../lib/dailyContent';
 import type { EducationModule } from '../lib/sleepEducation';
@@ -41,7 +50,7 @@ interface HomeScreenProps {
   reflectionEnergyLevel: EnergyLevel | '';
   onReflectionEnergyLevel: (level: EnergyLevel, value: number) => void;
   checkInSaved: boolean;
-  reflectionSleepData: WearableSleepRecord | null;
+  reflectionSleepData: HomeSleepNight | null;
   dailyEducation: EducationModule;
   onOpenSleepCard?: (moduleId: string) => void;
   getCategoryBadgeClass: (category: string) => string;
@@ -148,12 +157,14 @@ export function HomeScreen({
           {reflectionSleepData ? (
             <>
               <p className="text-2xl font-semibold text-ink">
-                {formatSleepDuration(reflectionSleepData.sleepDuration || 0)}
+                {formatSleepDuration(reflectionSleepData.durationMinutes || reflectionSleepData.sleepDuration || 0)}
               </p>
               <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted">
-                <span>{reflectionSleepData.estimatedREM || 0}m REM</span>
+                <span>{(reflectionSleepData.remMinutes || reflectionSleepData.estimatedREM || 0)}m REM</span>
                 <span>·</span>
-                <span>{reflectionSleepData.quality || reflectionSleepData.sleepQuality || 0}% quality</span>
+                <span>
+                  {(reflectionSleepData.score || reflectionSleepData.quality || reflectionSleepData.sleepQuality || 0)}% quality
+                </span>
                 {reflectionSleepData.source && (
                   <>
                     <span>·</span>

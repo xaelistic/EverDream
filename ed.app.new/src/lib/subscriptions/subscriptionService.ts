@@ -81,7 +81,7 @@ export async function getOfferings(): Promise<SubscriptionOffering[]> {
       tier: 'pro',
       identifier: PRODUCT_IDS.proMonthly,
       title: 'EverDream Pro',
-      priceString: '$9.99/mo',
+      priceString: '$12.99/mo',
     },
   ];
 }

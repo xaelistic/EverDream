@@ -8,15 +8,14 @@
  * Requires in .env (or environment):
  *   VITE_SUPABASE_URL
  *   VITE_SUPABASE_ANON_KEY
- *   SUPABASE_SERVICE_ROLE_KEY  (recommended — skips email confirmation)
+ *   SUPABASE_SERVICE_ROLE_KEY  (required to set admin or a paid tier)
+ *   SEED_PASSWORD               required. No default password is built in.
  *
  * Accounts created:
- *   admin@everdream.test  — is_admin + pro tier (all features, no payment)
+ *   admin@everdream.test  — is_admin + pro tier (service role only)
  *   free@everdream.test   — free tier (onboarding not completed)
  *   plus@everdream.test   — plus tier
  *   pro@everdream.test    — pro tier
- *
- * Default password for all: EverDream!Test2026
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -51,7 +50,11 @@ const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-const DEFAULT_PASSWORD = process.env.SEED_PASSWORD || 'EverDream!Test2026';
+const SEED_PASSWORD = process.env.SEED_PASSWORD;
+if (!SEED_PASSWORD) {
+  console.error('Set SEED_PASSWORD before seeding. This script will not use a built-in password.');
+  process.exit(1);
+}
 
 const ACCOUNTS = [
   {
@@ -98,8 +101,6 @@ const anonClient = createClient(SUPABASE_URL, ANON_KEY, { auth: { autoRefreshTok
 async function upsertAccount(account) {
   const metadata = {
     display_name: account.displayName,
-    is_admin: account.isAdmin,
-    subscription_tier: account.tier,
   };
 
   if (adminClient) {
@@ -108,7 +109,7 @@ async function upsertAccount(account) {
 
     if (found) {
       const { error } = await adminClient.auth.admin.updateUserById(found.id, {
-        password: DEFAULT_PASSWORD,
+        password: SEED_PASSWORD,
         email_confirm: true,
         user_metadata: metadata,
       });
@@ -119,7 +120,7 @@ async function upsertAccount(account) {
 
     const { data, error } = await adminClient.auth.admin.createUser({
       email: account.email,
-      password: DEFAULT_PASSWORD,
+      password: SEED_PASSWORD,
       email_confirm: true,
       user_metadata: metadata,
     });
@@ -130,14 +131,14 @@ async function upsertAccount(account) {
 
   const { data, error } = await anonClient.auth.signUp({
     email: account.email,
-    password: DEFAULT_PASSWORD,
+    password: SEED_PASSWORD,
     options: { data: metadata },
   });
   if (error) {
     if (error.message?.toLowerCase().includes('already registered')) {
       const { error: signInError } = await anonClient.auth.signInWithPassword({
         email: account.email,
-        password: DEFAULT_PASSWORD,
+        password: SEED_PASSWORD,
       });
       if (signInError) throw signInError;
       const { data: userData } = await anonClient.auth.getUser();
@@ -153,10 +154,14 @@ async function upsertAccount(account) {
 async function syncProfile(client, authUserId, account) {
   const profilePatch = {
     display_name: account.displayName,
-    is_admin: account.isAdmin,
-    subscription_tier: account.tier,
     updated_at: new Date().toISOString(),
   };
+  if (SERVICE_KEY) {
+    profilePatch.is_admin = account.isAdmin;
+    profilePatch.subscription_tier = account.tier;
+  } else if (account.isAdmin || account.tier !== 'free') {
+    console.warn(`  ${account.email}: service role missing, so admin and tier stay at the free signup defaults.`);
+  }
   if (account.skipOnboarding) {
     profilePatch.onboarded_at = new Date().toISOString();
   }
@@ -197,10 +202,13 @@ async function syncProfile(client, authUserId, account) {
   }
 }
 
+if (!SERVICE_KEY) {
+  console.warn('SUPABASE_SERVICE_ROLE_KEY is missing. Admin and paid tier cannot be set.');
+}
+
 console.log('EverDream — seeding test accounts');
 console.log('Supabase URL:', SUPABASE_URL);
 console.log('Service role:', SERVICE_KEY ? 'yes' : 'no (sign-up may need email confirmation)');
-console.log('Password:', DEFAULT_PASSWORD);
 console.log('');
 
 const results = [];
@@ -216,9 +224,7 @@ for (const account of ACCOUNTS) {
 }
 
 console.log('');
-console.log('Login credentials for testing:');
-console.log('  Primary admin: admin@everdream.test /', DEFAULT_PASSWORD);
-console.log('  Tier samples:  free@ / plus@ / pro@ everdream.test /', DEFAULT_PASSWORD);
+console.log('Accounts seeded. The password was taken from SEED_PASSWORD and is not printed.');
 console.log('');
 console.log('Enable login screen: set VITE_REQUIRE_AUTH=true in .env, then npm run dev');
 console.log('Force onboarding:  localStorage.setItem("forceOnboarding", "1"); location.reload()');

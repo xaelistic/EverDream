@@ -1,8 +1,12 @@
+import { lazy, Suspense } from 'react';
 import DreamJournalApp from './DreamJournalApp';
 import ProtectedRoute from './components/auth/ProtectedRoute';
-import PhoneTestTools from './components/dev/PhoneTestTools';
 import { PublicShareScreen } from './screens/PublicShareScreen';
 import { useSocialAuth } from './hooks/use-social-auth';
+
+const PhoneTestTools = import.meta.env.DEV
+  ? lazy(() => import('./components/dev/PhoneTestTools'))
+  : null;
 
 function getShareSlugFromHash(): string | null {
   if (typeof window === 'undefined') return null;
@@ -24,7 +28,11 @@ export default function App() {
         <DreamJournalApp />
       </ProtectedRoute>
 
-      <PhoneTestTools />
+      {PhoneTestTools ? (
+        <Suspense fallback={null}>
+          <PhoneTestTools />
+        </Suspense>
+      ) : null}
     </>
   );
 }

@@ -7,7 +7,6 @@ import {
   Play,
   Trash2,
   Download,
-  Upload,
   Zap,
   Heart,
   Camera,
@@ -261,14 +260,8 @@ export function DebugPanel({ onClose, dreams, onDreamsChange }: DebugPanelProps)
                   />
                   <FlowCard
                     title="Dream Capture"
-                    description="Text / Audio / Video / Photo upload flows"
+                    description="Text, audio, and video capture"
                     icon={Camera}
-                    onRun={() => {}}
-                  />
-                  <FlowCard
-                    title="Photo OCR Import"
-                    description="Multi-photo upload → Organize → OCR → Review → Save"
-                    icon={Upload}
                     onRun={() => {}}
                   />
                 </div>

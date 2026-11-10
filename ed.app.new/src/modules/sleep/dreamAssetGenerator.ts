@@ -1,22 +1,12 @@
 // Image generation via the generate-image edge function (OpenRouter primary).
+// The edge function debits the server ledger. This client does not.
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { DreamAsset } from './types';
-import { consumeImageCredits, refundImageCredits } from '../../lib/subscriptions/creditService';
+import { getCreditBalance, readEdgeFunctionError } from '../../lib/subscriptions/creditService';
 import { applyTasteToPrompt, pickImageRecipe } from '../../lib/imageTaste';
 import { feelingImageCue, loadDailyCheckin } from '../../lib/dailyCheckin';
+import { supabase } from '../../lib/supabase/client';
 export type { DreamAsset };
-
-// Local getSupabase (modeled after other modules to avoid "not defined" at runtime)
-let _supabase: SupabaseClient | null = null;
-function getSupabase(): SupabaseClient | null {
-  if (_supabase) return _supabase;
-  const url = (import.meta as any).env?.VITE_SUPABASE_URL || '';
-  const key = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
-  if (!url || !key || url.includes('placeholder')) return null;
-  _supabase = createClient(url, key);
-  return _supabase;
-}
 
 // Helpers (ensure they exist for the reliable path)
 function makeId() { return 'asset-' + Date.now() + '-' + Math.random().toString(36).slice(2, 9); }
@@ -71,12 +61,11 @@ async function generateViaEdgeFunction(
   look?: string,
   options?: GenerateImageOptions,
 ): Promise<DreamAsset> {
-  const spent = await consumeImageCredits(1, 'image_generation');
-  if (!spent.ok) {
-    throw new Error(`Out of image credits (${spent.remaining} left). Buy a pack or upgrade on Plan & credits.`);
+  const balance = await getCreditBalance();
+  if (balance.source === 'db' && balance.totalRemaining < 1) {
+    throw new Error(`Out of image credits (${balance.totalRemaining} left). Buy a pack or upgrade on Plan & credits.`);
   }
 
-  const supabase = getSupabase();
   const body = {
     prompt,
     style,
@@ -89,37 +78,11 @@ async function generateViaEdgeFunction(
     needsReadableText: options?.needsReadableText,
   };
 
-  try {
-    if (supabase) {
-      const { data, error } = await supabase.functions.invoke('generate-image', { body });
-      if (!error && data) {
-        return assetFromEdge(data as EdgeImageResponse, prompt, style);
-      }
-      console.warn('[AssetGen] functions.invoke failed:', error?.message || data);
-    }
-
-    const url = (import.meta as any).env?.VITE_SUPABASE_URL || '';
-    const key = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
-    if (!url || !key) throw new Error('Supabase is not configured for image generation');
-
-    const response = await fetch(`${url.replace(/\/$/, '')}/functions/v1/generate-image`, {
-      method: 'POST',
-      headers: {
-        apikey: key,
-        Authorization: `Bearer ${key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
-    const payload = await response.json().catch(() => ({})) as EdgeImageResponse;
-    if (!response.ok) {
-      throw new Error(payload.error || `Image generation failed (${response.status})`);
-    }
-    return assetFromEdge(payload, prompt, style);
-  } catch (err) {
-    await refundImageCredits(1, 'image_generation_failed');
-    throw err;
+  const { data, error } = await supabase.functions.invoke('generate-image', { body });
+  if (error || !data) {
+    throw new Error(await readEdgeFunctionError(error, data));
   }
+  return assetFromEdge(data as EdgeImageResponse, prompt, style);
 }
 
 // Ollama NWE integration (Brief 1 - primary provider when configured)

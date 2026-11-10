@@ -16,9 +16,16 @@ describe('image model routing', () => {
     });
   });
 
-  it('routes storyboards and quality requests to the flex model', () => {
-    expect(routeImageModel({ intent: 'storyboard' }).model).toBe(IMAGE_MODELS.quality);
-    expect(routeImageModel({ quality: 'quality' }).reason).toBe('storyboard-or-quality');
+  it('keeps storyboard panels on the cheap model unless quality is requested', () => {
+    expect(routeImageModel({ intent: 'storyboard' })).toMatchObject({
+      model: IMAGE_MODELS.cheap,
+      reason: 'storyboard-cheap',
+    });
+    expect(routeImageModel({ quality: 'quality' })).toMatchObject({
+      model: IMAGE_MODELS.quality,
+      reason: 'quality-requested',
+    });
+    expect(routeImageModel({ intent: 'storyboard', quality: 'quality' }).model).toBe(IMAGE_MODELS.quality);
   });
 
   it('routes in-world text to the text-capable model unless overlays are banned', () => {

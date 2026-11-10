@@ -60,7 +60,7 @@ export function PrivacyScreen({
         <div className="space-y-4">
           <PrivacyToggle
             label="AI Dream Analysis"
-            description="Allow Claude AI to analyze dream content"
+            description="Allow dream analysis through EverDream's model provider"
             value={privacySettings.aiAnalysis}
             onChange={(v) => {
               const newSettings = {...privacySettings, aiAnalysis: v};
@@ -135,8 +135,8 @@ export function PrivacyScreen({
             <Cpu className="w-5 h-5 text-duskDeep flex-shrink-0 mt-0.5" strokeWidth={1.75} />
             <div>
               <div className="font-semibold text-ink">Data Processors</div>
-              <div className="text-muted">• Claude AI (Anthropic) - Analysis only</div>
-              <div className="text-muted">• DALL-E (OpenAI) - Image generation</div>
+              <div className="text-muted">• OpenRouter — dream analysis, images, and clips</div>
+              <div className="text-muted">• Supabase — account, dreams, and media storage</div>
               <div className="text-xs text-muted mt-1">No data retention, processing only</div>
             </div>
           </div>

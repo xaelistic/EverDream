@@ -75,8 +75,11 @@ export function routeImageModel(input: ImageRouteInput = {}): ImageRoute {
   if (needsText) {
     return { model: IMAGE_MODELS.text, reason: 'readable-inworld-text', quality: 'quality' };
   }
-  if (input.intent === 'storyboard' || input.quality === 'quality') {
-    return { model: IMAGE_MODELS.quality, reason: 'storyboard-or-quality', quality: 'quality' };
+  if (input.quality === 'quality') {
+    return { model: IMAGE_MODELS.quality, reason: 'quality-requested', quality: 'quality' };
+  }
+  if (input.intent === 'storyboard') {
+    return { model: IMAGE_MODELS.cheap, reason: 'storyboard-cheap', quality: 'cheap' };
   }
   return { model: IMAGE_MODELS.cheap, reason: 'default-cheap', quality: 'cheap' };
 }

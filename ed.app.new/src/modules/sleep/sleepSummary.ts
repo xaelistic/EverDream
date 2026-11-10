@@ -109,6 +109,7 @@ export type WearableSleepLike = {
   lightMinutes?: number;
   awakeMinutes?: number;
   movement?: number;
+  snoreIndex?: number;
   heartRate?: { avg?: number };
   heartRateAvg?: number;
   hrv?: number;
@@ -252,11 +253,11 @@ export function mapWearableSleepToSummary(
     sleepEnd: end.toISOString(),
     targetSleepMinutes: getTargetSleepMinutes(settings),
     stageMinutes,
-    awakenings: 2,
+    awakenings: 0,
     wasoMinutes: stageMinutes.awake,
-    movementIndex: Number(session.movement) || 18,
-    snoreIndex: 12,
-    sleepTalkIndex: 6,
+    movementIndex: Number(session.movement) || 0,
+    snoreIndex: Number(session.snoreIndex) || 0,
+    sleepTalkIndex: 0,
     heartRateAvg: session.heartRateAvg ?? session.heartRate?.avg,
     heartRateVariability: session.hrv,
     restednessScore: session.sleepQuality
