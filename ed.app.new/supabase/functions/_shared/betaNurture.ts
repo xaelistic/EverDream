@@ -8,6 +8,8 @@ import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1
 
 type Cta = 'app' | 'discord' | 'letters';
 
+type CtaLink = { label: string; to: Cta; hash?: string };
+
 type Letter = {
   key: string;
   funnel: string;
@@ -16,8 +18,8 @@ type Letter = {
   preheader: string;
   headline: string;
   paragraphs: string[];
-  cta: { label: string; to: Cta };
-  quiet?: { label: string; to: Cta };
+  cta: CtaLink;
+  quiet?: CtaLink;
 };
 
 const LETTERS: Letter[] = [
@@ -33,7 +35,7 @@ const LETTERS: Letter[] = [
       'Today is the welcome. In seven days, a prompt to write one dream. Seven days after that, one picture. Seven days after that, a request for what we should keep.',
       'The app is open if you want to look tonight. You do not have to wait for the next letter.',
     ],
-    cta: { label: 'Open EverDream', to: 'app' },
+    cta: { label: 'Open EverDream', to: 'app', hash: '/#/?nurture=welcome' },
     quiet: { label: 'Read the four notes', to: 'letters' },
   },
   {
@@ -47,7 +49,7 @@ const LETTERS: Letter[] = [
       'Open EverDream when you wake and write the dream while it is still warm. A few sentences count. If typing feels like too much, leave a voice note.',
       'Leave the pictures for next week. This note is only about whether capture is calm enough to use half-asleep.',
     ],
-    cta: { label: 'Open the journal', to: 'app' },
+    cta: { label: 'Open the journal', to: 'app', hash: '/#/record?nurture=capture' },
   },
   {
     key: 'picture',
@@ -60,7 +62,7 @@ const LETTERS: Letter[] = [
       'If a dream is in the journal, make a single image from it. A new account includes 14 starter images. Spend one. The question is whether the picture feels like your dream.',
       'The journal itself does not cost a credit. Images do.',
     ],
-    cta: { label: 'Make one image', to: 'app' },
+    cta: { label: 'Make one image', to: 'app', hash: '/#/journal?nurture=picture' },
   },
   {
     key: 'circle',
@@ -74,7 +76,7 @@ const LETTERS: Letter[] = [
       'If you used the app, reply with one thing that helped and one thing that got in the way. If you would rather talk in a room, Discord is where the beta conversations sit.',
     ],
     cta: { label: 'Join Discord', to: 'discord' },
-    quiet: { label: 'Open the app', to: 'app' },
+    quiet: { label: 'Open the app', to: 'app', hash: '/#/?nurture=circle' },
   },
 ];
 
@@ -108,10 +110,11 @@ function discordUrl(): string {
   return Deno.env.get('DISCORD_URL') || 'https://discord.gg/everdream';
 }
 
-function hrefFor(to: Cta): string {
-  if (to === 'app') return appUrl();
-  if (to === 'discord') return discordUrl();
-  return `${siteUrl()}/beta/letters`;
+function hrefFor(link: CtaLink): string {
+  if (link.to === 'discord') return discordUrl();
+  if (link.to === 'letters') return `${siteUrl()}/beta/letters`;
+  const hash = link.hash || '/#/';
+  return `${appUrl()}${hash}`;
 }
 
 function esc(value: string): string {
@@ -127,9 +130,9 @@ export function letterByKey(key: string): Letter | undefined {
 }
 
 export function renderLetter(letter: Letter, unsubscribeUrl: string): { html: string; text: string } {
-  const cta = hrefFor(letter.cta.to);
+  const cta = hrefFor(letter.cta);
   const quiet = letter.quiet
-    ? `<p style="margin:16px 0 0;font-family:Inter,Helvetica,Arial,sans-serif;font-size:14px;"><a href="${esc(hrefFor(letter.quiet.to))}" style="color:#a8eddc;text-decoration:none;">${esc(letter.quiet.label)}</a></p>`
+    ? `<p style="margin:16px 0 0;font-family:Inter,Helvetica,Arial,sans-serif;font-size:14px;"><a href="${esc(hrefFor(letter.quiet))}" style="color:#a8eddc;text-decoration:none;">${esc(letter.quiet.label)}</a></p>`
     : '';
   const paragraphs = letter.paragraphs
     .map((paragraph) => `<p style="margin:0 0 12px;font-family:Inter,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#b0acc0;">${esc(paragraph)}</p>`)
@@ -140,7 +143,7 @@ export function renderLetter(letter: Letter, unsubscribeUrl: string): { html: st
     letter.headline,
     ...letter.paragraphs,
     `${letter.cta.label}: ${cta}`,
-    letter.quiet ? `${letter.quiet.label}: ${hrefFor(letter.quiet.to)}` : '',
+    letter.quiet ? `${letter.quiet.label}: ${hrefFor(letter.quiet)}` : '',
     'You’re on this list because you joined the EverDream beta.',
     `Leave the list: ${unsubscribeUrl}`,
   ].filter(Boolean).join('\n\n');

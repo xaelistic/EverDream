@@ -45,6 +45,7 @@ import {
   consumePendingReferral,
   applyReferralCode,
 } from './lib/referral';
+import { consumeNurtureLink, nurtureArrivalMessage } from './lib/nurtureLink';
 import { SLEEP_EDUCATION_CONTENT } from './lib/sleepEducation';
 import { getCategoryBadgeClass, getEmotionEmoji } from './utils/dreamPresentation';
 import {
@@ -701,6 +702,14 @@ const DreamJournalApp = () => {
     incrementTodayOpenCount();
     setHasRoutedToday(true);
   }, [isAppLoading, hasAcceptedTerms, showOnboarding, hasRoutedToday, dreams, navigate]);
+
+  // A letter opens the same screen the morning prompt would, and says so once.
+  useEffect(() => {
+    if (isAppLoading || !hasAcceptedTerms || showOnboarding) return;
+    const step = consumeNurtureLink();
+    if (!step) return;
+    addToast({ type: 'info', message: nurtureArrivalMessage(step) });
+  }, [isAppLoading, hasAcceptedTerms, showOnboarding, addToast]);
 
   // Save dreams to Supabase cloud (non-blocking helper)
   const syncDreamToSupabase = async (dream: Dream): Promise<void> => {
