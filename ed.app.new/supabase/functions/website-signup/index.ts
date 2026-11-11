@@ -3,7 +3,8 @@
  * Stores the address on website_signups. If an app profile already
  * uses that email, the row is attached to it.
  *
- * POST { email, source?, page?, referral_code?, company? }
+ * POST { email, source?, page?, referral_code?, newsletter?, company? }
+ * newsletter true joins the beta list (source beta-newsletter).
  * company is a honeypot and must be empty.
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
@@ -45,7 +46,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
   if (!url || !serviceKey) return json({ error: 'Signup is not configured.' }, 500, headers);
 
-  let body: { email?: string; source?: string; page?: string; referral_code?: string; company?: string };
+  let body: {
+    email?: string;
+    source?: string;
+    page?: string;
+    referral_code?: string;
+    newsletter?: boolean;
+    company?: string;
+  };
   try {
     body = await req.json();
   } catch {
@@ -61,10 +69,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return json({ error: 'Enter a valid email address.' }, 400, headers);
   }
 
+  const requestedSource = typeof body.source === 'string' && body.source.trim()
+    ? body.source.trim()
+    : 'website';
+  const signupSource = body.newsletter === true && requestedSource === 'website'
+    ? 'beta-newsletter'
+    : requestedSource;
+
   const admin = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
   const { error } = await admin.rpc('record_website_signup', {
     signup_email: email,
-    signup_source: body.source || 'website',
+    signup_source: signupSource,
     signup_page: body.page || null,
     signup_referral: body.referral_code || null,
   });
