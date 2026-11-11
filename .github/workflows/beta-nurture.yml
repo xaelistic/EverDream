@@ -1,0 +1,38 @@
+name: Beta nurture
+
+on:
+  schedule:
+    # Daily 09:00 UTC. Each person receives at most one due letter per run.
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send due beta letters
+        env:
+          NURTURE_CRON_SECRET: ${{ secrets.NURTURE_CRON_SECRET }}
+        run: |
+          if [ -z "$NURTURE_CRON_SECRET" ]; then
+            echo "NURTURE_CRON_SECRET is not set. The daily send stays off until that repo secret exists."
+            exit 0
+          fi
+          python3 - <<'PY'
+          import json, os, urllib.request
+          req = urllib.request.Request(
+              "https://supabase.n1g3.com/functions/v1/send-beta-nurture",
+              data=b"{}",
+              headers={
+                  "Content-Type": "application/json",
+                  "User-Agent": "EverDreamNurture",
+                  "x-cron-secret": os.environ["NURTURE_CRON_SECRET"],
+              },
+              method="POST",
+          )
+          with urllib.request.urlopen(req) as res:
+              print("nurture", res.status, res.read().decode()[:300])
+          PY

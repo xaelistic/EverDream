@@ -8,6 +8,7 @@
  * company is a honeypot and must be empty.
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
+import { dispatchDueNewsletters } from '../_shared/betaNurture.ts';
 
 const ALLOWED_ORIGINS = [
   'https://everdream.n1g3.com',
@@ -84,5 +85,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
     signup_referral: body.referral_code || null,
   });
   if (error) return json({ error: 'Could not save that signup.' }, 500, headers);
+  try {
+    await dispatchDueNewsletters(admin, 1, email.toLowerCase());
+  } catch (err) {
+    console.error('[website-signup] nurture', err instanceof Error ? err.message : 'dispatch failed');
+  }
   return json({ ok: true }, 200, headers);
 });
