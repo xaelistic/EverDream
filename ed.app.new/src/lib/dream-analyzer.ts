@@ -25,6 +25,7 @@ import { ServiceOverloadedError, isOverloadError } from './api/errorHandling';
 import { coerceNarrativeText, normalizeDreamAnalysis } from './normalizeDreamAnalysis';
 import { normalizeCategory, normalizeEmotion } from './dreamClassify';
 import { cleanDreamTranscript } from './cleanDreamTranscript';
+import { planDreamAnalysis } from './analysisPlan';
 import { latestNightSleep, type NightSleepContext } from './nightSleep';
 
 // ── Types ────────────────────────────────────────────────────
@@ -46,8 +47,8 @@ export interface DreamAnalysis {
 
 // ── Constants ────────────────────────────────────────────────
 
-// Live analyze-dream can spend ~20s on GLM then ~25s on DeepSeek.
-const ANALYSIS_TIMEOUT_MS = 70000;
+// Room for one short fallback after a fast model error, plus the network hop.
+const CLIENT_TIMEOUT_PADDING_MS = 10_000;
 
 const FALLBACK_ANALYSIS: DreamAnalysis = {
   category: 'uncategorized',
@@ -119,8 +120,10 @@ async function analyzeViaEdgeFunction(text: string, sleep?: NightSleepContext | 
     throw new Error('Supabase not configured');
   }
 
+  const plan = planDreamAnalysis(text);
+  const timeoutMs = plan.timeoutMs + CLIENT_TIMEOUT_PADDING_MS;
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), ANALYSIS_TIMEOUT_MS);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const { data, error } = await supabase.functions.invoke('analyze-dream', {
@@ -172,8 +175,8 @@ async function analyzeViaEdgeFunction(text: string, sleep?: NightSleepContext | 
   } catch (err) {
     clearTimeout(timeoutId);
     if (err instanceof Error && err.name === 'AbortError') {
-      console.error('[DreamAnalyzer] Step 4: Edge function timed out after', ANALYSIS_TIMEOUT_MS, 'ms');
-      throw new Error(`Analysis timed out after ${ANALYSIS_TIMEOUT_MS / 1000}s`);
+      console.error('[DreamAnalyzer] Step 4: Edge function timed out after', timeoutMs, 'ms');
+      throw new Error(`Analysis timed out after ${Math.round(timeoutMs / 1000)}s`);
     }
     throw err;
   }

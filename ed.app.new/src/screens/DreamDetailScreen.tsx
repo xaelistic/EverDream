@@ -188,7 +188,9 @@ export function DreamDetailScreen({
 }: DreamDetailScreenProps) {
   const { isAdmin } = useSubscription();
   const { addToast } = useToast();
-  const [showTranscript, setShowTranscript] = useState(false);
+  const [showTranscript, setShowTranscript] = useState(true);
+  const [editingTranscript, setEditingTranscript] = useState(false);
+  const [transcriptDraft, setTranscriptDraft] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
   const [storyboardBusy, setStoryboardBusy] = useState(false);
   const [videoBusy, setVideoBusy] = useState(false);
@@ -252,23 +254,29 @@ export function DreamDetailScreen({
     return true;
   };
 
-  const runAnalysis = async () => {
+  const runAnalysis = async (edited?: string) => {
     if (analyzing) return;
+    const sourceText = (edited ?? (transcript || analysisNarrative)).trim();
+    if (sourceText.length < 10) {
+      addToast({ type: 'warning', message: 'Add a few more words before analysis.' });
+      return;
+    }
     setAnalyzing(true);
     try {
-      const analysis = await analyzeDream(transcript || analysisNarrative);
-      const source = transcript || analysis.narrative || analysisNarrative;
+      const analysis = await analyzeDream(sourceText);
+      const source = sourceText;
       const length = classifyDreamLength(source);
       const panels = storyboardPanelCount(length);
       const nextScenes = panels ? splitIntoPanels(source, panels) : [];
       onUpdateDream?.({
+        ...(edited ? { content: sourceText } : {}),
         category: analysis.category,
         themes: analysis.themes,
         emotion: analysis.emotion,
         symbols: analysis.symbols,
         narrative: analysis.narrative,
         nugget: analysis.nugget,
-        title: deriveDreamTitle(analysis.nugget, analysis.narrative || transcript),
+        title: deriveDreamTitle(analysis.nugget, analysis.narrative || sourceText),
         interpretation: analysis.interpretation,
         moodValence: analysis.valence,
         scenes: nextScenes,
@@ -890,7 +898,7 @@ export function DreamDetailScreen({
               </button>
             </div>
             {analyzing && (
-              <p className="text-sm text-muted">Reading the dream — this can take up to a minute.</p>
+              <p className="text-sm text-muted">Reading the dream.</p>
             )}
             {!analyzing && analysisPending && (
               <p className="text-sm text-muted leading-relaxed">
@@ -943,35 +951,106 @@ export function DreamDetailScreen({
             )}
           </section>
 
-          {canShowTranscript && (
-            <section>
+          <section>
+            <div className="w-full flex items-center justify-between gap-2 rounded-2xl border border-line bg-cream px-4 py-3">
               <button
                 type="button"
                 onClick={() => setShowTranscript((open) => !open)}
-                className="w-full flex items-center justify-between gap-2 rounded-2xl border border-line bg-cream hover:bg-parchment/60 px-4 py-3 text-sm font-medium text-ink transition"
+                className="flex items-center gap-2 text-sm font-medium text-ink"
                 aria-expanded={showTranscript}
               >
-                <span className="inline-flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-duskDeep" strokeWidth={1.75} />
-                  Full transcript
-                </span>
+                <FileText className="w-4 h-4 text-duskDeep" strokeWidth={1.75} />
+                Transcript
                 {showTranscript ? (
                   <ChevronUp className="w-4 h-4 text-muted" strokeWidth={1.75} />
                 ) : (
                   <ChevronDown className="w-4 h-4 text-muted" strokeWidth={1.75} />
                 )}
               </button>
-              {showTranscript && (
-                <div className="mt-3 space-y-3 px-1">
-                  {transcriptParagraphs.split(/\n\n/).map((para, i) => (
+              {!editingTranscript && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const stored = detailDream.content && !isPlaceholderTranscript(detailDream.content)
+                      ? detailDream.content
+                      : transcript;
+                    setTranscriptDraft(stored);
+                    setEditingTranscript(true);
+                    setShowTranscript(true);
+                  }}
+                  className="text-xs font-medium text-sageDark hover:text-ink"
+                >
+                  Edit
+                </button>
+              )}
+            </div>
+            {showTranscript && editingTranscript && (
+              <div className="mt-3 space-y-3">
+                <textarea
+                  value={transcriptDraft}
+                  onChange={(event) => setTranscriptDraft(event.target.value)}
+                  rows={8}
+                  className="w-full rounded-2xl border border-line bg-parchment px-4 py-3 text-sm leading-relaxed text-ink focus:outline-none focus:ring-2 focus:ring-sage/40"
+                  aria-label="Dream transcript"
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = transcriptDraft.trim();
+                      if (next.length < 10) {
+                        addToast({ type: 'warning', message: 'Keep at least a sentence of the dream.' });
+                        return;
+                      }
+                      onUpdateDream?.({ content: next });
+                      setEditingTranscript(false);
+                      addToast({ type: 'success', message: 'Transcript saved.' });
+                    }}
+                    className="flex-1 bg-sage text-cream py-2.5 rounded-xl text-sm font-medium"
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    disabled={analyzing}
+                    onClick={() => {
+                      const next = transcriptDraft.trim();
+                      if (next.length < 10) {
+                        addToast({ type: 'warning', message: 'Keep at least a sentence of the dream.' });
+                        return;
+                      }
+                      onUpdateDream?.({ content: next });
+                      setEditingTranscript(false);
+                      void runAnalysis(next);
+                    }}
+                    className="flex-1 bg-parchment hover:bg-sage/15 border border-line text-ink py-2.5 rounded-xl text-sm font-medium disabled:opacity-50"
+                  >
+                    Save and re-analyze
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingTranscript(false)}
+                    className="px-3 text-sm text-muted"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+            {showTranscript && !editingTranscript && (
+              <div className="mt-3 space-y-3 px-1">
+                {canShowTranscript ? (
+                  transcriptParagraphs.split(/\n\n/).map((para, i) => (
                     <p key={i} className="text-sm leading-relaxed text-ink">
                       {para}
                     </p>
-                  ))}
-                </div>
-              )}
-            </section>
-          )}
+                  ))
+                ) : (
+                  <p className="text-sm text-muted">No transcript yet. Edit to write what you remember.</p>
+                )}
+              </div>
+            )}
+          </section>
 
           {panelCount >= 2 && (
             <section className="rounded-2xl border border-line bg-cream p-4">

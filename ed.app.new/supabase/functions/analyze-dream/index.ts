@@ -6,18 +6,22 @@
  *
  * Voice: insightful, health-conscious, symbolic, informative, not woo.
  *
- * OpenRouter (EN stack — Gemini reserved for later non-EN):
- *   1. OPENROUTER_ANALYSIS_MODEL or z-ai/glm-4.7-flash
- *   2. deepseek/deepseek-v4-flash-0731
+ * Model and wait follow the transcript. Word count is the size.
+ * Average word length stands in for density. Short tellings use
+ * DeepSeek flash with thinking off. Denser tellings raise the effort.
+ * Long dense tellings use OPENROUTER_ANALYSIS_MODEL or GLM.
+ * See _shared/analysisPlan.ts.
  *
  * Secrets:
  *   OPENROUTER_API_KEY
- *   OPENROUTER_ANALYSIS_MODEL (optional)
+ *   OPENROUTER_FAST_MODEL (optional)
+ *   OPENROUTER_ANALYSIS_MODEL (optional, deep tier)
  *
  * Requires a signed-in user or the service role. The anon key is rejected.
  * Analysis does not spend image credits.
  */
 import { requireUserOrService } from '../_shared/auth.ts';
+import { planDreamAnalysis, type AnalysisPlan, type AnalysisTier } from '../_shared/analysisPlan.ts';
 
 interface DreamAnalysis {
   category: string;
@@ -36,6 +40,8 @@ interface DreamAnalysis {
 
 interface AnalyzeRequestBody {
   text?: string;
+  /** Omit to size the pass from the transcript. */
+  depth?: 'fast' | 'deep';
   sleep?: {
     source?: string;
     durationMinutes?: number;
@@ -58,8 +64,9 @@ interface ProviderResult {
 }
 
 const MAX_INPUT_LENGTH = 8000;
-const DEFAULT_MODEL = 'z-ai/glm-4.7-flash';
-const FALLBACK_MODELS = ['deepseek/deepseek-v4-flash-0731'];
+const LIGHTNING_MODEL = 'deepseek/deepseek-v4.1-flash';
+const LIGHTNING_FALLBACK = 'deepseek/deepseek-v4-flash-0731';
+const DEEP_MODEL = 'z-ai/glm-4.7-flash';
 
 const ALLOWED_ORIGINS = [
   'https://everdream.n1g3.com',
@@ -79,6 +86,30 @@ const CATEGORIES = [
   'anxiety',
   'adventure',
 ] as const;
+
+const FAST_PROMPT = `You are EverDream's dream analyst. This is a fast first read, not a rewrite.
+
+Return ONLY valid JSON (no markdown) with this exact shape:
+{
+  "category": "nightmare|lucid|recurring|peaceful|prophetic|anxiety|adventure",
+  "themes": ["2-3 short themes"],
+  "emotion": "joy|fear|sadness|anger|surprise|peace|anxiety|wonder|excitement",
+  "symbols": ["1-4 concrete symbols from the dream"],
+  "narrative": "at most 40 words, first person present, only events the dreamer stated",
+  "nugget": "one concrete sentence, 12-20 words",
+  "valence": 0,
+  "interpretation": {
+    "symbols": { "symbol": "plain-language association" },
+    "meaning": "2 short sentences. Specific to this dream. No diagnosis.",
+    "commonPattern": "one sentence on when dreams like this show up"
+  }
+}
+
+Do not invent scenes. Do not write Speaker labels, timestamps, or talk about recording.
+valence is -1 (distress) to 1 (ease).
+
+Dream:
+`;
 
 const ANALYSIS_PROMPT = `You are EverDream's dream analyst: a sleep-health coach who also understands symbolism.
 
@@ -352,14 +383,26 @@ function sleepPromptBlock(sleep?: AnalyzeRequestBody['sleep']): string {
   return `\n\n${parts.join(' ')} Use this as health context in interpretation.meaning (sleep debt, high REM/vividness, fragmentation, waking energy). Do not invent extra numbers.`;
 }
 
+function isTimeout(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return err.name === 'TimeoutError' || err.name === 'AbortError' || /timeout|aborted/i.test(err.message);
+}
+
 async function analyzeWithOpenRouter(
   text: string,
   model: string,
-  sleep?: AnalyzeRequestBody['sleep'],
+  sleep: AnalyzeRequestBody['sleep'] | undefined,
+  options: {
+    timeoutMs: number;
+    maxTokens: number;
+    prompt: string;
+    effort: AnalysisPlan['effort'];
+  },
 ): Promise<ProviderResult> {
   const apiKey = Deno.env.get('OPENROUTER_API_KEY');
   if (!apiKey) throw new Error('OPENROUTER_API_KEY not set');
 
+  const lightning = options.effort === 'none';
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -371,13 +414,14 @@ async function analyzeWithOpenRouter(
     body: JSON.stringify({
       model,
       messages: [
-        { role: 'system', content: 'Return only compact valid JSON. No markdown.' },
-        { role: 'user', content: ANALYSIS_PROMPT + text + sleepPromptBlock(sleep) },
+        { role: 'system', content: 'Return only compact valid JSON. No markdown. Do not think out loud.' },
+        { role: 'user', content: options.prompt + text + sleepPromptBlock(sleep) },
       ],
-      temperature: 0.4,
-      max_tokens: 1800,
+      temperature: lightning ? 0.2 : 0.4,
+      max_tokens: options.maxTokens,
+      reasoning: lightning ? { effort: 'none', enabled: false } : { effort: options.effort },
     }),
-    signal: AbortSignal.timeout(20_000),
+    signal: AbortSignal.timeout(options.timeoutMs),
   });
 
   const raw = await response.text();
@@ -463,21 +507,49 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
 
     const safeText = text.slice(0, MAX_INPUT_LENGTH);
-    const primary =
-      Deno.env.get('OPENROUTER_ANALYSIS_MODEL') || DEFAULT_MODEL;
-    const models = [primary, ...FALLBACK_MODELS.filter((m) => m !== primary)];
+    const plan = planDreamAnalysis(safeText);
+    const tier: AnalysisTier = body.depth === 'deep'
+      ? 'deep'
+      : body.depth === 'fast'
+        ? 'light'
+        : plan.tier;
+    const lightningModel = Deno.env.get('OPENROUTER_FAST_MODEL') || LIGHTNING_MODEL;
+    const deepModel = Deno.env.get('OPENROUTER_ANALYSIS_MODEL') || DEEP_MODEL;
+    const primary = tier === 'deep' ? deepModel : lightningModel;
+    const fallback = tier === 'deep' ? lightningModel : LIGHTNING_FALLBACK;
+    const callOptions = {
+      timeoutMs: tier === 'deep' ? Math.max(plan.timeoutMs, 12_000) : plan.timeoutMs,
+      maxTokens: tier === 'light' ? 500 : tier === 'standard' ? 800 : 1400,
+      prompt: tier === 'deep' ? ANALYSIS_PROMPT : FAST_PROMPT,
+      effort: tier === 'light' ? 'none' as const : 'low' as const,
+    };
     const errors: string[] = [];
+    const attempts = fallback === primary ? [primary] : [primary, fallback];
 
-    for (const model of models) {
+    for (let i = 0; i < attempts.length; i++) {
+      const model = attempts[i];
+      const options = i === 0
+        ? callOptions
+        : { ...callOptions, timeoutMs: Math.min(8_000, callOptions.timeoutMs) };
       try {
-        console.log(`[analyze-dream] Trying ${model}...`);
-        const result = await analyzeWithOpenRouter(safeText, model, body.sleep);
+        console.log(`[analyze-dream] ${tier} score=${plan.score} words=${plan.words} avg=${plan.avgWordLength} model=${model}`);
+        const result = await analyzeWithOpenRouter(safeText, model, body.sleep, options);
         console.log(`[analyze-dream] ${model} succeeded`);
-        return jsonResponse(result, 200, headers);
+        return jsonResponse({
+          ...result,
+          plan: {
+            tier,
+            words: plan.words,
+            avgWordLength: plan.avgWordLength,
+            score: plan.score,
+            timeoutMs: options.timeoutMs,
+          },
+        }, 200, headers);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.warn(`[analyze-dream] ${model} failed: ${msg}`);
         errors.push(`${model}: ${msg}`);
+        if (isTimeout(err)) break;
       }
     }
 
