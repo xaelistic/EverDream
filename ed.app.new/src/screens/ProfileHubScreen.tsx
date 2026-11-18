@@ -239,8 +239,20 @@ export function ProfileHub({ onClose, navigate, onFriendAdded }: ProfileHubProps
 
   if (loading || !profile) {
     return (
-      <div className={`fixed inset-0 z-50 flex items-center justify-center ${isPearl ? 'bg-[rgba(247,245,255,0.98)]' : 'bg-cream/98'}`}>
-        <Loader2 className="w-8 h-8 text-sage animate-spin" />
+      <div className={`fixed inset-0 z-50 ${isPearl ? 'bg-[rgba(247,245,255,0.98)]' : 'bg-cream'}`}>
+        <div className={`sticky top-0 z-10 border-b ${isPearl ? 'border-[var(--glass-border)] bg-[rgba(247,245,255,0.98)]' : 'border-line bg-cream'}`}>
+          <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
+            <button type="button" onClick={onClose} className="p-2 rounded-full hover:bg-sage/10 transition" aria-label="Close account">
+              <ChevronRight className="w-6 h-6 text-ink rotate-180" strokeWidth={1.75} />
+            </button>
+            <h1 className="text-lg font-serif font-medium text-ink">Profile</h1>
+            <div className="w-10" aria-hidden />
+          </div>
+        </div>
+        <div className="flex flex-col items-center justify-center gap-3 pt-24">
+          <Loader2 className="w-8 h-8 text-sage animate-spin" />
+          <p className="text-sm text-muted">Opening your account…</p>
+        </div>
       </div>
     );
   }
@@ -567,7 +579,7 @@ export function ProfileHub({ onClose, navigate, onFriendAdded }: ProfileHubProps
   );
 
   return (
-    <div className={`fixed inset-0 z-50 ${isPearl ? 'bg-[rgba(247,245,255,0.98)]' : 'bg-cream/98'} backdrop-blur-md`}>
+    <div className={`fixed inset-0 z-50 ${isPearl ? 'bg-[rgb(247,245,255)]' : 'bg-cream'}`}>
       {showShareProfile && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
           <div className={`rounded-2xl border p-5 max-w-sm w-full ${card}`}>
@@ -596,7 +608,7 @@ export function ProfileHub({ onClose, navigate, onFriendAdded }: ProfileHubProps
         </div>
       )}
 
-      <div className={`sticky top-0 z-10 border-b backdrop-blur-md ${isPearl ? 'border-[var(--glass-border)] bg-[rgba(247,245,255,0.92)]' : 'border-line bg-cream/95'}`}>
+      <div className={`sticky top-0 z-10 border-b ${isPearl ? 'border-[var(--glass-border)] bg-[rgb(247,245,255)]' : 'border-line bg-cream'}`}>
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
           <button type="button" onClick={onClose} className="p-2 rounded-full hover:bg-sage/10 transition">
             <ChevronRight className="w-6 h-6 text-ink rotate-180" strokeWidth={1.75} />
@@ -606,7 +618,7 @@ export function ProfileHub({ onClose, navigate, onFriendAdded }: ProfileHubProps
         </div>
       </div>
 
-      <div className={`sticky top-[61px] z-10 border-b backdrop-blur-md ${isPearl ? 'border-[var(--glass-border)] bg-[rgba(247,245,255,0.98)]' : 'border-line bg-cream/98'}`}>
+      <div className={`sticky top-[61px] z-10 border-b ${isPearl ? 'border-[var(--glass-border)] bg-[rgb(247,245,255)]' : 'border-line bg-cream'}`}>
         <div className="max-w-lg mx-auto px-4">
           <div className="flex gap-1 py-2">
             {[

@@ -24,6 +24,24 @@ import {
 } from '../lib/auth/urlCleanup';
 import { clearProfileCache } from '../lib/profileService';
 
+const AUTH_WAIT_MS = 8000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error('auth-timeout')), ms);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
 export interface AuthUser {
   id: string;
   email?: string;
@@ -96,9 +114,17 @@ function useAuthInternal(): AuthState {
     let mounted = true;
 
     async function checkAuth() {
+      const deadline = Date.now() + AUTH_WAIT_MS;
+      const remaining = () => Math.max(400, deadline - Date.now());
       try {
-        // Ensure OAuth/magic-link tokens were consumed and stripped from the URL
-        const redirect = await authRedirectReady;
+        // Ensure OAuth/magic-link tokens were consumed and stripped from the URL.
+        // A stuck getSession must not leave the loading screen up forever.
+        let redirect = { wasRecovery: false, hadArtifacts: false };
+        try {
+          redirect = await withTimeout(authRedirectReady, remaining());
+        } catch (err) {
+          console.warn('[useAuth] Auth redirect wait ended:', err);
+        }
         if (!mounted) return;
         if (redirect.wasRecovery) {
           setIsRecoveryMode(true);
@@ -109,7 +135,18 @@ function useAuthInternal(): AuthState {
           stripAuthParamsFromUrl({ preserveRecovery: redirect.wasRecovery || isRecoveryHash() });
         }
 
-        const currentUser = await getCurrentUser();
+        let currentUser = null as Awaited<ReturnType<typeof getCurrentUser>>;
+        try {
+          currentUser = await withTimeout(getCurrentUser(), remaining());
+        } catch (err) {
+          console.warn('[useAuth] Session check ended, using the stored session:', err);
+          try {
+            const { data } = await withTimeout(supabase.auth.getSession(), Math.min(1500, remaining()));
+            currentUser = data.session?.user ?? null;
+          } catch {
+            currentUser = null;
+          }
+        }
         if (!mounted) return;
 
         if (currentUser) {
@@ -117,7 +154,10 @@ function useAuthInternal(): AuthState {
         } else if (FEATURE_REQUIRE_AUTH || import.meta.env.VITE_REQUIRE_AUTH === 'true') {
           setUser(null);
         } else {
-          const { data, error: signInError } = await supabase.auth.signInAnonymously();
+          const { data, error: signInError } = await withTimeout(
+            supabase.auth.signInAnonymously(),
+            remaining(),
+          );
           if (!mounted) return;
 
           if (signInError) {
@@ -144,6 +184,11 @@ function useAuthInternal(): AuthState {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
 
+      if (event === 'INITIAL_SESSION') {
+        if (session?.user) setUser(mapUser(session.user));
+        setLoading(false);
+      }
+
       if (event === 'PASSWORD_RECOVERY') {
         setIsRecoveryMode(true);
         stripAuthParamsFromUrl({ preserveRecovery: true });
@@ -153,6 +198,7 @@ function useAuthInternal(): AuthState {
         // Wipe every cached profile so we never paint the previous account's avatar
         clearProfileCache();
         setUser(mapUser(session.user));
+        setLoading(false);
         if (isRecoveryHash() || urlIndicatesPasswordRecovery()) {
           setIsRecoveryMode(true);
         }

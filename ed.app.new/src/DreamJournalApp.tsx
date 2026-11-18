@@ -501,6 +501,11 @@ const DreamJournalApp = () => {
 
   // Load data
   useEffect(() => {
+    // Arm the splash timeout first. A throw later in startup must not leave it up.
+    const loadingTimer = setTimeout(() => {
+      setIsAppLoading(false);
+      setIsLoadingDreams(false);
+    }, 600);
     const loadData = async () => {
       try {
         const stored = await window.storage?.get('dreams');
@@ -627,11 +632,6 @@ const DreamJournalApp = () => {
         console.log('[App] Supabase not configured — local mode only');
       }
     });
-    // Signal loading complete after data is fetched
-    const loadingTimer = setTimeout(() => {
-      setIsAppLoading(false);
-      setIsLoadingDreams(false);
-    }, 600);
     return () => clearTimeout(loadingTimer);
   }, []);
 
@@ -2642,20 +2642,22 @@ const DreamJournalApp = () => {
               const next = prev.map((d) =>
                 d.id === detailDream.id ? { ...d, generatedImage } : d,
               );
+              const updated = next.find((d) => d.id === detailDream.id);
               saveDreamsToStorage(next).catch(console.error);
+              if (updated) syncDreamToSupabase(updated).catch(console.error);
               return next;
             });
-            syncDreamToSupabase({ ...detailDream, generatedImage }).catch(console.error);
           }}
           onUpdateDream={(patch) => {
             setDreams((prev) => {
               const next = prev.map((d) =>
                 d.id === detailDream.id ? { ...d, ...patch } : d,
               );
+              const updated = next.find((d) => d.id === detailDream.id);
               saveDreamsToStorage(next).catch(console.error);
+              if (updated) syncDreamToSupabase(updated).catch(console.error);
               return next;
             });
-            syncDreamToSupabase({ ...detailDream, ...patch }).catch(console.error);
           }}
         />
       )}

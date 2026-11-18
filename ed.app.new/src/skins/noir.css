@@ -29,8 +29,8 @@
   --glass-blur: 8px;
   --glass-border: rgba(255, 255, 255, 0.08);
   --glass-shadow: 0 1px 6px rgba(0, 0, 0, 0.50), 0 0 1px rgba(255, 255, 255, 0.04);
-  --header-bg: rgba(10, 10, 10, 0.96);
-  --nav-bg: rgba(10, 10, 10, 0.98);
+  --header-bg: #0a0a0a;
+  --nav-bg: #0a0a0a;
 
   --font-ui: 'Inter', system-ui, sans-serif;
   --font-dream: 'Playfair Display', Georgia, serif;
@@ -87,10 +87,8 @@
 }
 
 .skin-noir nav {
-  background: linear-gradient(to top, var(--nav-bg) 70%, transparent 100%) !important;
+  background: var(--nav-bg) !important;
   border-top: 1px solid var(--glass-border) !important;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
 }
 
 .skin-noir nav button.text-sageDark {

@@ -18,6 +18,7 @@ import {
   Quote,
   Sparkles,
   Compass,
+  Loader2,
   X,
 } from 'lucide-react';
 import { FEATURE_NFT_UI_ENABLED } from '../config/features';
@@ -192,6 +193,8 @@ export function DreamDetailScreen({
   const [editingTranscript, setEditingTranscript] = useState(false);
   const [transcriptDraft, setTranscriptDraft] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
+  const [statusNote, setStatusNote] = useState<string | null>(null);
+  const [openSymbol, setOpenSymbol] = useState<string | null>(null);
   const [storyboardBusy, setStoryboardBusy] = useState(false);
   const [videoBusy, setVideoBusy] = useState(false);
   const [clipQuality, setClipQuality] = useState<ImageQualityReport | null>(null);
@@ -224,6 +227,15 @@ export function DreamDetailScreen({
   );
   const canShowTranscript = transcript.length > 0 && !isPlaceholderTranscript(transcript);
   const transcriptParagraphs = useMemo(() => formatTranscriptParagraphs(transcript), [transcript]);
+  const symbolEntries = useMemo(() => {
+    const mapped = Object.entries(detailDream.interpretation?.symbols || {}).filter(
+      ([name, meaning]) => name.trim() && String(meaning || '').trim(),
+    );
+    if (mapped.length > 0) return mapped;
+    return (detailDream.symbols || [])
+      .filter((name) => name.trim())
+      .map((name) => [name, ''] as [string, string]);
+  }, [detailDream.interpretation?.symbols, detailDream.symbols]);
   const analysisPending = analysisLooksPending(
     detailDream.interpretation?.meaning,
     detailDream.category,
@@ -240,6 +252,25 @@ export function DreamDetailScreen({
   }, [detailDream.scenes, transcript, analysisNarrative, panelCount]);
   const storyboardCost = panelCount || 0;
   const videoCost = narrativeLength === 'long' ? 3 : 2;
+
+  const persistBlob = async (blob: Blob, kind: 'image' | 'video'): Promise<string | null> => {
+    try {
+      const stored = await persistUserMedia({ blob, kind, dreamId: detailDream.id });
+      return stored?.url || null;
+    } catch {
+      return null;
+    }
+  };
+
+  const persistMaybeDataUrl = async (url: string): Promise<string> => {
+    if (!url.startsWith('data:') && !url.startsWith('blob:')) return url;
+    try {
+      const blob = await (await fetch(url)).blob();
+      return (await persistBlob(blob, 'image')) || url;
+    } catch {
+      return url;
+    }
+  };
 
   const ensureCredits = async (count: number): Promise<boolean> => {
     if (isAdmin || count < 1) return true;
@@ -262,6 +293,7 @@ export function DreamDetailScreen({
       return;
     }
     setAnalyzing(true);
+    setStatusNote(edited ? 'Updating the analysis from your edit…' : 'Reading the dream…');
     try {
       const analysis = await analyzeDream(sourceText);
       const source = sourceText;
@@ -283,7 +315,34 @@ export function DreamDetailScreen({
         narrativeLength: length,
         processingStatus: 'complete',
       });
-      addToast({ type: 'success', message: 'Analysis is ready.' });
+      if (!edited) {
+        addToast({ type: 'success', message: 'Analysis is ready.' });
+        return;
+      }
+      setStatusNote('Redrawing the picture from your edit…');
+      const canPaint = await ensureCredits(1);
+      if (!canPaint) {
+        addToast({ type: 'success', message: 'Analysis updated from your edit.' });
+        return;
+      }
+      try {
+        const asset = await generateDreamImage(sourceText, 'auto');
+        const url = await persistMaybeDataUrl(asset.url);
+        onImageGenerated({
+          url,
+          prompt: asset.prompt,
+          style: asset.style,
+          generatedAt: asset.generatedAt,
+          source: asset.source,
+        });
+        addToast({ type: 'success', message: 'Analysis and picture now follow your edit.' });
+      } catch (imgErr) {
+        console.warn('[DreamDetail] image redraw failed:', imgErr);
+        addToast({
+          type: 'warning',
+          message: 'Analysis updated. The picture could not be redrawn from this edit.',
+        });
+      }
     } catch (err) {
       addToast({
         type: 'error',
@@ -291,6 +350,7 @@ export function DreamDetailScreen({
       });
     } finally {
       setAnalyzing(false);
+      setStatusNote(null);
     }
   };
 
@@ -339,25 +399,6 @@ export function DreamDetailScreen({
     void retryMediaProcessing();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- retry once per dream open
   }, [detailDream.id, detailDream.processingStatus]);
-
-  const persistBlob = async (blob: Blob, kind: 'image' | 'video'): Promise<string | null> => {
-    try {
-      const stored = await persistUserMedia({ blob, kind, dreamId: detailDream.id });
-      return stored?.url || null;
-    } catch {
-      return null;
-    }
-  };
-
-  const persistMaybeDataUrl = async (url: string): Promise<string> => {
-    if (!url.startsWith('data:') && !url.startsWith('blob:')) return url;
-    try {
-      const blob = await (await fetch(url)).blob();
-      return (await persistBlob(blob, 'image')) || url;
-    } catch {
-      return url;
-    }
-  };
 
   const runStoryboard = async () => {
     if (storyboardBusy || panelCount < 2) return;
@@ -674,6 +715,15 @@ export function DreamDetailScreen({
   const openStoryboardFrame = storyboardViewIndex != null ? storyboardFrames[storyboardViewIndex] : null;
 
   useEffect(() => {
+    if (!openSymbol) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpenSymbol(null);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [openSymbol]);
+
+  useEffect(() => {
     if (storyboardViewIndex == null) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setStoryboardViewIndex(null);
@@ -705,8 +755,23 @@ export function DreamDetailScreen({
     });
   };
 
+  const openSymbolMeaning = openSymbol
+    ? symbolEntries.find(([name]) => name === openSymbol)?.[1] || ''
+    : '';
+
   return (
     <>
+    {statusNote && (
+      <div
+        role="status"
+        className="fixed bottom-24 inset-x-0 z-50 px-4 pointer-events-none"
+      >
+        <div className="max-w-lg mx-auto rounded-2xl border border-sage/40 bg-cream shadow-lift px-4 py-3 flex items-center gap-3">
+          <Loader2 className="w-5 h-5 animate-spin text-sageDark shrink-0" />
+          <p className="text-sm font-medium text-ink">{statusNote}</p>
+        </div>
+      </div>
+    )}
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3">
         <button
@@ -894,11 +959,11 @@ export function DreamDetailScreen({
                 disabled={analyzing}
                 className="text-xs font-semibold px-3 py-1.5 rounded-full border border-sage/30 bg-sage/10 text-sageDark hover:bg-sage/20 disabled:opacity-50"
               >
-                {analyzing ? 'Analysing…' : analysisPending ? 'Run analysis' : 'Refresh'}
+                {analyzing ? 'Working…' : analysisPending ? 'Run analysis' : 'Refresh'}
               </button>
             </div>
-            {analyzing && (
-              <p className="text-sm text-muted">Reading the dream.</p>
+            {statusNote && (
+              <p className="text-sm font-medium text-ink" role="status">{statusNote}</p>
             )}
             {!analyzing && analysisPending && (
               <p className="text-sm text-muted leading-relaxed">
@@ -919,21 +984,22 @@ export function DreamDetailScreen({
                 </p>
               </div>
             )}
-            {Object.keys(detailDream.interpretation?.symbols || {}).length > 0 && (
+            {symbolEntries.length > 0 && (
               <div className="space-y-2.5">
                 <p className="text-[10px] uppercase tracking-[0.2em] text-sageDark font-semibold flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5" strokeWidth={1.75} />
                   Symbols
                 </p>
-                <div className="grid gap-2">
-                  {Object.entries(detailDream.interpretation.symbols).map(([symbol, meaning]) => (
-                    <div
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {symbolEntries.map(([symbol]) => (
+                    <button
                       key={symbol}
-                      className="rounded-2xl border border-sage/25 bg-cream pl-3 pr-3 py-3 border-l-[3px] border-l-sage shadow-paper"
+                      type="button"
+                      onClick={() => setOpenSymbol(symbol)}
+                      className="rounded-2xl border border-sage/30 bg-cream px-3 py-3 text-left text-sm font-semibold capitalize text-sageDark shadow-paper hover:bg-sage/10"
                     >
-                      <p className="text-sm font-semibold capitalize text-sageDark">{symbol}</p>
-                      <p className="text-sm text-ink leading-relaxed mt-1">{meaning}</p>
-                    </div>
+                      {symbol}
+                    </button>
                   ))}
                 </div>
               </div>
@@ -1025,7 +1091,7 @@ export function DreamDetailScreen({
                     }}
                     className="flex-1 bg-parchment hover:bg-sage/15 border border-line text-ink py-2.5 rounded-xl text-sm font-medium disabled:opacity-50"
                   >
-                    Save and re-analyze
+                    {analyzing ? 'Working…' : 'Save and re-analyze'}
                   </button>
                   <button
                     type="button"
@@ -1272,6 +1338,44 @@ export function DreamDetailScreen({
         </div>
       </div>
     </div>
+
+    {openSymbol && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center bg-ink/50 p-4"
+            role="presentation"
+            onClick={() => setOpenSymbol(null)}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="dream-symbol-title"
+              className="w-full max-w-md rounded-3xl border border-line bg-cream p-5 shadow-lift"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-sageDark font-semibold">Symbol</p>
+                <button
+                  type="button"
+                  onClick={() => setOpenSymbol(null)}
+                  className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-sm text-muted hover:text-ink"
+                  aria-label="Close symbol"
+                >
+                  <X className="w-4 h-4" strokeWidth={1.75} />
+                  Close
+                </button>
+              </div>
+              <h2 id="dream-symbol-title" className="font-serif text-2xl capitalize text-ink mt-2">
+                {openSymbol}
+              </h2>
+              <p className="text-sm text-ink leading-relaxed mt-3">
+                {openSymbolMeaning || 'No reading for this symbol yet.'}
+              </p>
+            </div>
+          </div>,
+          document.body,
+        )
+      : null}
 
     {openStoryboardFrame && storyboardViewIndex != null && typeof document !== 'undefined'
       ? createPortal(

@@ -41,8 +41,8 @@
   --glass-border: rgba(168, 237, 220, 0.22);
   --glass-shadow: 0 1px 6px rgba(168, 237, 220, 0.10), 0 1px 3px rgba(0, 0, 0, 0.03);
   /* Near-solid white so header text stays readable over dream images */
-  --header-bg: rgba(255, 255, 255, 0.97);
-  --nav-bg: rgba(255, 255, 255, 0.98);
+  --header-bg: #ffffff;
+  --nav-bg: #ffffff;
 
   /* Starlight */
   --starlight: rgba(168, 237, 220, 0.07);
@@ -105,11 +105,8 @@
    ═══════════════════════════════════════════ */
 
 .skin-pearl header {
-  /* Near-solid white — readable when scrolling over dream images */
-  background: rgba(255, 255, 255, 0.97) !important;
+  background: #ffffff !important;
   border-bottom: 1px solid var(--glass-border) !important;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
 }
 
 .skin-pearl header .font-serif {
@@ -142,10 +139,8 @@
    ═══════════════════════════════════════════ */
 
 .skin-pearl nav {
-  background: rgba(255, 255, 255, 0.98) !important;
+  background: #ffffff !important;
   border-top: 1px solid var(--glass-border) !important;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
 }
 
 .skin-pearl nav button {

@@ -17,31 +17,50 @@ import { signInWithSocialProvider, startSpotifyOAuth } from '../lib/auth/socialA
 import { goalIdsFromLabels } from '../lib/onboarding/model';
 import { useAuth } from './use-auth';
 
+let memoryProfile: UserProfile | null = null;
+let memoryUserId: string | null = null;
+
+function rememberedProfile(userId: string | null): UserProfile | null {
+  if (memoryUserId !== userId || !memoryProfile) return null;
+  return memoryProfile;
+}
+
+function rememberProfile(next: UserProfile | null, userId: string | null) {
+  memoryProfile = next;
+  memoryUserId = userId;
+}
+
 export function useProfile() {
   const { user } = useAuth();
   const userId = user?.id ?? null;
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState<UserProfile | null>(() => rememberedProfile(userId));
+  const [loading, setLoading] = useState(() => !rememberedProfile(userId));
   const [saving, setSaving] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedForUser = useRef<string | null>(null);
 
   const refresh = useCallback(async () => {
-    setLoading(true);
+    const warm = rememberedProfile(userId);
+    if (!warm) setLoading(true);
     try {
       // Do not paint until load finishes for this userId
       const data = await loadUserProfile();
       // Guard: never surface a profile tagged for a different auth user
       if (userId && data.authUserId !== userId) {
         clearProfileCache();
+        rememberProfile(null, userId);
         setProfile(null);
         loadedForUser.current = userId;
         const clean = await loadUserProfile();
-        if (clean.authUserId === userId) setProfile(clean);
+        if (clean.authUserId === userId) {
+          rememberProfile(clean, userId);
+          setProfile(clean);
+        }
         return;
       }
       // Soft social hydrate after identity is correct (never blocks avatar correctness)
       void hydrateSignalsFromLinkedAccounts().catch(() => undefined);
+      rememberProfile(data, userId);
       setProfile(data);
       loadedForUser.current = userId;
     } finally {
@@ -55,9 +74,14 @@ export function useProfile() {
       clearTimeout(saveTimer.current);
       saveTimer.current = null;
     }
-    // Always clear in-memory profile on user change so header never shows previous avatar
-    setProfile(null);
-    setLoading(true);
+    const warm = rememberedProfile(userId);
+    if (warm) {
+      setProfile(warm);
+      setLoading(false);
+    } else {
+      setProfile(null);
+      setLoading(true);
+    }
     void refresh();
   }, [userId, refresh]);
 
@@ -68,6 +92,7 @@ export function useProfile() {
       return;
     }
     const tagged = { ...next, authUserId: userId };
+    rememberProfile(tagged, userId);
     setProfile(tagged);
     setSaving(true);
     try {

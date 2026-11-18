@@ -114,7 +114,7 @@ export default function Shell({ active, onNavigate, onOpenProfile, processingDre
 
   return (
     <div className={`min-h-screen flex flex-col font-sans ${isThemed ? 'text-[var(--text-primary)]' : 'text-ink'}`}>
-      <header className={`sticky top-0 z-40 border-b backdrop-blur-xl ${isThemed ? 'border-[var(--glass-border)] bg-[var(--header-bg)]' : 'border-line bg-white/98'}`}>
+      <header className={`sticky top-0 z-40 border-b ${isThemed ? 'border-[var(--glass-border)] bg-[var(--header-bg)]' : 'border-line bg-white'}`}>
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between gap-3">
           <button
             type="button"
@@ -181,7 +181,7 @@ export default function Shell({ active, onNavigate, onOpenProfile, processingDre
 
       <main className="flex-1 w-full max-w-lg mx-auto px-4 py-5 pb-28">{children}</main>
 
-      <nav className={`fixed bottom-0 inset-x-0 z-40 border-t backdrop-blur-xl pb-[env(safe-area-inset-bottom,0px)] ${isThemed ? 'border-[var(--glass-border)] bg-[var(--nav-bg)]' : 'border-line bg-white/98'}`}>
+      <nav className={`fixed bottom-0 inset-x-0 z-40 border-t pb-[env(safe-area-inset-bottom,0px)] ${isThemed ? 'border-[var(--glass-border)] bg-[var(--nav-bg)]' : 'border-line bg-white'}`}>
         <div className="max-w-lg mx-auto px-2 pt-2 pb-3 flex justify-around items-end">
           {/* Left nav items: Home, Journal */}
           {navItems.slice(0, 2).map(renderNavButton)}

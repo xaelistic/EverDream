@@ -29,8 +29,8 @@
   --glass-blur: 12px;
   --glass-border: rgba(212, 140, 80, 0.18);
   --glass-shadow: 0 1px 8px rgba(0, 0, 0, 0.35), 0 0 24px rgba(200, 120, 64, 0.06);
-  --header-bg: rgba(26, 20, 16, 0.94);
-  --nav-bg: rgba(26, 20, 16, 0.98);
+  --header-bg: #1a1410;
+  --nav-bg: #1a1410;
 
   --font-ui: 'Inter', system-ui, sans-serif;
   --font-dream: 'Playfair Display', Georgia, serif;
@@ -87,10 +87,8 @@
 }
 
 .skin-ember nav {
-  background: linear-gradient(to top, var(--nav-bg) 70%, transparent 100%) !important;
+  background: var(--nav-bg) !important;
   border-top: 1px solid var(--glass-border) !important;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
 }
 
 .skin-ember nav button.text-sageDark {

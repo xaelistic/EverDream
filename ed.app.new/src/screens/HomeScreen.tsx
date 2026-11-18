@@ -1,7 +1,10 @@
-import { Moon, Sparkles, BookOpen, ChevronRight, BedDouble, PenLine, Check } from 'lucide-react';
+import { useState } from 'react';
+import { Moon, Sparkles, BookOpen, ChevronRight, BedDouble, PenLine, Check, Share2 } from 'lucide-react';
 import { coerceNarrativeText } from '../lib/normalizeDreamAnalysis';
 import { presentDream } from '../lib/dreamClassify';
 import { ENERGY_LEVELS, type EnergyLevel } from '../lib/dailyCheckin';
+import { shareCard } from '../lib/shareCard';
+import { useToast } from '../components/ui/Toast';
 type HomeSleepNight = {
   durationMinutes?: number;
   remMinutes?: number;
@@ -73,6 +76,34 @@ export function HomeScreen({
   onOpenSleepCard,
   getEmotionEmoji,
 }: HomeScreenProps) {
+  const { addToast } = useToast();
+  const [sharingNote, setSharingNote] = useState(false);
+
+  const shareNightNote = async () => {
+    if (sharingNote) return;
+    setSharingNote(true);
+    try {
+      const energy = ENERGY_LEVELS.find((level) => level.id === reflectionEnergyLevel)?.value ?? 50;
+      const result = await shareCard('reflection', {
+        mood: reflectionMood || 'reflective',
+        energy,
+        quote: reflectionQuote.text,
+        quoteSource: reflectionQuote.source,
+      });
+      addToast({
+        type: 'success',
+        message: result === 'shared'
+          ? 'Night note shared with the EverDream watermark.'
+          : 'Night note saved with the EverDream watermark.',
+      });
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') return;
+      addToast({ type: 'error', message: 'Could not share the night note.' });
+    } finally {
+      setSharingNote(false);
+    }
+  };
+
   const formatSleepDuration = (minutes: number) => {
     const h = Math.floor(minutes / 60);
     const m = Math.round(minutes % 60);
@@ -99,14 +130,25 @@ export function HomeScreen({
             Open full card <ChevronRight className="w-3.5 h-3.5" />
           </span>
         </button>
-        <button
-          type="button"
-          onClick={() => navigate('record')}
-          className="relative mt-5 w-full bg-white/15 hover:bg-white/22 border border-white/20 text-white font-semibold py-3.5 rounded-2xl transition flex items-center justify-center gap-2 text-sm"
-        >
-          <PenLine className="w-4 h-4" strokeWidth={2} />
-          Journal about this
-        </button>
+        <div className="relative mt-5 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => navigate('record')}
+            className="bg-white/15 hover:bg-white/22 border border-white/20 text-white font-semibold py-3.5 rounded-2xl transition flex items-center justify-center gap-2 text-sm"
+          >
+            <PenLine className="w-4 h-4" strokeWidth={2} />
+            Journal
+          </button>
+          <button
+            type="button"
+            onClick={() => void shareNightNote()}
+            disabled={sharingNote}
+            className="bg-white text-[#2d3a2d] hover:bg-white/90 font-semibold py-3.5 rounded-2xl transition flex items-center justify-center gap-2 text-sm disabled:opacity-60"
+          >
+            <Share2 className="w-4 h-4" strokeWidth={2} />
+            {sharingNote ? 'Preparing…' : 'Share'}
+          </button>
+        </div>
       </section>
 
       {/* ── How are you feeling? (energy check-in) ── */}

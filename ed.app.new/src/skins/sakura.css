@@ -29,8 +29,8 @@
   --glass-border: rgba(244, 168, 184, 0.28);
   --glass-shadow: 0 1px 8px rgba(244, 168, 184, 0.12), 0 1px 3px rgba(0, 0, 0, 0.03);
   /* Near-solid so header text stays readable over dream images */
-  --header-bg: rgba(255, 252, 253, 0.97);
-  --nav-bg: rgba(255, 252, 253, 0.98);
+  --header-bg: #fffcfd;
+  --nav-bg: #fffcfd;
 
   --font-ui: 'Inter', system-ui, sans-serif;
   --font-dream: 'Playfair Display', Georgia, serif;
@@ -87,10 +87,8 @@
 }
 
 .skin-sakura nav {
-  background: linear-gradient(to top, var(--nav-bg) 70%, transparent 100%) !important;
+  background: var(--nav-bg) !important;
   border-top: 1px solid var(--glass-border) !important;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
 }
 
 .skin-sakura nav button.text-sageDark {
