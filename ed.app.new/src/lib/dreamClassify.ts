@@ -127,6 +127,16 @@ export function normalizeEmotion(
   return fromModel || 'wonder';
 }
 
+/** Card title from the person's telling. A stored label is only a fallback. */
+export function titleFromOwnTelling(content?: string, storedTitle?: string): string {
+  const telling = (content || '').trim();
+  const placeholder = /video journal|audio journal|processing your|watch the video|listen to the recording|did not finish/i.test(telling);
+  if (telling && !placeholder) return deriveDreamTitle('', telling);
+  const stored = (storedTitle || '').trim();
+  if (stored && !/video journal|audio journal|processing/i.test(stored)) return stored;
+  return telling ? deriveDreamTitle('', telling) : 'Untitled dream';
+}
+
 export function deriveDreamTitle(nugget?: string, content?: string): string {
   const fromNugget = (nugget || '').replace(/^["“]+|["”]+$/g, '').trim();
   if (fromNugget && !/^audio journal|^video journal|^processing/i.test(fromNugget)) {
@@ -196,7 +206,7 @@ export function presentDream(dream: {
   processingStatus?: string;
   capturedEmotions?: { dominantEmotion?: string } | null;
 }): DreamPresentation {
-  const text = [dream.content, dream.narrative, dream.nugget].filter(Boolean).join(' ');
+  const text = (dream.content || dream.title || '').trim();
   const processing = dream.processingStatus === 'processing';
   const category = processing
     ? dream.category || 'processing'
@@ -216,7 +226,7 @@ export function presentDream(dream: {
     category,
     emotion,
     emotionName: emotionLabel(emotion),
-    title: dream.title || deriveDreamTitle(dream.nugget, dream.narrative || dream.content),
+    title: titleFromOwnTelling(dream.content, dream.title),
     when: formatDreamWhen(dream.date || new Date().toISOString()),
   };
 }

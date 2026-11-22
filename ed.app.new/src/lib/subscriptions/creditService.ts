@@ -8,7 +8,7 @@ export type CreditBalance = {
   totalRemaining: number;
   allotmentMonth: string;
   tier: string;
-  source: 'db' | 'local';
+  source: 'db' | 'local' | 'unavailable';
 };
 
 export const FREE_STARTER_CREDITS = 14;
@@ -47,6 +47,29 @@ function saveLocalUsed(used: number) {
   localStorage.setItem(LOCAL_KEY, String(Math.max(0, used)));
 }
 
+function unavailableBalance(): CreditBalance {
+  return {
+    monthlyAllotment: 0,
+    monthlyUsed: 0,
+    monthlyRemaining: 0,
+    purchasedCredits: 0,
+    totalRemaining: 0,
+    allotmentMonth: currentMonth(),
+    tier: 'free',
+    source: 'unavailable',
+  };
+}
+
+async function hasSignedInSession(): Promise<boolean> {
+  try {
+    const { data } = await supabase.auth.getSession();
+    const user = data.session?.user;
+    return Boolean(user && user.is_anonymous !== true);
+  } catch {
+    return false;
+  }
+}
+
 function localBalance(): CreditBalance {
   const remaining = starterRemainingFromUsed(readLocalUsed());
   return {
@@ -62,11 +85,13 @@ function localBalance(): CreditBalance {
 }
 
 export async function getCreditBalance(): Promise<CreditBalance> {
+  const signedIn = await hasSignedInSession();
+  const fallback = () => (signedIn ? unavailableBalance() : localBalance());
   try {
     const { data, error } = await supabase.rpc('get_credit_balance');
-    if (error || !data) return localBalance();
+    if (error || !data) return fallback();
     const row = Array.isArray(data) ? data[0] : data;
-    if (!row) return localBalance();
+    if (!row) return fallback();
     return {
       monthlyAllotment: Number(row.monthly_allotment) || 0,
       monthlyUsed: Number(row.monthly_used) || 0,
@@ -78,7 +103,7 @@ export async function getCreditBalance(): Promise<CreditBalance> {
       source: 'db',
     };
   } catch {
-    return localBalance();
+    return fallback();
   }
 }
 
@@ -86,6 +111,7 @@ export async function consumeImageCredits(
   amount: number,
   reason = 'image_generation',
 ): Promise<{ ok: boolean; remaining: number; message: string }> {
+  const signedIn = await hasSignedInSession();
   try {
     const { data, error } = await supabase.rpc('consume_image_credits', { amount, reason });
     if (!error && data) {
@@ -97,7 +123,10 @@ export async function consumeImageCredits(
       };
     }
   } catch {
-    /* fall through to local */
+    /* signed-in users do not invent a local debit */
+  }
+  if (signedIn) {
+    return { ok: false, remaining: 0, message: 'Credit balance is unavailable' };
   }
   const used = readLocalUsed();
   const remaining = starterRemainingFromUsed(used);
@@ -126,10 +155,11 @@ export async function readEdgeFunctionError(error: unknown, data?: unknown): Pro
 }
 
 export async function refundImageCredits(amount: number, reason = 'refund'): Promise<void> {
+  const signedIn = await hasSignedInSession();
   try {
     await supabase.rpc('refund_image_credits', { amount, reason });
   } catch {
-    saveLocalUsed(Math.max(0, readLocalUsed() - amount));
+    if (!signedIn) saveLocalUsed(Math.max(0, readLocalUsed() - amount));
   }
 }
 

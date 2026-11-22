@@ -20,8 +20,9 @@ export function getAppOrigin(): string {
 /** Base path without hash — safe for OAuth / email redirects. */
 export function getAuthCallbackUrl(query?: Record<string, string>): string {
   const origin = getAppOrigin();
-  const path = typeof window !== 'undefined' ? window.location.pathname || '/' : '/';
-  const url = new URL(path || '/', origin);
+  // Always the site root. A phone PWA path or a hash route is not on the
+  // GoTrue allow list, and that return never finishes sign-in.
+  const url = new URL('/', origin);
   url.searchParams.set('auth', 'callback');
   if (query) {
     for (const [k, v] of Object.entries(query)) {

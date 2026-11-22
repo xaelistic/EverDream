@@ -1058,10 +1058,8 @@ export default function ProfileAndSettings({ user, onClose }: ProfileAndSettings
 
       {/* Legal Links */}
       <div className="p-4 space-y-2">
-        <a href="#" className="block text-sm text-purple-600 hover:underline">Privacy Policy</a>
-        <a href="#" className="block text-sm text-purple-600 hover:underline">Terms of Service</a>
-        <a href="#" className="block text-sm text-purple-600 hover:underline">Cookie Policy</a>
-        <a href="#" className="block text-sm text-purple-600 hover:underline">Data Processing Agreement</a>
+        <a href="/privacy.html" target="_blank" rel="noopener noreferrer" className="block text-sm text-purple-600 hover:underline">Privacy Policy</a>
+        <a href="/terms.html" target="_blank" rel="noopener noreferrer" className="block text-sm text-purple-600 hover:underline">Terms of Service</a>
       </div>
     </div>
   );

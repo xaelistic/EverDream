@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { MediaMetadata } from '../../lib/mediaStorage';
 import { CloudBackupProvider } from '../../hooks/useMediaPlayback';
+import { videoFrameStyle } from '../../lib/videoFrame';
 
 export interface MediaPlaybackProps {
   /** Media metadata */
@@ -233,6 +234,7 @@ const VideoPlayer: React.FC<{
   const [showControls, setShowControls] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [frame, setFrame] = useState({ portrait: false, aspectRatio: '16 / 9' });
   const controlTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -246,6 +248,7 @@ const VideoPlayer: React.FC<{
 
     const handleLoadedMetadata = () => {
       setDuration(video.duration);
+      setFrame(videoFrameStyle(video.videoWidth, video.videoHeight));
     };
 
     const handlePlay = () => setIsPlaying(true);
@@ -311,7 +314,8 @@ const VideoPlayer: React.FC<{
 
   return (
     <div
-      className="relative w-full aspect-video bg-black rounded-xl overflow-hidden"
+      className={`relative w-full bg-black rounded-xl overflow-hidden ${frame.portrait ? 'max-h-[70vh] mx-auto' : 'aspect-video'}`}
+      style={frame.portrait ? { aspectRatio: frame.aspectRatio, width: 'auto', maxWidth: '100%' } : { aspectRatio: frame.aspectRatio }}
       onMouseMove={handleMouseMove}
       onMouseLeave={() => isPlaying && setShowControls(false)}
     >

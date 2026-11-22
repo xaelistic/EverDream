@@ -119,9 +119,12 @@ function useAuthInternal(): AuthState {
       try {
         // Ensure OAuth/magic-link tokens were consumed and stripped from the URL.
         // A stuck getSession must not leave the loading screen up forever.
+        const returningFromAuth = urlHasAuthArtifacts();
         let redirect = { wasRecovery: false, hadArtifacts: false };
+        let redirectSettled = false;
         try {
-          redirect = await withTimeout(authRedirectReady, remaining());
+          redirect = await withTimeout(authRedirectReady, returningFromAuth ? 25000 : remaining());
+          redirectSettled = true;
         } catch (err) {
           console.warn('[useAuth] Auth redirect wait ended:', err);
         }
@@ -130,8 +133,9 @@ function useAuthInternal(): AuthState {
           setIsRecoveryMode(true);
         }
 
-        // Belt-and-suspenders: never leave tokens in the bar
-        if (urlHasAuthArtifacts()) {
+        // Strip tokens only after the exchange has finished. A phone return
+        // that is still exchanging must keep ?code= or Google sign-in dies.
+        if (redirectSettled && urlHasAuthArtifacts()) {
           stripAuthParamsFromUrl({ preserveRecovery: redirect.wasRecovery || isRecoveryHash() });
         }
 

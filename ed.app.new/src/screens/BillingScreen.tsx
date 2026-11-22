@@ -54,7 +54,7 @@ export function BillingScreen({ onUpgrade, onTopUp }: BillingScreenProps) {
               onClick={onUpgrade}
               className="w-full rounded-xl bg-sage text-cream font-semibold py-3 inline-flex items-center justify-center gap-2"
             >
-              See plans & unlock
+              See plans
               <ArrowRight className="w-4 h-4" />
             </button>
           )}
@@ -64,7 +64,7 @@ export function BillingScreen({ onUpgrade, onTopUp }: BillingScreenProps) {
               onClick={() => void openPortal()}
               className="text-sm font-medium text-sageDark"
             >
-              {busy === 'portal' ? 'Opening…' : 'Manage billing'}
+              {busy === 'portal' ? 'Opening checkout…' : 'Manage billing'}
             </button>
           )}
         </div>

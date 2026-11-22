@@ -4,6 +4,7 @@ import DreamCapture from '../components/dreams/DreamCapture';
 import VideoCaptureFlow from '../components/capture/VideoCaptureFlow';
 import type { VideoCaptureData } from '../components/capture/VideoCaptureFlow';
 import { CaptureModeBar, type CaptureMode } from '../components/capture/CaptureModeBar';
+import { RecordingAdvice } from '../components/capture/RecordingAdvice';
 import { AudioWaveform } from '../components/capture/AudioWaveform';
 import { Mic, Square, Loader2, X, Upload, FileText, ArrowLeft } from 'lucide-react';
 import { mediaStorageManager } from '../lib/mediaStorage';
@@ -223,9 +224,10 @@ function AudioJournalCapture({
         <div className="text-5xl font-mono tracking-[4px] mb-2">
           {Math.floor(duration / 60)}:{(duration % 60).toString().padStart(2, '0')}
         </div>
-        <p className="text-white/60 mb-10">
+        <p className="text-white/60 mb-3">
           {isRecording ? 'Describe your dream…' : 'Tap to record your dream'}
         </p>
+        {!isRecording && <div className="mb-8"><RecordingAdvice tone="dark" /></div>}
 
         <button
           type="button"
@@ -335,6 +337,7 @@ function UploadCapturePanel({
 
       <div className="rounded-3xl border border-line bg-cream p-6 shadow-lift space-y-4">
         <h2 className="font-serif text-xl text-ink">Upload a dream</h2>
+        <RecordingAdvice />
         <p className="text-sm text-muted">
           Import a text file you wrote earlier, or an audio voice memo. We&apos;ll transcribe audio,
           extract emotional tone, and build your XAEL narrative.
@@ -452,6 +455,7 @@ export function RecordScreen({ onComplete, onCancel }: RecordScreenProps) {
   return (
     <div className="space-y-4">
       <CaptureModeBar active="text" onChange={handleModeChange} />
+      <RecordingAdvice />
       <DreamCapture onComplete={onComplete} onCancel={onCancel} />
     </div>
   );

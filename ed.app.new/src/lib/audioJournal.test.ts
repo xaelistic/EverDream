@@ -25,6 +25,9 @@ describe('audio journal helpers', () => {
     expect(isStuckJournalDream({ content: 'Processing your audio dream…' })).toBe(true);
     expect(isStuckJournalDream({ narrative: 'Audio journal recording (processing in progress)' })).toBe(true);
     expect(isPlaceholderJournalText('Transcribing your recording…')).toBe(true);
+    expect(isPlaceholderJournalText('Video journal entry - watch the video for the full dream description.')).toBe(true);
+    expect(isPlaceholderJournalText('Transcription did not finish')).toBe(true);
+    expect(isPlaceholderJournalText('I was in the kitchen and the lights were out.')).toBe(false);
   });
 
   it('keeps local audioCapture when cloud sync dropped it', () => {
@@ -107,12 +110,14 @@ describe('dreamsRecord audio hydrate', () => {
           fileName: 'voice.m4a',
         },
         mediaStoragePath: 'user/audio-1.webm',
+        linkedDreamIds: ['dream-b', '11111111-1111-4111-8111-111111111111'],
       },
       'profile-1',
     );
 
     const meta = row.ai_metadata as Record<string, unknown>;
     expect(meta.processing_status).toBe('processing');
+    expect(meta.linked_dream_ids).toEqual(['dream-b']);
     expect((meta.audio_capture as { mediaId: string }).mediaId).toBe('media-9');
 
     const hydrated = fromDreamsRow(row);
@@ -122,6 +127,7 @@ describe('dreamsRecord audio hydrate', () => {
     expect(audio?.path).toBe('user/audio-1.webm');
     expect(audio?.mediaId).toBe('media-9');
     expect(hydrated.mediaStoragePath).toBe('user/audio-1.webm');
+    expect(hydrated.linkedDreamIds).toEqual(['dream-b']);
     expect(hydrated.pipelineStatus?.audio_captured).toBe('done');
     expect(hydrated.pipelineStatus?.transcription).toBe('pending');
     expect(row.pipeline_status).toMatchObject({

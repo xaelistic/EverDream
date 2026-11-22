@@ -127,7 +127,7 @@ export default function DreamCapture({
     updateStep('Image Generation', { status: 'running', message: 'Creating your dream visualization...' });
     let generatedImage: DreamAsset | null = null;
     try {
-      let imagePrompt = analysis.narrative || analysis.nugget || text;
+      let imagePrompt = text;
       const profile = await loadCurrentUserProfile();
       imagePrompt = enrichImagePromptWithProfile(imagePrompt, profile);
 

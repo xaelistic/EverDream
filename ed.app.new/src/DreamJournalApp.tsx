@@ -63,7 +63,8 @@ import {
   transcribeWithWebSpeech,
   isSpeechRecognitionSupported,
 } from './lib/transcriptionWhisper';
-import { processVideoJournal, processTextJournal, processAudioJournal } from './lib/videoJournalProcessor';
+import { processVideoJournal, processTextJournal, processAudioJournal, PipelineStepError } from './lib/videoJournalProcessor';
+import { releasePipeline, tryAcquirePipeline } from './lib/pipelineLock';
 import { stopCaptureMedia } from './lib/stopCaptureMedia';
 import { WearableSettings } from './components/wearables/WearableSettings';
 import type { WearableConfig, WearableProvider, WearableSleepRecord } from './lib/wearables';
@@ -217,6 +218,7 @@ const DreamJournalApp = () => {
     isSample?: boolean;
     sleepData?: Record<string, unknown>;
     title?: string;
+    linkedDreamIds?: string[];
     processingStatus?: 'processing' | 'complete' | 'failed';
     processingStep?: 'transcribe' | 'analyse' | 'image' | 'complete';
     pipelineStatus?: import('./lib/dreamPipelineStatus').DreamPipelineStatus | null;
@@ -815,7 +817,7 @@ const DreamJournalApp = () => {
     setIsGeneratingImage(true);
     const perfCall = startAPICall('image_gen', 'generate-image', 'POST', route.screen);
     try {
-      let basePrompt = dreamData.narrative || dreamData.nugget || dreamData.content || 'a surreal dreamscape';
+      let basePrompt = String(dreamData.content || '').trim() || 'a surreal dreamscape';
 
       try {
         const profile = await loadCurrentUserProfile();
@@ -2261,8 +2263,12 @@ const DreamJournalApp = () => {
               addToast({ type: 'info', message: 'Dream saved. Running analysis and image generation…' });
 
               (async () => {
+                if (!tryAcquirePipeline(dreamId)) {
+                  addToast({ type: 'info', message: 'This dream is already being processed.' });
+                  return;
+                }
                 try {
-                  const { analysis, generatedImage, scenes, narrativeLength } = await processTextJournal(sourceText, (step) => {
+                  const { analysis, generatedImage, scenes, narrativeLength, imageFailed } = await processTextJournal(sourceText, (step) => {
                     patchDreamById(dreamId, { processingStatus: 'processing', processingStep: step });
                   });
                   let image = generatedImage;
@@ -2286,8 +2292,8 @@ const DreamJournalApp = () => {
                     generatedImage: image,
                     scenes,
                     narrativeLength,
-                    processingStatus: 'complete' as const,
-                    processingStep: 'complete' as const,
+                    processingStatus: imageFailed ? 'failed' as const : 'complete' as const,
+                    processingStep: imageFailed ? 'image' as const : 'complete' as const,
                   } as Dream;
                   setDreams((prev) => {
                     const next = prev.map((d) => (d.id === dreamId ? finalDream : d));
@@ -2295,14 +2301,22 @@ const DreamJournalApp = () => {
                     return next;
                   });
                   syncDreamToSupabase(finalDream).catch(console.error);
-                  addToast({ type: 'success', message: 'Analysis and image are ready.' });
+                  addToast({
+                    type: imageFailed ? 'warning' : 'success',
+                    message: imageFailed
+                      ? 'The text and analysis are saved. The picture did not finish.'
+                      : 'Analysis and image are ready.',
+                  });
                 } catch (err) {
                   console.error('[Upload] processing failed:', err);
-                  patchDreamById(dreamId, { processingStatus: 'failed', processingStep: 'analyse' });
+                  const step = err instanceof PipelineStepError ? err.step : 'analyse';
+                  patchDreamById(dreamId, { processingStatus: 'failed', processingStep: step });
                   addToast({
                     type: 'warning',
-                    message: err instanceof Error ? err.message : 'Saved the text, but analysis/image failed. Try Regenerate.',
+                    message: err instanceof Error ? err.message : 'Saved the text, but analysis did not finish.',
                   });
+                } finally {
+                  releasePipeline(dreamId);
                 }
               })();
               return;
@@ -2360,8 +2374,12 @@ const DreamJournalApp = () => {
               });
 
               (async () => {
+                if (!tryAcquirePipeline(dreamId)) {
+                  addToast({ type: 'info', message: 'This recording is already being processed.' });
+                  return;
+                }
                 try {
-                  const { dream: processedDream } = await processVideoJournal({
+                  const { dream: processedDream, imageFailed } = await processVideoJournal({
                     videoBlob: result.videoBlob,
                     videoUrl: uploaded?.url || localVideoUrl,
                     thumbnail: result.thumbnail,
@@ -2398,8 +2416,8 @@ const DreamJournalApp = () => {
                     mediaStoragePath: uploaded?.path || null,
                     generatedImage: image,
                     sleepData: newDream.sleepData,
-                    processingStatus: 'complete',
-                    processingStep: 'complete',
+                    processingStatus: imageFailed ? 'failed' : 'complete',
+                    processingStep: imageFailed ? 'image' : 'complete',
                   };
 
                   setDreams((prev) => {
@@ -2408,12 +2426,41 @@ const DreamJournalApp = () => {
                     return next;
                   });
                   syncDreamToSupabase(finalDream).catch(console.error);
-                  addToast({ type: 'success', message: 'Your video dream is ready in the journal.' });
+                  addToast({
+                    type: imageFailed ? 'warning' : 'success',
+                    message: imageFailed
+                      ? 'The video and transcript are saved. The picture did not finish.'
+                      : 'Your video dream is ready in the journal.',
+                  });
                 } catch (error) {
                   console.error('[RecordScreen] Video journal processing failed:', error);
-                  patchDreamById(dreamId, { processingStatus: 'failed' });
-                  addToast({ type: 'warning', message: 'Video is saved. Transcription or image generation failed — open the dream to retry.' });
+                  const step = error instanceof PipelineStepError ? error.step : 'transcribe';
+                  const transcript = error instanceof PipelineStepError ? error.transcript : null;
+                  patchDreamById(dreamId, transcript
+                    ? {
+                        processingStatus: 'failed',
+                        processingStep: step,
+                        content: transcript,
+                        narrative: transcript,
+                        nugget: transcript.slice(0, 90),
+                      }
+                    : {
+                        processingStatus: 'failed',
+                        processingStep: 'transcribe',
+                        content: '',
+                        narrative: '',
+                        nugget: 'Transcription did not finish',
+                        interpretation: { symbols: {}, meaning: '', commonPattern: '' },
+                        generatedImage: null,
+                      });
+                  addToast({
+                    type: 'warning',
+                    message: error instanceof Error
+                      ? error.message
+                      : 'The video is saved. Transcription did not finish.',
+                  });
                 } finally {
+                  releasePipeline(dreamId);
                   stopCaptureMedia();
                 }
               })();
@@ -2464,8 +2511,12 @@ const DreamJournalApp = () => {
               addToast({ type: 'info', message: 'Recording saved. Transcribing your dream…' });
 
               (async () => {
+                if (!tryAcquirePipeline(dreamId)) {
+                  addToast({ type: 'info', message: 'This recording is already being processed.' });
+                  return;
+                }
                 try {
-                  const { dream: processedDream } = await processAudioJournal({
+                  const { dream: processedDream, imageFailed } = await processAudioJournal({
                     audioBlob: result.audioBlob,
                     audioUrl: uploadedAudio?.url || result.audioUrl,
                     duration: audioDuration,
@@ -2502,8 +2553,8 @@ const DreamJournalApp = () => {
                     mediaStoragePath: uploadedAudio?.path || null,
                     generatedImage: image,
                     sleepData: newDream.sleepData,
-                    processingStatus: 'complete',
-                    processingStep: 'complete',
+                    processingStatus: imageFailed ? 'failed' : 'complete',
+                    processingStep: imageFailed ? 'image' : 'complete',
                   };
                   setDreams((prev) => {
                     const next = prev.map((d) => (d.id === dreamId ? finalDream : d));
@@ -2511,15 +2562,38 @@ const DreamJournalApp = () => {
                     return next;
                   });
                   syncDreamToSupabase(finalDream).catch(console.error);
-                  addToast({ type: 'success', message: 'Your audio dream is ready in the journal.' });
+                  addToast({
+                    type: imageFailed ? 'warning' : 'success',
+                    message: imageFailed
+                      ? 'The recording and transcript are saved. The picture did not finish.'
+                      : 'Your audio dream is ready in the journal.',
+                  });
                 } catch (e) {
                   console.warn('[AudioRecord] Background processing error:', e);
-                  patchDreamById(dreamId, { processingStatus: 'failed', processingStep: 'transcribe' });
+                  const step = e instanceof PipelineStepError ? e.step : 'transcribe';
+                  const transcript = e instanceof PipelineStepError ? e.transcript : null;
+                  patchDreamById(dreamId, transcript
+                    ? {
+                        processingStatus: 'failed',
+                        processingStep: step,
+                        content: transcript,
+                        narrative: transcript,
+                        nugget: transcript.slice(0, 90),
+                      }
+                    : {
+                        processingStatus: 'failed',
+                        processingStep: 'transcribe',
+                        content: '',
+                        narrative: '',
+                        nugget: 'Transcription did not finish',
+                        interpretation: { symbols: {}, meaning: '', commonPattern: '' },
+                      });
                   addToast({
                     type: 'warning',
-                    message: e instanceof Error ? e.message : 'Audio saved, but transcription failed. You can edit it in your journal.',
+                    message: e instanceof Error ? e.message : 'The recording is saved. Transcription did not finish.',
                   });
                 } finally {
+                  releasePipeline(dreamId);
                   stopCaptureMedia();
                 }
               })();
@@ -2589,27 +2663,98 @@ const DreamJournalApp = () => {
               return;
             }
 
+            const dreamId = generateDreamId();
+            const uploaded = await persistUserMedia({ blob: videoBlob, kind: 'video', dreamId }).catch(() => null);
+            const shell = applyNightSleep({
+              id: dreamId,
+              date: new Date().toISOString(),
+              content: '',
+              category: 'processing',
+              themes: ['video'],
+              emotion: capturedEmotionFromVideo?.dominantEmotion || 'neutral',
+              symbols: [],
+              narrative: '',
+              nugget: 'Transcribing your recording…',
+              title: 'New video dream',
+              interpretation: { symbols: {}, meaning: '', commonPattern: '' },
+              captureMode: 'video' as const,
+              videoCapture: {
+                url: uploaded?.url || videoUrl,
+                path: uploaded?.path,
+                capturedAt: new Date().toISOString(),
+                duration,
+                thumbnail: thumbnailUrl || undefined,
+              },
+              capturedEmotions: capturedEmotionFromVideo || null,
+              mediaStoragePath: uploaded?.path || null,
+              generatedImage: null,
+              processingStatus: 'processing' as const,
+              processingStep: 'transcribe' as const,
+              isSample: false as const,
+            } as Dream);
+            const saved = [shell, ...dreams];
+            setDreams(saved);
+            await saveDreamsToStorage(saved);
+            syncDreamToSupabase(shell).catch((err: unknown) => {
+              console.warn('[VideoJournal] Supabase sync error:', err);
+            });
+            navigate('dream', dreamId);
+            if (!tryAcquirePipeline(dreamId)) return;
             setIsProcessing(true);
             try {
-              const { dream: newDream } = await processVideoJournal({
+              const { dream: processedDream, imageFailed } = await processVideoJournal({
                 videoBlob,
-                videoUrl,
+                videoUrl: uploaded?.url || videoUrl,
                 thumbnail: thumbnailUrl || undefined,
                 duration,
+                path: uploaded?.path,
                 capturedEmotion: capturedEmotionFromVideo,
+              }, (step) => {
+                patchDreamById(dreamId, { processingStatus: 'processing', processingStep: step });
               });
-
-              const updatedDreams = [newDream, ...dreams];
-              setDreams(updatedDreams);
-              await saveDreamsToStorage(updatedDreams);
-              syncDreamToSupabase(newDream).catch((err: unknown) => {
-                console.warn('[VideoJournal] Supabase sync error:', err);
+              const finalDream = {
+                ...processedDream,
+                id: dreamId,
+                videoCapture: {
+                  ...processedDream.videoCapture,
+                  url: uploaded?.url || processedDream.videoCapture.url,
+                  path: uploaded?.path,
+                },
+                mediaStoragePath: uploaded?.path || null,
+                sleepData: shell.sleepData,
+                processingStatus: imageFailed ? 'failed' as const : 'complete' as const,
+                processingStep: imageFailed ? 'image' as const : 'complete' as const,
+              } as Dream;
+              setDreams((prev) => {
+                const next = prev.map((d) => (d.id === dreamId ? finalDream : d));
+                saveDreamsToStorage(next).catch(console.error);
+                return next;
               });
-              navigate('dream', newDream.id);
+              syncDreamToSupabase(finalDream).catch(console.error);
             } catch (error) {
               console.error('[VideoJournal] Processing failed:', error);
-              addToast({ type: 'error', message: 'Failed to process video journal. Please try again.' });
+              const transcript = error instanceof PipelineStepError ? error.transcript : null;
+              patchDreamById(dreamId, transcript
+                ? {
+                    processingStatus: 'failed',
+                    processingStep: error instanceof PipelineStepError ? error.step : 'analyse',
+                    content: transcript,
+                    narrative: transcript,
+                  }
+                : {
+                    processingStatus: 'failed',
+                    processingStep: 'transcribe',
+                    content: '',
+                    narrative: '',
+                    nugget: 'Transcription did not finish',
+                    generatedImage: null,
+                  });
+              addToast({
+                type: 'warning',
+                message: error instanceof Error ? error.message : 'The video is saved. Transcription did not finish.',
+              });
             } finally {
+              releasePipeline(dreamId);
               setIsProcessing(false);
             }
           }}
@@ -2622,6 +2767,12 @@ const DreamJournalApp = () => {
         <DreamDetailScreen
           key={detailDream.id}
           detailDream={detailDream}
+          siblingDreams={dreams
+            .filter((dream) => !dream.isSample)
+            .map((dream) => ({
+              id: dream.id,
+              label: (dream.content || dream.title || 'Dream').replace(/\s+/g, ' ').trim().slice(0, 72),
+            }))}
           navigate={navigate}
           shareDream={shareDream}
           handleOpenMintModal={handleOpenMintModal}

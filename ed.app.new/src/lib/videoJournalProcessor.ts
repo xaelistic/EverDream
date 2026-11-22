@@ -14,9 +14,27 @@ import { detectDreamScenes, type DreamScene } from './dreamScenes';
 import { classifyDreamLength, type DreamNarrativeLength } from './dreamLength';
 import { normalizeCategory, normalizeEmotion, deriveDreamTitle } from './dreamClassify';
 import { cleanDreamTranscript, dreamTellingFromTranscript } from './cleanDreamTranscript';
-import { guessAudioMime, resolveJournalAudioBlob, resolveJournalVideoBlob } from './audioJournal';
+import { guessAudioMime, isPlaceholderJournalText, resolveJournalAudioBlob, resolveJournalVideoBlob } from './audioJournal';
+import { whisperWavFromChannels } from './whisperAudio';
 
 export type DreamProcessStep = 'transcribe' | 'analyse' | 'image' | 'complete';
+
+export class PipelineStepError extends Error {
+  readonly step: 'transcribe' | 'analyse' | 'image';
+  readonly transcript: string | null;
+
+  constructor(step: 'transcribe' | 'analyse' | 'image', message: string, transcript: string | null = null) {
+    super(message);
+    this.name = 'PipelineStepError';
+    this.step = step;
+    this.transcript = transcript;
+  }
+}
+
+function usableTranscript(text: string): boolean {
+  const value = text.trim();
+  return value.length >= 10 && !isPlaceholderJournalText(value);
+}
 import { generateDreamImage } from '../modules/sleep/dreamAssetGenerator';
 import { 
   loadCurrentUserProfile, 
@@ -80,6 +98,7 @@ export interface VideoJournalProcessResult {
   transcriptSource: 'whisper' | 'web-speech' | 'fallback' | 'none';
   transcriptLength: number;
   imageSource: string;
+  imageFailed?: boolean;
 }
 
 function logStage(stage: string, detail?: Record<string, unknown>) {
@@ -119,59 +138,18 @@ function getSupportedAudioMimeType(): string {
   return 'audio/webm';
 }
 
-function audioBufferToWav(buffer: AudioBuffer): Blob {
-  const numChannels = buffer.numberOfChannels;
-  const sampleRate = buffer.sampleRate;
-  const bitDepth = 16;
-  const bytesPerSample = bitDepth / 8;
-  const blockAlign = numChannels * bytesPerSample;
-  const dataLength = buffer.length * blockAlign;
-  const arrayBuffer = new ArrayBuffer(44 + dataLength);
-  const view = new DataView(arrayBuffer);
-
-  const writeString = (offset: number, str: string) => {
-    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
-  };
-
-  writeString(0, 'RIFF');
-  view.setUint32(4, 36 + dataLength, true);
-  writeString(8, 'WAVE');
-  writeString(12, 'fmt ');
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, numChannels, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * blockAlign, true);
-  view.setUint16(32, blockAlign, true);
-  view.setUint16(34, bitDepth, true);
-  writeString(36, 'data');
-  view.setUint32(40, dataLength, true);
-
-  const channels: Float32Array[] = [];
-  for (let ch = 0; ch < numChannels; ch++) {
-    channels.push(buffer.getChannelData(ch));
-  }
-
-  let offset = 44;
-  for (let i = 0; i < buffer.length; i++) {
-    for (let ch = 0; ch < numChannels; ch++) {
-      const sample = Math.max(-1, Math.min(1, channels[ch][i]));
-      view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
-      offset += 2;
-    }
-  }
-
-  return new Blob([arrayBuffer], { type: 'audio/wav' });
-}
-
 async function tryDecodeAudioExtraction(videoBlob: Blob): Promise<Blob | null> {
   try {
     const audioContext = new AudioContext();
     const arrayBuffer = await videoBlob.arrayBuffer();
     const audioBuffer = await audioContext.decodeAudioData(arrayBuffer.slice(0));
     await audioContext.close();
-    const wav = audioBufferToWav(audioBuffer);
-    console.log(`[VideoJournal] Decoded audio via Web Audio API (${wav.size} bytes)`);
+    const channels: Float32Array[] = [];
+    for (let ch = 0; ch < audioBuffer.numberOfChannels; ch++) {
+      channels.push(audioBuffer.getChannelData(ch));
+    }
+    const wav = whisperWavFromChannels(channels, audioBuffer.sampleRate);
+    console.log(`[VideoJournal] Decoded audio via Web Audio API (${wav.size} bytes, 16 kHz mono)`);
     return wav;
   } catch {
     return null;
@@ -199,7 +177,7 @@ async function tryCaptureStreamExtraction(
   const chunks: Blob[] = [];
 
   return new Promise((resolve, reject) => {
-    const recorder = new MediaRecorder(audioStream, { mimeType, audioBitsPerSecond: 128000 });
+    const recorder = new MediaRecorder(audioStream, { mimeType, audioBitsPerSecond: 32000 });
 
     recorder.ondataavailable = (event) => {
       if (event.data.size > 0) chunks.push(event.data);
@@ -257,11 +235,11 @@ async function extractAudioFromVideo(videoBlob: Blob): Promise<Blob> {
   try {
     await waitForVideoReady(video);
 
-    const captured = await tryCaptureStreamExtraction(video, videoBlob.type);
-    if (captured && captured.size > 1000) return captured;
-
     const decoded = await tryDecodeAudioExtraction(videoBlob);
     if (decoded && decoded.size > 1000) return decoded;
+
+    const captured = await tryCaptureStreamExtraction(video, videoBlob.type);
+    if (captured && captured.size > 1000) return captured;
 
     throw new Error('Could not extract audio track from video');
   } finally {
@@ -394,6 +372,12 @@ export async function processVideoJournal(
     (status) => logStage('transcription_progress', { status }),
   );
   logStage('transcription_complete', { source: transcriptSource, length: transcriptText.length });
+  if (transcriptSource === 'none' || !usableTranscript(transcriptText)) {
+    throw new PipelineStepError(
+      'transcribe',
+      'Could not transcribe that video. The recording is saved.',
+    );
+  }
 
   // 2. Analyze
   onStep?.('analyse');
@@ -409,19 +393,11 @@ export async function processVideoJournal(
     logStage('analysis_complete', { narrativeLength: finalAnalysis.narrative?.length ?? 0 });
   } catch (error) {
     logError('analysis', error);
-    finalAnalysis = {
-      category: normalizeCategory(undefined, transcriptText),
-      themes: ['video', 'personal-recording'],
-      emotion: normalizeEmotion(undefined, { text: transcriptText, face: input.capturedEmotion?.dominantEmotion }),
-      symbols: [],
-      narrative: dreamTellingFromTranscript(transcriptText),
-      nugget: deriveDreamTitle(undefined, transcriptText),
-      interpretation: {
-        symbols: {},
-        meaning: 'A first-person telling of the dream as recalled on waking.',
-        commonPattern: 'Dreams like this often show up after a vivid night of sleep.',
-      },
-    };
+    throw new PipelineStepError(
+      'analyse',
+      'The transcript is saved. Analysis did not finish.',
+      transcriptText,
+    );
   }
 
   const { analysis, emotion: mergedFace } = mergeEmotionIntoAnalysis(
@@ -441,7 +417,9 @@ export async function processVideoJournal(
   onStep?.('image');
   let generatedImage: VideoJournalDream['generatedImage'] = null;
   let imageSource = 'none';
-  const imagePrompt = analysis.narrative || analysis.nugget || transcriptText;
+  let imageFailed = false;
+  const telling = dreamTellingFromTranscript(transcriptText);
+  const imagePrompt = telling || transcriptText;
 
   try {
     logStage('image_gen_start', { promptLength: imagePrompt.length });
@@ -459,16 +437,7 @@ export async function processVideoJournal(
     logStage('image_gen_complete', { source: imageSource });
   } catch (error) {
     logError('image_gen', error);
-    if (input.thumbnail) {
-      generatedImage = {
-        url: input.thumbnail,
-        prompt: 'Video journal thumbnail (image gen failed)',
-        style: 'photo',
-        generatedAt: new Date().toISOString(),
-        source: 'video-capture-fallback',
-      };
-      imageSource = 'thumbnail-fallback';
-    }
+    imageFailed = true;
   }
 
   // 4. Resolve persistent video URL
@@ -477,14 +446,14 @@ export async function processVideoJournal(
   const dream: VideoJournalDream = {
     id: crypto.randomUUID?.() || `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     date: new Date().toISOString(),
-    content: dreamTellingFromTranscript(transcriptText, analysis.narrative),
+    content: telling,
     category: analysis.category,
     themes: analysis.themes,
     emotion: finalEmotion,
     symbols: analysis.symbols,
     narrative: analysis.narrative,
     nugget: analysis.nugget,
-    title: analysis.nugget,
+    title: deriveDreamTitle('', telling || transcriptText),
     interpretation: analysis.interpretation,
     captureMode: 'video',
     videoCapture: {
@@ -512,6 +481,7 @@ export async function processVideoJournal(
     transcriptSource,
     transcriptLength: transcriptText.length,
     imageSource,
+    imageFailed,
   };
 }
 
@@ -557,6 +527,7 @@ export async function processAudioJournal(
   transcriptSource: VideoJournalProcessResult['transcriptSource'];
   transcriptLength: number;
   imageSource: string;
+  imageFailed?: boolean;
 }> {
   const logPrefix = 'audio_journal';
 
@@ -582,8 +553,11 @@ export async function processAudioJournal(
     input.fileName,
   );
 
-  if (transcriptSource === 'none' || transcriptText === AUDIO_PLACEHOLDER) {
-    throw new Error('Could not transcribe that audio. Try .m4a, .mp3, .ogg, or a shorter clip.');
+  if (transcriptSource === 'none' || !usableTranscript(transcriptText)) {
+    throw new PipelineStepError(
+      'transcribe',
+      'Could not transcribe that audio. The recording is saved.',
+    );
   }
 
   onStep?.('analyse');
@@ -596,25 +570,19 @@ export async function processAudioJournal(
     finalAnalysis.nugget = deriveDreamTitle(finalAnalysis.nugget, finalAnalysis.narrative || transcriptText);
   } catch (error) {
     logError('analysis', error);
-    finalAnalysis = {
-      category: normalizeCategory(undefined, transcriptText),
-      themes: ['audio', 'voice-note'],
-      emotion: normalizeEmotion(undefined, { text: transcriptText }),
-      symbols: [],
-      narrative: dreamTellingFromTranscript(transcriptText),
-      nugget: deriveDreamTitle(undefined, transcriptText),
-      interpretation: {
-        symbols: {},
-        meaning: 'A first-person telling of the dream as recalled on waking.',
-        commonPattern: 'Dreams like this often show up after a vivid night of sleep.',
-      },
-    };
+    throw new PipelineStepError(
+      'analyse',
+      'The transcript is saved. Analysis did not finish.',
+      transcriptText,
+    );
   }
 
   onStep?.('image');
   let generatedImage: AudioJournalDream['generatedImage'] = null;
   let imageSource = 'none';
-  const imagePrompt = finalAnalysis.narrative || finalAnalysis.nugget || transcriptText;
+  let imageFailed = false;
+  const audioTelling = dreamTellingFromTranscript(transcriptText);
+  const imagePrompt = audioTelling || transcriptText;
 
   try {
     const p2 = await loadCurrentUserProfile();
@@ -630,6 +598,7 @@ export async function processAudioJournal(
     imageSource = asset.source || 'generated';
   } catch (error) {
     logError('image_gen', error);
+    imageFailed = true;
   }
 
   let audioUrl = input.audioUrl;
@@ -644,14 +613,14 @@ export async function processAudioJournal(
   const dream: AudioJournalDream = {
     id: crypto.randomUUID?.() || `dream-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     date: new Date().toISOString(),
-    content: dreamTellingFromTranscript(transcriptText, finalAnalysis.narrative),
+    content: audioTelling,
     category: finalAnalysis.category,
     themes: finalAnalysis.themes,
     emotion: finalAnalysis.emotion || 'wonder',
     symbols: finalAnalysis.symbols,
     narrative: finalAnalysis.narrative,
     nugget: finalAnalysis.nugget,
-    title: finalAnalysis.nugget,
+    title: deriveDreamTitle('', audioTelling || transcriptText),
     interpretation: finalAnalysis.interpretation,
     captureMode: 'audio',
     audioCapture: {
@@ -672,7 +641,7 @@ export async function processAudioJournal(
     imageSource,
   }, 'record');
 
-  return { dream, transcriptSource, transcriptLength: transcriptText.length, imageSource };
+  return { dream, transcriptSource, transcriptLength: transcriptText.length, imageSource, imageFailed };
 }
 
 export async function processTextJournal(
@@ -683,6 +652,7 @@ export async function processTextJournal(
   generatedImage: VideoJournalDream['generatedImage'];
   scenes: DreamScene[];
   narrativeLength: DreamNarrativeLength;
+  imageFailed?: boolean;
 }> {
   const trimmed = text.trim();
   onStep?.('analyse');
@@ -690,14 +660,14 @@ export async function processTextJournal(
   analysis.category = normalizeCategory(analysis.category, trimmed, analysis.valence);
   analysis.emotion = normalizeEmotion(analysis.emotion, { text: trimmed, valence: analysis.valence });
   analysis.nugget = deriveDreamTitle(analysis.nugget, analysis.narrative || trimmed);
-  const source = trimmed || analysis.narrative;
+  const source = trimmed;
   const narrativeLength = classifyDreamLength(source);
   const scenes = detectDreamScenes(source);
   onStep?.('image');
   let generatedImage: VideoJournalDream['generatedImage'] = null;
   try {
     const p3 = await loadCurrentUserProfile();
-    const ep3 = enrichImagePromptWithProfile(analysis.narrative || analysis.nugget || trimmed, p3);
+    const ep3 = enrichImagePromptWithProfile(trimmed, p3);
     const asset = await generateDreamImage(ep3);
     generatedImage = {
       url: asset.url,
@@ -709,5 +679,5 @@ export async function processTextJournal(
   } catch (error) {
     console.warn('[text_journal] image gen failed:', error);
   }
-  return { analysis, generatedImage, scenes, narrativeLength };
+  return { analysis, generatedImage, scenes, narrativeLength, imageFailed: !generatedImage };
 }

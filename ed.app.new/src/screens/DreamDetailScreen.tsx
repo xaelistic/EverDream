@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { useEffect, useMemo, useState, useRef, type TouchEvent } from 'react';
 import { createPortal } from 'react-dom';
 import {
   ArrowLeft,
@@ -33,12 +33,16 @@ import { completeMissingPipelineSteps } from '../lib/dreamPipelineCatchup';
 import type { EmotionCapture } from '../components/face/FacialEmotionDetector';
 import { mediaStorageManager } from '../lib/mediaStorage';
 import { persistUserMedia, signedMediaUrl } from '../lib/mediaPersist';
-import { isStuckJournalDream, type JournalMediaDream } from '../lib/audioJournal';
+import { isPlaceholderJournalText, isStuckJournalDream, type JournalMediaDream } from '../lib/audioJournal';
+import { pipelineIsRunning, releasePipeline, tryAcquirePipeline } from '../lib/pipelineLock';
+import { videoFrameStyle } from '../lib/videoFrame';
+import { VoiceNoteWaveform } from '../components/capture/VoiceNoteWaveform';
 import { reprocessStuckMediaDream } from '../lib/stuckDreamProcessor';
+import { PipelineStepError } from '../lib/videoJournalProcessor';
 import { useSubscription } from '../hooks/use-subscription';
-import { coerceNarrativeText } from '../lib/normalizeDreamAnalysis';
 import { deriveDreamTitle, presentDream } from '../lib/dreamClassify';
 import { dreamTellingFromTranscript } from '../lib/cleanDreamTranscript';
+import { SCULPT_PROMPTS, appendSculptStarter, toggleLinkedDreamId } from '../lib/sculptPrompts';
 import { analyzeDream } from '../lib/dream-analyzer';
 import { generateDreamImage } from '../modules/sleep/dreamAssetGenerator';
 import { generateDreamClip } from '../lib/dreamClip';
@@ -139,6 +143,7 @@ interface Dream {
   lastClipJobId?: string | null;
   lastClipModel?: string | null;
   title?: string;
+  linkedDreamIds?: string[];
   processingStatus?: 'processing' | 'complete' | 'failed';
   processingStep?: 'transcribe' | 'analyse' | 'image' | 'complete';
   pipelineStatus?: import('../lib/dreamPipelineStatus').DreamPipelineStatus | null;
@@ -149,8 +154,14 @@ interface SimilarDream {
   score: number;
 }
 
+interface SiblingDream {
+  id: string;
+  label: string;
+}
+
 interface DreamDetailScreenProps {
   detailDream: Dream;
+  siblingDreams?: SiblingDream[];
   navigate: (screen: string, dreamId?: string) => void;
   shareDream: (dream: Dream) => void;
   handleOpenMintModal: (dream: Dream) => void;
@@ -171,11 +182,12 @@ function formatDuration(totalSeconds?: number): string | null {
 }
 
 function isPlaceholderTranscript(text: string): boolean {
-  return /processing your (audio |video )?dream/i.test(text.trim());
+  return isPlaceholderJournalText(text);
 }
 
 export function DreamDetailScreen({
   detailDream,
+  siblingDreams = [],
   navigate,
   shareDream,
   handleOpenMintModal,
@@ -212,19 +224,16 @@ export function DreamDetailScreen({
   const [retrying, setRetrying] = useState(false);
   const retriedIdRef = useRef<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [videoFrame, setVideoFrame] = useState({ portrait: false, aspectRatio: '16 / 9' });
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const siblingIndex = siblingDreams.findIndex((item) => item.id === detailDream.id);
+  const previousDream = siblingIndex > 0 ? siblingDreams[siblingIndex - 1] : null;
+  const nextDream = siblingIndex >= 0 && siblingIndex < siblingDreams.length - 1
+    ? siblingDreams[siblingIndex + 1]
+    : null;
+  const linkedIds = detailDream.linkedDreamIds ?? [];
 
-  const summary = useMemo(
-    () => coerceNarrativeText(detailDream.nugget, ''),
-    [detailDream.nugget],
-  );
-  const analysisNarrative = useMemo(
-    () => coerceNarrativeText(detailDream.narrative, ''),
-    [detailDream.narrative],
-  );
-  const transcript = dreamTellingFromTranscript(
-    detailDream.content || '',
-    analysisNarrative,
-  );
+  const transcript = dreamTellingFromTranscript(detailDream.content || '');
   const canShowTranscript = transcript.length > 0 && !isPlaceholderTranscript(transcript);
   const transcriptParagraphs = useMemo(() => formatTranscriptParagraphs(transcript), [transcript]);
   const symbolEntries = useMemo(() => {
@@ -243,13 +252,13 @@ export function DreamDetailScreen({
   );
   const narrativeLength: DreamNarrativeLength =
     detailDream.narrativeLength ||
-    classifyDreamLength(transcript || analysisNarrative || detailDream.content || '');
+    classifyDreamLength(transcript || detailDream.content || '');
   const panelCount = storyboardPanelCount(narrativeLength);
   const scenes = useMemo(() => {
     if (panelCount && detailDream.scenes?.length === panelCount) return detailDream.scenes;
     if (!panelCount) return [];
-    return splitIntoPanels(transcript || analysisNarrative, panelCount);
-  }, [detailDream.scenes, transcript, analysisNarrative, panelCount]);
+    return splitIntoPanels(transcript, panelCount);
+  }, [detailDream.scenes, transcript, panelCount]);
   const storyboardCost = panelCount || 0;
   const videoCost = narrativeLength === 'long' ? 3 : 2;
 
@@ -275,6 +284,10 @@ export function DreamDetailScreen({
   const ensureCredits = async (count: number): Promise<boolean> => {
     if (isAdmin || count < 1) return true;
     const balance = await getCreditBalance();
+    if (balance.source === 'unavailable') {
+      addToast({ type: 'warning', message: 'Credit balance is unavailable. Nothing was spent.' });
+      return false;
+    }
     if (balance.source === 'db' && balance.totalRemaining < count) {
       addToast({
         type: 'warning',
@@ -286,14 +299,28 @@ export function DreamDetailScreen({
   };
 
   const runAnalysis = async (edited?: string) => {
-    if (analyzing) return;
-    const sourceText = (edited ?? (transcript || analysisNarrative)).trim();
-    if (sourceText.length < 10) {
+    if (analyzing || pipelineIsRunning(detailDream.id)) {
+      if (pipelineIsRunning(detailDream.id)) {
+        addToast({ type: 'info', message: 'This dream is already being processed.' });
+      }
+      return;
+    }
+    const sourceText = (edited ?? transcript).trim();
+    if (sourceText.length < 10 || isPlaceholderTranscript(sourceText)) {
       addToast({ type: 'warning', message: 'Add a few more words before analysis.' });
+      return;
+    }
+    if (!tryAcquirePipeline(detailDream.id)) {
+      addToast({ type: 'info', message: 'This dream is already being processed.' });
       return;
     }
     setAnalyzing(true);
     setStatusNote(edited ? 'Updating the analysis from your edit…' : 'Reading the dream…');
+    onUpdateDream?.({
+      processingStatus: 'processing',
+      processingStep: 'analyse',
+      ...(edited ? { content: sourceText } : {}),
+    });
     try {
       const analysis = await analyzeDream(sourceText);
       const source = sourceText;
@@ -308,20 +335,23 @@ export function DreamDetailScreen({
         symbols: analysis.symbols,
         narrative: analysis.narrative,
         nugget: analysis.nugget,
-        title: deriveDreamTitle(analysis.nugget, analysis.narrative || sourceText),
+        title: deriveDreamTitle('', sourceText),
         interpretation: analysis.interpretation,
         moodValence: analysis.valence,
         scenes: nextScenes,
         narrativeLength: length,
-        processingStatus: 'complete',
+        processingStatus: 'processing',
+        processingStep: edited ? 'image' : 'complete',
       });
       if (!edited) {
+        onUpdateDream?.({ processingStatus: 'complete', processingStep: 'complete' });
         addToast({ type: 'success', message: 'Analysis is ready.' });
         return;
       }
       setStatusNote('Redrawing the picture from your edit…');
       const canPaint = await ensureCredits(1);
       if (!canPaint) {
+        onUpdateDream?.({ processingStatus: 'complete', processingStep: 'complete' });
         addToast({ type: 'success', message: 'Analysis updated from your edit.' });
         return;
       }
@@ -335,27 +365,32 @@ export function DreamDetailScreen({
           generatedAt: asset.generatedAt,
           source: asset.source,
         });
+        onUpdateDream?.({ processingStatus: 'complete', processingStep: 'complete' });
         addToast({ type: 'success', message: 'Analysis and picture now follow your edit.' });
       } catch (imgErr) {
         console.warn('[DreamDetail] image redraw failed:', imgErr);
+        onUpdateDream?.({ processingStatus: 'failed', processingStep: 'image' });
         addToast({
           type: 'warning',
           message: 'Analysis updated. The picture could not be redrawn from this edit.',
         });
       }
     } catch (err) {
+      onUpdateDream?.({ processingStatus: 'failed', processingStep: 'analyse' });
       addToast({
         type: 'error',
         message: err instanceof Error ? err.message : 'Analysis failed. Try again in a moment.',
       });
     } finally {
+      releasePipeline(detailDream.id);
       setAnalyzing(false);
       setStatusNote(null);
     }
   };
 
   useEffect(() => {
-    if (analysisPending && (transcript || analysisNarrative).length >= 10 && !isPlaceholderTranscript(transcript)) {
+    if (detailDream.processingStatus === 'processing' || pipelineIsRunning(detailDream.id)) return;
+    if (analysisPending && transcript.length >= 10 && !isPlaceholderTranscript(transcript)) {
       void runAnalysis();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot when opening a pending dream
@@ -363,6 +398,10 @@ export function DreamDetailScreen({
 
   const retryMediaProcessing = async () => {
     if (retrying || !onUpdateDream) return;
+    if (detailDream.processingStatus === 'processing' || pipelineIsRunning(detailDream.id)) {
+      addToast({ type: 'info', message: 'This dream is already being processed.' });
+      return;
+    }
     setRetrying(true);
     onUpdateDream({ processingStatus: 'processing', processingStep: 'transcribe' });
     try {
@@ -377,10 +416,18 @@ export function DreamDetailScreen({
       onUpdateDream(next as Partial<Dream>);
       addToast({ type: 'success', message: 'Your audio dream is ready.' });
     } catch (err) {
-      onUpdateDream({ processingStatus: 'failed', processingStep: 'transcribe' });
+      const transcript = err instanceof PipelineStepError ? err.transcript : null;
+      onUpdateDream(transcript
+        ? {
+            processingStatus: 'failed',
+            processingStep: err instanceof PipelineStepError ? err.step : 'analyse',
+            content: transcript,
+            narrative: transcript,
+          }
+        : { processingStatus: 'failed', processingStep: 'transcribe' });
       addToast({
         type: 'error',
-        message: err instanceof Error ? err.message : 'Transcription failed. Try again in a moment.',
+        message: err instanceof Error ? err.message : 'Transcription failed. The recording is saved.',
       });
     } finally {
       setRetrying(false);
@@ -388,7 +435,7 @@ export function DreamDetailScreen({
   };
 
   useEffect(() => {
-    if (detailDream.processingStatus === 'processing') return;
+    if (detailDream.processingStatus === 'processing' || pipelineIsRunning(detailDream.id)) return;
     const pipelineNow = deriveDreamPipelineStatus(detailDream, detailDream.pipelineStatus);
     const needsWork =
       missingPipelineSteps(pipelineNow).length > 0 ||
@@ -397,8 +444,8 @@ export function DreamDetailScreen({
     if (!needsWork || retriedIdRef.current === detailDream.id) return;
     retriedIdRef.current = detailDream.id;
     void retryMediaProcessing();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- retry once per dream open
-  }, [detailDream.id, detailDream.processingStatus]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- retry once when the dream opens, not when its status flips
+  }, [detailDream.id]);
 
   const runStoryboard = async () => {
     if (storyboardBusy || panelCount < 2) return;
@@ -574,7 +621,7 @@ export function DreamDetailScreen({
       }
       const clip = await generateDreamClip({
         scenes,
-        narrative: analysisNarrative || transcript,
+        narrative: transcript,
         firstFrameUrl: stills[0],
         lastFrameUrl: stills[stills.length - 1],
         length: narrativeLength,
@@ -603,8 +650,8 @@ export function DreamDetailScreen({
       addToast({ type: 'success', message: `Dream clip is ready · ${route.model.split('/')[1] || 'routed'}.` });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Video generation failed.';
-      await finishGenerationJob({ jobId, status: 'failed', error: message });
-      setVideoError(message);
+      if (jobId) await finishGenerationJob({ jobId, status: 'failed', error: message });
+      setVideoError(`${message} The dream, recording, and transcript are still here.`);
       addToast({ type: 'error', message });
     } finally {
       setVideoBusy(false);
@@ -759,6 +806,38 @@ export function DreamDetailScreen({
     ? symbolEntries.find(([name]) => name === openSymbol)?.[1] || ''
     : '';
 
+  const openSibling = (id?: string) => {
+    if (id && id !== detailDream.id) navigate('dream', id);
+  };
+
+  const beginSculpt = (starter?: string) => {
+    const stored = detailDream.content && !isPlaceholderTranscript(detailDream.content)
+      ? detailDream.content
+      : transcript;
+    setTranscriptDraft(starter ? appendSculptStarter(stored, starter) : stored);
+    setEditingTranscript(true);
+    setShowTranscript(true);
+  };
+
+  const onWorkshopTouchStart = (event: TouchEvent) => {
+    const touch = event.changedTouches[0];
+    touchStart.current = { x: touch.clientX, y: touch.clientY };
+  };
+
+  const onWorkshopTouchEnd = (event: TouchEvent) => {
+    const start = touchStart.current;
+    touchStart.current = null;
+    if (!start) return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('textarea, video, input, button, a, select')) return;
+    const touch = event.changedTouches[0];
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    if (Math.abs(dx) < 64 || Math.abs(dx) < Math.abs(dy) * 1.4) return;
+    if (dx < 0) openSibling(nextDream?.id);
+    if (dx > 0) openSibling(previousDream?.id);
+  };
+
   return (
     <>
     {statusNote && (
@@ -772,7 +851,11 @@ export function DreamDetailScreen({
         </div>
       </div>
     )}
-    <div className="space-y-5">
+    <div
+      className="space-y-5"
+      onTouchStart={onWorkshopTouchStart}
+      onTouchEnd={onWorkshopTouchEnd}
+    >
       <div className="flex items-center justify-between gap-3">
         <button
           type="button"
@@ -782,6 +865,26 @@ export function DreamDetailScreen({
         >
           <ArrowLeft className="w-4 h-4" strokeWidth={1.75} /> Journal
         </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => openSibling(previousDream?.id)}
+            disabled={!previousDream}
+            className="w-10 h-10 rounded-full border border-line bg-cream shadow-paper flex items-center justify-center transition active:scale-95 disabled:opacity-40"
+            aria-label="Previous dream"
+          >
+            <ChevronLeft className="w-5 h-5 text-ink" strokeWidth={1.75} />
+          </button>
+          <button
+            type="button"
+            onClick={() => openSibling(nextDream?.id)}
+            disabled={!nextDream}
+            className="w-10 h-10 rounded-full border border-line bg-cream shadow-paper flex items-center justify-center transition active:scale-95 disabled:opacity-40"
+            aria-label="Next dream"
+          >
+            <ChevronRight className="w-5 h-5 text-ink" strokeWidth={1.75} />
+          </button>
+        </div>
         {onToggleFavourite && (
           <button
             type="button"
@@ -798,10 +901,10 @@ export function DreamDetailScreen({
         )}
       </div>
 
-      <div className="rounded-3xl border border-line bg-cream shadow-lift overflow-hidden">
+      <div className="rounded-3xl border border-line bg-cream shadow-lift overflow-hidden transition-transform duration-150 active:scale-[0.995]">
         <DreamVisualizer
           dreamId={detailDream.id}
-          dreamText={detailDream.narrative || detailDream.content}
+          dreamText={detailDream.content || ''}
           dreamTitle={presented.title}
           existingImageUrl={detailDream.generatedImage?.url}
           processingStatus={detailDream.processingStatus}
@@ -827,8 +930,14 @@ export function DreamDetailScreen({
               <div className="rounded-2xl border border-line bg-parchment/60 p-4 flex items-center justify-between gap-3">
                 <p className="text-sm text-muted">
                   {retrying
-                    ? 'Filling in missing transcription, analysis, or image…'
-                    : 'Some steps are still missing. We retry automatically every hour, or you can run them now.'}
+                    ? 'Working on the next step. The recording stays put.'
+                    : detailDream.processingStep === 'transcribe'
+                      ? 'Transcription did not finish. The recording is saved. Analysis and the picture wait until there is a transcript.'
+                      : detailDream.processingStep === 'analyse'
+                        ? 'The transcript is saved. Analysis did not finish.'
+                        : detailDream.processingStep === 'image'
+                          ? 'The transcript and analysis are saved. The picture did not finish.'
+                          : 'Some steps are still missing. You can run the next one now.'}
                 </p>
                 <button
                   type="button"
@@ -839,14 +948,14 @@ export function DreamDetailScreen({
                   disabled={retrying}
                   className="shrink-0 text-xs font-medium px-3 py-1.5 rounded-full border border-line bg-cream hover:bg-parchment disabled:opacity-50"
                 >
-                  {retrying ? 'Working…' : 'Generate missing'}
+                  {retrying ? 'Working…' : detailDream.processingStep === 'transcribe' ? 'Retry transcription' : 'Run next step'}
                 </button>
               </div>
             </>
           )}
 
           {(hasVideo || hasAudio) && (
-            <section className="rounded-2xl border border-line bg-parchment/50 overflow-hidden">
+            <section className="rounded-2xl border border-line bg-parchment/50 overflow-hidden transition-transform duration-150 active:scale-[0.985]">
               <div className="flex items-center gap-2 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted">
                 {hasVideo ? (
                   <Play className="w-3.5 h-3.5 text-duskDeep" strokeWidth={1.75} />
@@ -867,14 +976,19 @@ export function DreamDetailScreen({
                   controls
                   playsInline
                   preload="metadata"
-                  className="w-full max-h-56 bg-ink"
+                  className={videoFrame.portrait
+                    ? 'mx-auto block w-auto max-w-full max-h-[70vh] bg-black object-contain'
+                    : 'w-full max-h-56 bg-ink object-contain'}
+                  style={{ aspectRatio: videoFrame.aspectRatio }}
                   poster={detailDream.videoCapture?.thumbnail || detailDream.generatedImage?.url}
+                  onLoadedMetadata={(event) => {
+                    const video = event.currentTarget;
+                    setVideoFrame(videoFrameStyle(video.videoWidth, video.videoHeight));
+                  }}
                 />
               )}
               {hasAudio && resolvedAudioUrl && (
-                <div className="px-3 pb-3">
-                  <audio src={resolvedAudioUrl} controls preload="metadata" className="w-full" />
-                </div>
+                <VoiceNoteWaveform src={resolvedAudioUrl} durationLabel={audioDuration} />
               )}
             </section>
           )}
@@ -922,30 +1036,7 @@ export function DreamDetailScreen({
             </div>
           </div>
 
-          <section className="rounded-2xl border border-line bg-parchment/50 px-4 py-3.5">
-            <h3 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted mb-2">
-              Summary
-            </h3>
-            {summary && (
-              <p className="text-xl font-serif font-medium text-ink italic leading-snug">
-                “{summary}”
-              </p>
-            )}
-            {detailDream.themes?.length > 0 && (
-              <div className="flex gap-2 flex-wrap mt-3">
-                {detailDream.themes.slice(0, 6).map((theme) => (
-                  <span
-                    key={theme}
-                    className="text-[11px] font-medium text-duskDeep bg-dusk/10 border border-dusk/20 px-2.5 py-1 rounded-full"
-                  >
-                    {theme}
-                  </span>
-                ))}
-              </div>
-            )}
-          </section>
-
-          <section className="rounded-3xl border border-dusk/25 bg-gradient-to-br from-[#f4f0fa] via-cream to-parchment p-5 space-y-5 shadow-paper">
+          <section className="rounded-3xl border border-dusk/25 bg-gradient-to-br from-[#f4f0fa] via-cream to-parchment p-5 space-y-5 shadow-paper transition-transform duration-150 active:scale-[0.985]">
             <div className="flex items-center justify-between gap-2">
               <h3 className="font-serif text-xl text-ink flex items-center gap-2.5">
                 <span className="inline-flex w-9 h-9 rounded-2xl bg-dusk/20 text-duskDeep items-center justify-center">
@@ -970,8 +1061,17 @@ export function DreamDetailScreen({
                 No analysis yet. Tap Run analysis for meaning, symbols, and the pattern underneath.
               </p>
             )}
-            {!analyzing && !analysisPending && analysisNarrative && analysisNarrative !== summary && (
-              <p className="text-sm text-ink/80 leading-relaxed whitespace-pre-wrap">{analysisNarrative}</p>
+            {detailDream.themes?.length > 0 && (
+              <div className="flex gap-2 flex-wrap">
+                {detailDream.themes.slice(0, 6).map((theme) => (
+                  <span
+                    key={theme}
+                    className="text-[11px] font-medium text-duskDeep bg-dusk/10 border border-dusk/20 px-2.5 py-1 rounded-full"
+                  >
+                    {theme}
+                  </span>
+                ))}
+              </div>
             )}
             {!analyzing && !analysisPending && detailDream.interpretation?.meaning && (
               <div className="rounded-2xl border border-line bg-cream p-4 shadow-paper">
@@ -1017,8 +1117,8 @@ export function DreamDetailScreen({
             )}
           </section>
 
-          <section>
-            <div className="w-full flex items-center justify-between gap-2 rounded-2xl border border-line bg-cream px-4 py-3">
+          <section className="rounded-3xl border border-line bg-cream p-4 shadow-paper transition-transform duration-150 active:scale-[0.985]">
+            <div className="w-full flex items-center justify-between gap-2">
               <button
                 type="button"
                 onClick={() => setShowTranscript((open) => !open)}
@@ -1036,20 +1136,27 @@ export function DreamDetailScreen({
               {!editingTranscript && (
                 <button
                   type="button"
-                  onClick={() => {
-                    const stored = detailDream.content && !isPlaceholderTranscript(detailDream.content)
-                      ? detailDream.content
-                      : transcript;
-                    setTranscriptDraft(stored);
-                    setEditingTranscript(true);
-                    setShowTranscript(true);
-                  }}
+                  onClick={() => beginSculpt()}
                   className="text-xs font-medium text-sageDark hover:text-ink"
                 >
                   Edit
                 </button>
               )}
             </div>
+            {showTranscript && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {SCULPT_PROMPTS.map((prompt) => (
+                  <button
+                    key={prompt.id}
+                    type="button"
+                    onClick={() => beginSculpt(prompt.starter)}
+                    className="rounded-full border border-line bg-parchment px-3 py-1.5 text-xs font-medium text-ink transition active:scale-95 hover:border-sage/40"
+                  >
+                    {prompt.label}
+                  </button>
+                ))}
+              </div>
+            )}
             {showTranscript && editingTranscript && (
               <div className="mt-3 space-y-3">
                 <textarea
@@ -1072,9 +1179,10 @@ export function DreamDetailScreen({
                       setEditingTranscript(false);
                       addToast({ type: 'success', message: 'Transcript saved.' });
                     }}
-                    className="flex-1 bg-sage text-cream py-2.5 rounded-xl text-sm font-medium"
+                    disabled={analyzing}
+                    className="flex-1 bg-sage text-cream py-2.5 rounded-xl text-sm font-medium disabled:opacity-50"
                   >
-                    Save
+                    {analyzing ? 'Working…' : 'Save'}
                   </button>
                   <button
                     type="button"
@@ -1116,6 +1224,62 @@ export function DreamDetailScreen({
                 )}
               </div>
             )}
+            <div className="mt-4 space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted">Linked dreams</p>
+              {linkedIds.length === 0 && (
+                <p className="text-xs text-muted">Link this dream to another one you already kept.</p>
+              )}
+              <div className="flex flex-wrap gap-2">
+                {linkedIds.map((id) => {
+                  const linked = siblingDreams.find((item) => item.id === id);
+                  return (
+                    <span key={id} className="inline-flex items-center gap-1 rounded-full border border-sage/30 bg-sage/10 pl-3 pr-1 py-1">
+                      <button
+                        type="button"
+                        onClick={() => openSibling(id)}
+                        className="text-xs font-medium text-sageDark active:scale-95"
+                      >
+                        {(linked?.label || 'Open linked dream').slice(0, 42)}
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="Remove link"
+                        onClick={() => onUpdateDream?.({
+                          linkedDreamIds: toggleLinkedDreamId(linkedIds, id, detailDream.id),
+                        })}
+                        className="w-6 h-6 rounded-full text-sageDark text-sm"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
+              <label className="block text-xs text-muted">
+                Add a link
+                <select
+                  className="mt-1 w-full rounded-xl border border-line bg-parchment px-3 py-2 text-sm text-ink"
+                  value=""
+                  onChange={(event) => {
+                    const id = event.target.value;
+                    if (!id) return;
+                    onUpdateDream?.({
+                      linkedDreamIds: toggleLinkedDreamId(linkedIds, id, detailDream.id),
+                    });
+                  }}
+                >
+                  <option value="">Choose a dream</option>
+                  {siblingDreams
+                    .filter((item) => item.id !== detailDream.id && !linkedIds.includes(item.id))
+                    .map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.label || 'Dream'}
+                      </option>
+                    ))}
+                </select>
+              </label>
+
+            </div>
           </section>
 
           {panelCount >= 2 && (
@@ -1202,8 +1366,9 @@ export function DreamDetailScreen({
                 src={finishedClipUrl}
                 controls
                 playsInline
-                className="w-full rounded-xl bg-ink max-h-64"
+                className="w-full rounded-xl bg-ink max-h-64 object-contain"
                 poster={storyboardFrames[0]?.stillUrl || storyboardFrames[0]?.url || detailDream.generatedImage?.url}
+                onError={() => setVideoError('The clip could not play. The dream, recording, and transcript are still here.')}
               />
             ) : (
               <button
@@ -1215,7 +1380,18 @@ export function DreamDetailScreen({
                 {videoBusy ? (videoError || 'Rendering clip…') : 'Generate clip'}
               </button>
             )}
-            {videoError && !videoBusy && <p className="mt-2 text-xs text-duskDeep">{videoError}</p>}
+            {videoError && !videoBusy && (
+              <div className="mt-2 space-y-2">
+                <p className="text-xs text-duskDeep">{videoError}</p>
+                <button
+                  type="button"
+                  onClick={() => void runVideo()}
+                  className="text-xs font-medium px-3 py-1.5 rounded-full border border-line bg-cream hover:bg-parchment"
+                >
+                  Retry clip
+                </button>
+              </div>
+            )}
             {finishedClipUrl && (
               <AssetFeedback
                 dreamId={detailDream.id}
@@ -1317,7 +1493,7 @@ export function DreamDetailScreen({
                     className="text-xs p-3 rounded-xl bg-cream/90 border border-line cursor-pointer hover:border-dusk/40 transition"
                   >
                     {new Date(dream.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}:{' '}
-                    {dream.nugget?.substring(0, 60)}...
+                    {(dream.content || dream.title || 'Dream').replace(/\s+/g, ' ').slice(0, 60)}
                   </div>
                 ))}
               </div>

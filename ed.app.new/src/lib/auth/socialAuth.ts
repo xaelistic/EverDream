@@ -52,6 +52,11 @@ export async function signInWithSocialProvider(
 
   const scopes = getOAuthScopes(provider);
   const redirectTo = getRedirectUrl(intent);
+  const queryParams: Record<string, string> | undefined = supabaseProvider === 'google'
+    ? (intent === 'link'
+      ? { access_type: 'offline', prompt: 'consent' }
+      : { prompt: 'select_account' })
+    : undefined;
 
   if (intent === 'link') {
     const { error } = await supabase.auth.linkIdentity({
@@ -59,9 +64,7 @@ export async function signInWithSocialProvider(
       options: {
         redirectTo,
         scopes,
-        queryParams: supabaseProvider === 'google'
-          ? { access_type: 'offline', prompt: 'consent' }
-          : undefined,
+        queryParams,
       },
     });
     if (error) return { ok: false, message: error.message };
@@ -73,9 +76,8 @@ export async function signInWithSocialProvider(
     options: {
       redirectTo,
       scopes,
-      queryParams: supabaseProvider === 'google'
-        ? { access_type: 'offline', prompt: 'consent' }
-        : undefined,
+      queryParams,
+      skipBrowserRedirect: false,
     },
   });
 

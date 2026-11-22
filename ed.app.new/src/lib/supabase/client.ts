@@ -44,10 +44,16 @@ export const authRedirectReady: Promise<{ wasRecovery: boolean; hadArtifacts: bo
         const code = params.get('code');
         const { data, error } = await supabase.auth.getSession();
         if (error) throw error;
-        // PKCE return: GoTrue exchanged at supabase.n1g3.com then sent ?code= here.
-        // If Kong/auth rejected the exchange, there is a code but no session.
+        // Phone returns are slow. If the code is still here, finish the exchange
+        // in this tab instead of dropping the person back on the login screen.
         if (code && !data.session) {
-          throw new Error('Google sign-in did not complete. Please try Continue with Google again.');
+          const exchanged = await supabase.auth.exchangeCodeForSession(code);
+          if (exchanged.error || !exchanged.data.session) {
+            throw new Error(
+              exchanged.error?.message
+                || 'Google sign-in did not finish. Please try Continue with Google again.',
+            );
+          }
         }
       })
     : Promise.resolve({ wasRecovery: false, hadArtifacts: false });

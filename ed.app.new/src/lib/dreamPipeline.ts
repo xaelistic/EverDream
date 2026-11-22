@@ -182,7 +182,7 @@ export async function runDreamPipeline(
     report(STEP_NAMES.image, 'running', 'Generating dream image...');
 
     try {
-      let imagePrompt = analysis.narrative || analysis.nugget || dreamText;
+      let imagePrompt = dreamText;
       const profile = await loadCurrentUserProfile();
       imagePrompt = enrichImagePromptWithProfile(imagePrompt, profile);
 

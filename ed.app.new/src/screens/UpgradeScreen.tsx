@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowLeft, Check, Minus } from 'lucide-react';
 import { useSubscription } from '../hooks/use-subscription';
 import { useBillingCheckout } from '../hooks/useBillingCheckout';
@@ -6,6 +6,7 @@ import { PLAN_COMPARE, PLANS } from '../lib/subscriptions/plans';
 import { CreditBalanceCard } from '../components/subscriptions/CreditBalanceCard';
 import {
   captureCheckoutIntent,
+  checkoutButtonLabel,
   clearCheckoutIntent,
   readCheckoutIntent,
 } from '../lib/subscriptions/stripe';
@@ -19,21 +20,16 @@ export function UpgradeScreen({ onBack, onTopUp }: UpgradeScreenProps) {
   const { tier, isAdmin } = useSubscription();
   const { busy, buyPlan, openPortal, signedIn } = useBillingCheckout();
   const current = isAdmin ? 'pro' : tier;
-  const intentFired = useRef(false);
+  const [heldPlan, setHeldPlan] = useState<'plus' | 'pro' | null>(null);
 
   useEffect(() => {
     captureCheckoutIntent();
-  }, []);
-
-  useEffect(() => {
-    if (intentFired.current || !signedIn) return;
     const { plan } = readCheckoutIntent();
     if (plan === 'plus' || plan === 'pro') {
-      intentFired.current = true;
+      setHeldPlan(plan);
       clearCheckoutIntent();
-      void buyPlan(plan);
     }
-  }, [buyPlan, signedIn]);
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -54,8 +50,12 @@ export function UpgradeScreen({ onBack, onTopUp }: UpgradeScreenProps) {
           Journals, analysis, and sleep tracking are free. Credits are spent when you paint an image,
           storyboard, or motion clip. Monthly credits reset; packs you buy stay until you use them.
         </p>
+        <p className="text-sm text-duskDeep mt-3">
+          Checkout is closed until Stripe is set up. Nothing is charged from this screen.
+          {heldPlan ? ` The ${heldPlan} link was kept, and checkout was not started.` : ''}
+        </p>
         {!signedIn && (
-          <p className="text-sm text-duskDeep mt-3">Sign in to unlock a plan with Stripe.</p>
+          <p className="text-sm text-muted mt-2">Sign in before checkout can open.</p>
         )}
       </div>
 
@@ -102,7 +102,7 @@ export function UpgradeScreen({ onBack, onTopUp }: UpgradeScreenProps) {
                   onClick={() => void buyPlan(plan.id)}
                   className="mt-5 w-full rounded-xl bg-sage text-cream font-semibold py-3 disabled:opacity-60"
                 >
-                  {busy === plan.id ? 'Redirecting…' : `Unlock ${plan.name}`}
+                  {checkoutButtonLabel(busy === plan.id)}
                 </button>
               )}
               {isCurrent && (
@@ -139,7 +139,7 @@ export function UpgradeScreen({ onBack, onTopUp }: UpgradeScreenProps) {
 
       {tier !== 'free' && (
         <button type="button" onClick={() => void openPortal()} className="text-sm font-medium text-sageDark">
-          {busy === 'portal' ? 'Opening…' : 'Manage billing'}
+          {busy === 'portal' ? 'Opening checkout…' : 'Manage billing'}
         </button>
       )}
     </div>

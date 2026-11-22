@@ -62,6 +62,9 @@ async function generateViaEdgeFunction(
   options?: GenerateImageOptions,
 ): Promise<DreamAsset> {
   const balance = await getCreditBalance();
+  if (balance.source === 'unavailable') {
+    throw new Error('Credit balance is unavailable. Nothing was spent.');
+  }
   if (balance.source === 'db' && balance.totalRemaining < 1) {
     throw new Error(`Out of image credits (${balance.totalRemaining} left). Buy a pack or upgrade on Plan & credits.`);
   }

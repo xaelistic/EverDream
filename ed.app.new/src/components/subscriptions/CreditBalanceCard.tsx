@@ -17,7 +17,8 @@ export function CreditBalanceCard({ onTopUp, onUpgrade, compact = false }: Credi
     void getCreditBalance().then(setBalance);
   }, []);
 
-  const available = isAdmin ? '∞' : balance ? String(balance.totalRemaining) : '—';
+  const unavailable = balance?.source === 'unavailable';
+  const available = isAdmin ? '∞' : unavailable || !balance ? '—' : String(balance.totalRemaining);
   const showUpgrade = Boolean(onUpgrade) && !isAdmin;
 
   return (
@@ -27,12 +28,16 @@ export function CreditBalanceCard({ onTopUp, onUpgrade, compact = false }: Credi
           <p className="text-[10px] uppercase tracking-[0.2em] text-muted">Tokens</p>
           <p className="font-serif text-4xl text-ink mt-1 leading-none">{available}</p>
           <p className="text-xs text-muted mt-2">
-            {isAdmin ? 'Admin — unlimited generation' : `${tierLabel} plan`}
+            {isAdmin
+              ? 'Admin — unlimited generation'
+              : unavailable
+                ? 'Balance unavailable. The account ledger did not answer.'
+                : `${tierLabel} plan`}
           </p>
         </div>
         <Sparkles className="w-6 h-6 text-duskDeep" strokeWidth={1.5} />
       </div>
-      {balance && !isAdmin && !compact && (
+      {balance && balance.source !== 'unavailable' && !isAdmin && !compact && (
         <div className="mt-4 grid grid-cols-2 gap-2 text-center">
           <div className="rounded-xl bg-white/80 border border-line/60 p-2.5">
             <p className="text-[9px] uppercase text-muted">

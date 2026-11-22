@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { useAuth } from './use-auth';
 import { useToast } from '../components/ui/Toast';
 import {
+  isCheckoutClosedMessage,
   openStripeCustomerPortal,
   startStripeCheckout,
   startStripeCreditCheckout,
@@ -12,6 +13,7 @@ export function useBillingCheckout() {
   const { user } = useAuth();
   const { addToast } = useToast();
   const [busy, setBusy] = useState<string | null>(null);
+  const [checkoutClosed, setCheckoutClosed] = useState(true);
   const signedIn = Boolean(user && !user.isAnonymous);
   const channel = getPreferredPaymentChannel();
 
@@ -28,11 +30,16 @@ export function useBillingCheckout() {
       setBusy(key);
       try {
         await fn();
+        setCheckoutClosed(false);
       } catch (err) {
-        addToast({
-          type: 'error',
-          message: err instanceof Error ? err.message : 'Payment could not start.',
-        });
+        const message = err instanceof Error ? err.message : 'Payment could not start.';
+        if (isCheckoutClosedMessage(message)) {
+          setCheckoutClosed(true);
+          addToast({ type: 'info', message: 'Checkout is closed. Nothing was charged.' });
+        } else {
+          addToast({ type: 'error', message });
+        }
+      } finally {
         setBusy(null);
       }
     },
@@ -47,5 +54,5 @@ export function useBillingCheckout() {
 
   const openPortal = () => run('portal', openStripeCustomerPortal);
 
-  return { busy, signedIn, buyPlan, buyPack, openPortal };
+  return { busy, signedIn, checkoutClosed, buyPlan, buyPack, openPortal };
 }

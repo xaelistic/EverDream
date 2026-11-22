@@ -103,6 +103,7 @@ export interface JournalDreamLike {
   clipQuality?: { score: number; verdict: string; reasons: string[] } | null;
   lastClipJobId?: string | null;
   lastClipModel?: string | null;
+  linkedDreamIds?: string[];
 }
 
 export function toDreamsUpsertRow(dream: JournalDreamLike, profileId: string): Record<string, unknown> {
@@ -172,6 +173,9 @@ export function toDreamsUpsertRow(dream: JournalDreamLike, profileId: string): R
       processing_step: dream.processingStep || rollup.processingStep,
       pipeline_status: pipelineStatus,
       title: dream.title || null,
+      linked_dream_ids: Array.isArray(dream.linkedDreamIds)
+        ? dream.linkedDreamIds.filter((id) => typeof id === 'string' && id && id !== dream.id)
+        : [],
     },
   };
 }
@@ -195,6 +199,7 @@ interface DreamsAiMetadata {
   processing_step?: string | null;
   pipeline_status?: DreamPipelineStatus | null;
   title?: string | null;
+  linked_dream_ids?: string[];
 }
 
 /** Hydrate a journal dream from a public.dreams row, including audio/video capture. */
@@ -242,7 +247,10 @@ export function fromDreamsRow(record: Record<string, unknown>): JournalDreamLike
     processingStatus: meta.processing_status || undefined,
     processingStep: meta.processing_step || undefined,
     pipelineStatus,
-    title: meta.title || (typeof record.nugget === 'string' ? record.nugget : undefined),
+    title: meta.title || undefined,
+    linkedDreamIds: Array.isArray(meta.linked_dream_ids)
+      ? meta.linked_dream_ids.filter((id) => typeof id === 'string' && id)
+      : [],
     scenes: Array.isArray(meta.scenes) ? meta.scenes : undefined,
     storyboardImages: normalizeStoryboard(meta.storyboard),
     storyboardComicUrl: typeof meta.storyboard_comic_url === 'string' ? meta.storyboard_comic_url : undefined,

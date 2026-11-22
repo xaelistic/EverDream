@@ -72,7 +72,7 @@ export function FriendsNetwork({
   const refresh = useCallback(async () => {
     try {
       const next = await listFriendships();
-      setFriends((prev) => (next.length > 0 ? next : prev));
+      setFriends(next);
     } catch (err) {
       addToast({ type: 'error', message: err instanceof Error ? err.message : 'Could not load friends.' });
     } finally {

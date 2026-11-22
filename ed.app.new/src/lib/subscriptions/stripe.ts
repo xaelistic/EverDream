@@ -3,7 +3,20 @@
  */
 
 import { supabase } from '../supabase/client';
+import { readEdgeFunctionError } from './creditService';
 import type { SubscriptionTier } from './types';
+
+/** True when Stripe did not open a checkout page. Nothing was charged. */
+export function isCheckoutClosedMessage(message: string): boolean {
+  return /stripe not configured|not configured|no checkout url|portal unavailable|non-2xx|checkout failed/i.test(
+    message,
+  );
+}
+
+export function checkoutButtonLabel(busy: boolean): string {
+  if (busy) return 'Opening checkout…';
+  return 'Checkout is closed';
+}
 
 export function isStripeConfigured(): boolean {
   // Redirect Checkout uses the stripe-checkout edge function (secret on the server).
@@ -106,7 +119,7 @@ export async function startStripeCheckout(tier: 'plus' | 'pro'): Promise<void> {
     },
   });
 
-  if (error) throw new Error(error.message || 'Checkout failed');
+  if (error || data?.error) throw new Error(await readEdgeFunctionError(error, data));
   if (!data?.url) throw new Error('No checkout URL returned');
 
   window.location.href = data.url as string;
@@ -126,7 +139,7 @@ export async function startStripeCreditCheckout(packId: string): Promise<void> {
     },
   });
 
-  if (error) throw new Error(error.message || 'Checkout failed');
+  if (error || data?.error) throw new Error(await readEdgeFunctionError(error, data));
   if (!data?.url) throw new Error('No checkout URL returned');
   window.location.href = data.url as string;
 }
@@ -138,7 +151,7 @@ export async function openStripeCustomerPortal(): Promise<void> {
     body: { return_url: returnUrl },
   });
 
-  if (error) throw new Error(error.message);
+  if (error || data?.error) throw new Error(await readEdgeFunctionError(error, data));
   if (!data?.url) throw new Error('Portal unavailable');
 
   window.location.href = data.url as string;

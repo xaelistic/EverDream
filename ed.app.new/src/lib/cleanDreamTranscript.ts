@@ -46,12 +46,11 @@ export function transcriptNeedsRewrite(text: string): boolean {
   return false;
 }
 
-/** Prefer a cleaned telling; fall back to the analysis narrative if the memo is still meta. */
-export function dreamTellingFromTranscript(raw: string, narrative?: string): string {
+/**
+ * The telling on screen is the person's words, with filler removed.
+ * A model rewrite is never substituted, even when the memo is still rough.
+ */
+export function dreamTellingFromTranscript(raw: string, _narrative?: string): string {
   const cleaned = cleanDreamTranscript(raw);
-  const story = (narrative || '').trim();
-  if (transcriptNeedsRewrite(cleaned) && story && !transcriptNeedsRewrite(story)) {
-    return cleanDreamTranscript(story);
-  }
-  return cleaned || cleanDreamTranscript(story);
+  return cleaned || (raw || '').trim();
 }

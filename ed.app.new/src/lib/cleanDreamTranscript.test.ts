@@ -26,12 +26,13 @@ describe('cleanDreamTranscript', () => {
     expect(out).toMatch(/library/i);
   });
 
-  it('uses the analysis narrative when the memo is still labeled', () => {
+  it('keeps the person\'s words and leaves the rewritten story off the telling', () => {
     const telling = dreamTellingFromTranscript(
-      'Speaker 1: testing testing',
-      'I walk through a glass library at dawn.',
+      'Um, I walked through a glass library.',
+      'A luminous archive rewrote every shelf into a myth.',
     );
     expect(telling).toMatch(/library/i);
+    expect(telling.toLowerCase()).not.toMatch(/myth|luminous/);
     expect(transcriptNeedsRewrite(telling)).toBe(false);
   });
 });

@@ -13,6 +13,7 @@
  */
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { RecordingAdvice } from './RecordingAdvice';
 import { 
   Camera, 
   StopCircle, 
@@ -511,6 +512,11 @@ export function VideoCaptureFlow({
         
         {/* Bottom controls */}
         <div className="absolute bottom-0 left-0 right-0 p-6 pb-12">
+          {!isRecording && (
+            <div className="flex justify-center mb-4">
+              <RecordingAdvice tone="dark" />
+            </div>
+          )}
           <div className="flex items-center justify-center gap-6">
             {/* Audio toggle */}
             <button

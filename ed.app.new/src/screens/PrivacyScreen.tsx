@@ -1,4 +1,4 @@
-import { Download, X, Shield, Cpu, Activity, Moon } from 'lucide-react';
+import { Download, X, Shield, Cpu, Activity } from 'lucide-react';
 
 interface PrivacySettings {
   aiAnalysis: boolean;
@@ -25,7 +25,6 @@ export function PrivacyScreen({
   exportAllData,
   deleteAllUserData,
   setShowLicensing,
-  setShowTerms,
 }: PrivacyScreenProps) {
   return (
     <div className="space-y-4">
@@ -104,17 +103,7 @@ export function PrivacyScreen({
             }}
           />
 
-          <PrivacyToggle
-            label="Third-Party Data Sharing"
-            description="Allow dream baskets to license your content"
-            value={privacySettings.thirdPartySharing}
-            onChange={(v) => {
-              const newSettings = {...privacySettings, thirdPartySharing: v};
-              setPrivacySettings(newSettings);
-              savePrivacySettings(newSettings);
-            }}
-            note="Required for monetization (Phase 3)"
-          />
+
         </div>
       </div>
 
@@ -137,7 +126,7 @@ export function PrivacyScreen({
               <div className="font-semibold text-ink">Data Processors</div>
               <div className="text-muted">• OpenRouter — dream analysis, images, and clips</div>
               <div className="text-muted">• Supabase — account, dreams, and media storage</div>
-              <div className="text-xs text-muted mt-1">No data retention, processing only</div>
+              <div className="text-xs text-muted mt-1">Saved dreams stay in the account until you delete them</div>
             </div>
           </div>
 
@@ -150,14 +139,7 @@ export function PrivacyScreen({
             </div>
           </div>
 
-          <div className="flex items-start gap-3">
-            <Moon className="w-5 h-5 text-duskDeep flex-shrink-0 mt-0.5" strokeWidth={1.75} />
-            <div>
-              <div className="font-semibold text-ink">Future: Ethereum Storage</div>
-              <div className="text-muted">IPFS + Ethereum for NFT minting</div>
-              <div className="text-xs text-muted mt-1">Phase 3: Decentralized storage option</div>
-            </div>
-          </div>
+
         </div>
       </div>
 
@@ -184,10 +166,18 @@ export function PrivacyScreen({
 
       {/* Terms */}
       <button
-        onClick={() => setShowTerms(true)}
+        type="button"
+        onClick={() => window.open('/privacy.html', '_blank', 'noopener,noreferrer')}
         className="w-full border border-line bg-parchment hover:bg-cream text-ink py-3 rounded-xl transition font-medium text-sm"
       >
-        View Terms & Conditions
+        Privacy Policy
+      </button>
+      <button
+        type="button"
+        onClick={() => window.open('/terms.html', '_blank', 'noopener,noreferrer')}
+        className="w-full border border-line bg-parchment hover:bg-cream text-ink py-3 rounded-xl transition font-medium text-sm"
+      >
+        Terms of Service
       </button>
     </div>
   );

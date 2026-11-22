@@ -1,5 +1,5 @@
 import { ArrowLeft, Sparkles } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { useSubscription } from '../hooks/use-subscription';
 import { useBillingCheckout } from '../hooks/useBillingCheckout';
 import { CREDIT_PACKS } from '../lib/subscriptions/plans';
@@ -8,6 +8,7 @@ import {
   parseSubscriptionReturn,
   clearSubscriptionReturnParams,
   captureCheckoutIntent,
+  checkoutButtonLabel,
   clearCheckoutIntent,
   readCheckoutIntent,
 } from '../lib/subscriptions/stripe';
@@ -22,21 +23,16 @@ export function CreditsScreen({ onBack, onUpgrade }: CreditsScreenProps) {
   const { refresh } = useSubscription();
   const { busy, buyPack, signedIn } = useBillingCheckout();
   const { addToast } = useToast();
-  const intentFired = useRef(false);
+  const [heldPack, setHeldPack] = useState<string | null>(null);
 
   useEffect(() => {
     captureCheckoutIntent();
-  }, []);
-
-  useEffect(() => {
-    if (intentFired.current || !signedIn) return;
     const { pack } = readCheckoutIntent();
     if (pack && CREDIT_PACKS.some((row) => row.id === pack)) {
-      intentFired.current = true;
+      setHeldPack(pack);
       clearCheckoutIntent();
-      void buyPack(pack);
     }
-  }, [buyPack, signedIn]);
+  }, []);
 
   useEffect(() => {
     const { status } = parseSubscriptionReturn();
@@ -69,8 +65,12 @@ export function CreditsScreen({ onBack, onUpgrade }: CreditsScreenProps) {
           One credit paints one image. Storyboards use one credit per scene. Packs never expire and sit
           on top of any monthly allotment.
         </p>
+        <p className="text-sm text-duskDeep mt-3">
+          Checkout is closed until Stripe is set up. Nothing is charged from this screen.
+          {heldPack ? ' The pack link was kept, and checkout was not started.' : ''}
+        </p>
         {!signedIn && (
-          <p className="text-sm text-duskDeep mt-3">Sign in to buy credits with Stripe.</p>
+          <p className="text-sm text-muted mt-2">Sign in before checkout can open.</p>
         )}
       </div>
 
@@ -89,7 +89,7 @@ export function CreditsScreen({ onBack, onUpgrade }: CreditsScreenProps) {
               onClick={() => void buyPack(pack.id)}
               className="mt-4 w-full rounded-xl bg-sage text-cream font-semibold py-3 disabled:opacity-60"
             >
-              {busy === pack.id ? 'Redirecting…' : `Buy ${pack.credits} credits`}
+              {checkoutButtonLabel(busy === pack.id)}
             </button>
           </article>
         ))}

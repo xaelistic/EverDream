@@ -20,11 +20,14 @@ import {
   pipelineNeedsWork,
   rollupProcessingFields,
   withPipelineBookkeeping,
+  isAnalysisReady,
+  isTranscriptReady,
   type DreamPipelineStatus,
   type PipelineDreamLike,
 } from './dreamPipelineStatus';
 import { reprocessStuckMediaDream } from './stuckDreamProcessor';
-import { isStuckJournalDream, type JournalMediaDream } from './audioJournal';
+import { isPlaceholderJournalText, isStuckJournalDream, type JournalMediaDream } from './audioJournal';
+import { pipelineIsRunning, releasePipeline, tryAcquirePipeline } from './pipelineLock';
 
 export const PIPELINE_CATCHUP_INTERVAL_MS = 60 * 60 * 1000;
 
@@ -103,35 +106,44 @@ function isRecentlyProcessing(dream: CatchupDream): boolean {
   return Date.now() - created < 10 * 60 * 1000;
 }
 
+function realTranscript(text: string): boolean {
+  return isTranscriptReady({ content: text }) && !isPlaceholderJournalText(text);
+}
+
 export async function completeMissingPipelineSteps(dream: CatchupDream): Promise<Record<string, unknown> | null> {
-  if (!dream?.id || dream.isSample || isRecentlyProcessing(dream)) return null;
+  if (!dream?.id || dream.isSample || isRecentlyProcessing(dream) || pipelineIsRunning(dream.id)) return null;
   const status = deriveDreamPipelineStatus(dream, dream.pipelineStatus);
   const missing = missingPipelineSteps(status);
   if (missing.length === 0) return null;
   if (inFlight.has(dream.id)) return null;
+  if (!tryAcquirePipeline(dream.id)) return null;
   inFlight.add(dream.id);
 
   try {
     const isMedia = dream.captureMode === 'audio' || dream.captureMode === 'video'
       || Boolean(dream.audioCapture) || Boolean(dream.videoCapture);
 
-    if (missing.includes('transcription') && isMedia && isStuckJournalDream({
-      processingStatus: dream.processingStatus || undefined,
-      content: typeof dream.content === 'string' ? dream.content : undefined,
-      narrative: typeof dream.narrative === 'string' ? dream.narrative : undefined,
-      nugget: typeof dream.nugget === 'string' ? dream.nugget : undefined,
-    })) {
-      const processed = await reprocessStuckMediaDream(dream as unknown as JournalMediaDream);
-      if (processed) {
-        return pipelinePatch(dream, processed as Record<string, unknown>);
+    if (missing.includes('transcription')) {
+      if (!isMedia || !isStuckJournalDream({
+        processingStatus: dream.processingStatus || undefined,
+        content: typeof dream.content === 'string' ? dream.content : undefined,
+        narrative: typeof dream.narrative === 'string' ? dream.narrative : undefined,
+        nugget: typeof dream.nugget === 'string' ? dream.nugget : undefined,
+      })) {
+        return null;
       }
+      const processed = await reprocessStuckMediaDream(dream as unknown as JournalMediaDream);
+      if (!processed) return null;
+      const transcript = String(processed.content || '');
+      if (!realTranscript(transcript)) return null;
+      return pipelinePatch(dream, processed as Record<string, unknown>);
     }
 
     const extra: Record<string, unknown> = {};
 
     if (missing.includes('analysis')) {
-      const text = String(dream.content || dream.narrative || '').trim();
-      if (text.length >= 10 && !/processing your/i.test(text)) {
+      const text = String(dream.content || dream.transcript || '').trim();
+      if (realTranscript(text)) {
         const analysis = await analyzeDream(text);
         extra.category = analysis.category;
         extra.themes = analysis.themes;
@@ -141,16 +153,15 @@ export async function completeMissingPipelineSteps(dream: CatchupDream): Promise
         extra.nugget = analysis.nugget;
         extra.interpretation = analysis.interpretation;
         extra.moodValence = analysis.valence;
-        extra.title = deriveDreamTitle(analysis.nugget, analysis.narrative || text);
-        extra.scenes = detectDreamScenes(text || analysis.narrative);
+        extra.title = deriveDreamTitle('', text);
+        extra.scenes = detectDreamScenes(text);
       }
     }
 
     if (missing.includes('image')) {
-      const prompt = String(
-        extra.narrative || extra.nugget || dream.narrative || dream.nugget || dream.content || '',
-      ).trim();
-      if (prompt.length >= 10 && !/processing your/i.test(prompt)) {
+      const analysisReady = Boolean(extra.narrative) || isAnalysisReady(dream);
+      const prompt = String(dream.content || dream.transcript || '').trim();
+      if (analysisReady && realTranscript(prompt) && !isPlaceholderJournalText(prompt)) {
         const asset = await generateDreamImage(prompt);
         extra.generatedImage = await persistInlineImage(dream.id, {
           url: asset.url,
@@ -164,6 +175,7 @@ export async function completeMissingPipelineSteps(dream: CatchupDream): Promise
     if (Object.keys(extra).length === 0) return null;
     return pipelinePatch(dream, extra);
   } finally {
+    releasePipeline(dream.id);
     inFlight.delete(dream.id);
   }
 }

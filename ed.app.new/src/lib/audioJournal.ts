@@ -34,7 +34,7 @@ export interface JournalMediaDream {
 }
 
 const STUCK_TEXT =
-  /processing your|processing in progress|transcribing your recording|building your xael/i;
+  /processing your|processing in progress|transcribing your recording|building your xael|video journal entry|audio journal entry|watch the video for the full|listen to the recording|did not finish/i;
 
 export function guessAudioMime(name: string, fallback = 'audio/webm'): string {
   const lower = (name || '').toLowerCase();
