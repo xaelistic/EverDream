@@ -28,7 +28,7 @@ const navItems: { screen: RouteScreen; label: string; icon: typeof Home }[] = [
   { screen: 'more', label: 'More', icon: Menu },
 ];
 
-// Center Record button (the primary action for capturing new dreams, video-first)
+// Center Record button. Voice is the morning path; the last mode they picked is remembered.
 // Toggles between overview (home/journal) and the record/capture flow
 function getRecordButtonTarget(active: RouteScreen): RouteScreen {
   if (active === 'home' || active === 'journal') {

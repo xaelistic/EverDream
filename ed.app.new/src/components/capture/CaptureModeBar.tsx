@@ -2,6 +2,18 @@ import { Video, Mic, Type, Upload } from 'lucide-react';
 
 export type CaptureMode = 'video' | 'audio' | 'text' | 'upload';
 
+const CAPTURE_MODE_KEY = 'everdream.captureMode';
+
+export function readCaptureMode(storage: { getItem(key: string): string | null } | null): CaptureMode {
+  const saved = storage?.getItem(CAPTURE_MODE_KEY);
+  if (saved === 'video' || saved === 'audio' || saved === 'text' || saved === 'upload') return saved;
+  return 'audio';
+}
+
+export function writeCaptureMode(storage: { setItem(key: string, value: string): void }, mode: CaptureMode) {
+  storage.setItem(CAPTURE_MODE_KEY, mode);
+}
+
 const MODES: { id: CaptureMode; label: string; icon: typeof Video }[] = [
   { id: 'video', label: 'Video', icon: Video },
   { id: 'audio', label: 'Audio', icon: Mic },

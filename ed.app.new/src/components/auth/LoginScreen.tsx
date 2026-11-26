@@ -240,10 +240,10 @@ export default function LoginScreen() {
             fontSize: '1.875rem', fontWeight: 400, letterSpacing: '-0.025em',
             color: 'oklch(0.25 0.04 270)', margin: '1.25rem 0 0.25rem',
           }}>
-            {isSignUp ? 'Create your space' : 'Welcome back'}
+            {isSignUp ? 'Start a telling' : 'Pick up the dream'}
           </h1>
           <p style={{ fontSize: '0.875rem', color: 'oklch(0.45 0.02 270 / 0.7)', margin: 0 }}>
-            Track, reflect on, and share your dreams
+            Your words stay on the screen. Come back and sculpt them.
           </p>
         </div>
 

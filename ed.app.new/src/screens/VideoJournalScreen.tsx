@@ -3,6 +3,7 @@ import { Video, Camera, Mic, Square, Play, Pause, X, Check, Sparkles } from 'luc
 import { Button } from '../components/ui';
 import { Card } from '../components/ui/Card';
 import FacialEmotionDetector, { EmotionCapture } from '../components/face/FacialEmotionDetector';
+import { thumbnailCanvasSize } from '../lib/videoThumbnail';
 
 interface VideoJournalScreenProps {
   onComplete: (videoUrl: string, thumbnailUrl: string, duration: number, videoBlob?: Blob, emotion?: EmotionCapture | null) => Promise<void>;
@@ -71,16 +72,25 @@ export function VideoJournalScreen({ onComplete, onCancel }: VideoJournalScreenP
     if (!videoRef.current || !canvasRef.current) return null;
     
     const video = videoRef.current;
-    const canvas = canvasRef.current;
-    canvas.width = 320;
-    canvas.height = 240;
-    
+    const size = thumbnailCanvasSize(
+      video.videoWidth,
+      video.videoHeight,
+      window.matchMedia('(orientation: portrait)').matches,
+    );
+    if (!size) return null;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = size.width;
+    canvas.height = size.height;
+
     const ctx = canvas.getContext('2d');
-    if (ctx) {
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      return canvas.toDataURL('image/jpeg', 0.7);
+    if (!ctx) return null;
+    if (size.rotateClockwise) {
+      ctx.translate(canvas.width, 0);
+      ctx.rotate(Math.PI / 2);
     }
-    return null;
+    ctx.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+    return canvas.toDataURL('image/jpeg', 0.7);
   };
 
   const startRecording = () => {
@@ -275,7 +285,7 @@ export function VideoJournalScreen({ onComplete, onCancel }: VideoJournalScreenP
                 <img
                   src={thumbnailUrl}
                   alt="Video thumbnail"
-                  className="absolute bottom-4 right-4 w-16 h-12 object-cover rounded-lg border-2 border-white shadow-lg"
+                  className="absolute bottom-4 right-4 max-h-24 w-auto rounded-lg border-2 border-white object-contain shadow-lg"
                 />
               )}
             </>

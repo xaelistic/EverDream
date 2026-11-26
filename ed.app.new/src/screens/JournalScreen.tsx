@@ -3,6 +3,7 @@ import type { ErrorBannerProps, LoadingOverlayProps } from '../components/ui';
 import { useSubscription } from '../hooks/use-subscription';
 import { presentDream } from '../lib/dreamClassify';
 import { DreamProcessingOverlay } from '../components/dreams/DreamProcessingOverlay';
+import { VideoStill } from '../components/media/VideoStill';
 
 interface Dream {
   id: string;
@@ -20,6 +21,7 @@ interface Dream {
   generatedImage?: {
     url: string;
   };
+  videoCapture?: { thumbnail?: string } | null;
   capturedEmotions?: { dominantEmotion?: string } | null;
   assetMetadata?: {
     rarityScore: number;
@@ -169,7 +171,9 @@ function DreamCard({
         />
       </button>
 
-      {(dream.generatedImage || processing) && (
+      {dream.videoCapture ? (
+        <VideoStill src={dream.videoCapture.thumbnail || dream.generatedImage?.url} />
+      ) : (dream.generatedImage || processing) && (
         <div className="relative">
           {dream.generatedImage ? (
             <img

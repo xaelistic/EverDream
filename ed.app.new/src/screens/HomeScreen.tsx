@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Moon, Sparkles, BookOpen, ChevronRight, BedDouble, PenLine, Check, Share2 } from 'lucide-react';
 import { coerceNarrativeText } from '../lib/normalizeDreamAnalysis';
 import { presentDream } from '../lib/dreamClassify';
+import { VideoStill } from '../components/media/VideoStill';
 import { ENERGY_LEVELS, type EnergyLevel } from '../lib/dailyCheckin';
 import { shareCard } from '../lib/shareCard';
 import { useToast } from '../components/ui/Toast';
@@ -33,6 +34,7 @@ interface Dream {
   processingStatus?: string;
   capturedEmotions?: { dominantEmotion?: string } | null;
   generatedImage?: { url: string } | null;
+  videoCapture?: { thumbnail?: string } | null;
   assetMetadata?: { rarityScore: number };
   isSample?: boolean;
 }
@@ -247,7 +249,9 @@ export function HomeScreen({
               onClick={() => navigate('dream', lastDream.id)}
               className="w-full text-left group"
             >
-              {lastDream.generatedImage?.url && (
+              {lastDream.videoCapture ? (
+                <VideoStill src={lastDream.videoCapture.thumbnail || lastDream.generatedImage?.url} />
+              ) : lastDream.generatedImage?.url && (
                 <img
                   src={lastDream.generatedImage.url}
                   alt=""

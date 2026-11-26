@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { RecordScreen } from './RecordScreen';
 
 vi.mock('../components/capture/VideoCaptureFlow', () => ({
@@ -18,10 +18,13 @@ vi.mock('../components/dreams/DreamCapture', () => ({
 }));
 
 describe('RecordScreen', () => {
-  it('shows the video capture flow by default', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('opens on voice when no mode is saved', () => {
     render(<RecordScreen onComplete={vi.fn()} onCancel={vi.fn()} />);
 
-    expect(screen.getByTestId('video-capture-flow')).toBeInTheDocument();
+    expect(screen.getByText('Audio journal')).toBeInTheDocument();
+    expect(screen.getByText('Tap to record your dream')).toBeInTheDocument();
   });
 
   it('can switch to upload mode for audio and text files', () => {

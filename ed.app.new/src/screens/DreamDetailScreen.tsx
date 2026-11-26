@@ -747,7 +747,6 @@ export function DreamDetailScreen({
   const hasVideo = Boolean(detailDream.videoCapture && (resolvedVideoUrl || detailDream.videoCapture.url));
   const hasAudio = Boolean(resolvedAudioUrl) && !hasVideo;
   const videoDuration = formatDuration(detailDream.videoCapture?.duration);
-  const audioDuration = formatDuration(detailDream.audioCapture?.duration);
   const presented = presentDream(detailDream);
   const pipeline = deriveDreamPipelineStatus(detailDream, detailDream.pipelineStatus);
   const pipelineIncomplete = missingPipelineSteps(pipeline).length > 0;
@@ -829,7 +828,7 @@ export function DreamDetailScreen({
     touchStart.current = null;
     if (!start) return;
     const target = event.target as HTMLElement | null;
-    if (target?.closest('textarea, video, input, button, a, select')) return;
+    if (target?.closest('textarea, video, input, button, a, select, [data-voice-note]')) return;
     const touch = event.changedTouches[0];
     const dx = touch.clientX - start.x;
     const dy = touch.clientY - start.y;
@@ -963,9 +962,9 @@ export function DreamDetailScreen({
                   <Mic className="w-3.5 h-3.5 text-duskDeep" strokeWidth={1.75} />
                 )}
                 Replay
-                {(hasVideo ? videoDuration : audioDuration) && (
+                {hasVideo && videoDuration && (
                   <span className="font-medium normal-case tracking-normal">
-                    {hasVideo ? videoDuration : audioDuration}
+                    {videoDuration}
                   </span>
                 )}
               </div>
@@ -980,7 +979,6 @@ export function DreamDetailScreen({
                     ? 'mx-auto block w-auto max-w-full max-h-[70vh] bg-black object-contain'
                     : 'w-full max-h-56 bg-ink object-contain'}
                   style={{ aspectRatio: videoFrame.aspectRatio }}
-                  poster={detailDream.videoCapture?.thumbnail || detailDream.generatedImage?.url}
                   onLoadedMetadata={(event) => {
                     const video = event.currentTarget;
                     setVideoFrame(videoFrameStyle(video.videoWidth, video.videoHeight));
@@ -988,7 +986,11 @@ export function DreamDetailScreen({
                 />
               )}
               {hasAudio && resolvedAudioUrl && (
-                <VoiceNoteWaveform src={resolvedAudioUrl} durationLabel={audioDuration} />
+                <VoiceNoteWaveform
+                  src={resolvedAudioUrl}
+                  durationSeconds={detailDream.audioCapture?.duration}
+                  transcript={canShowTranscript ? transcriptParagraphs : null}
+                />
               )}
             </section>
           )}
@@ -1211,7 +1213,7 @@ export function DreamDetailScreen({
                 </div>
               </div>
             )}
-            {showTranscript && !editingTranscript && (
+            {showTranscript && !editingTranscript && !(hasAudio && canShowTranscript) && (
               <div className="mt-3 space-y-3 px-1">
                 {canShowTranscript ? (
                   transcriptParagraphs.split(/\n\n/).map((para, i) => (

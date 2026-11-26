@@ -226,9 +226,8 @@ const AudioPlayer: React.FC<{
  */
 const VideoPlayer: React.FC<{
   blobUrl: string;
-  thumbnail?: string;
   onProgress: (time: number) => void;
-}> = ({ blobUrl, thumbnail, onProgress }) => {
+}> = ({ blobUrl, onProgress }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showControls, setShowControls] = useState(true);
@@ -322,7 +321,6 @@ const VideoPlayer: React.FC<{
       <video
         ref={videoRef}
         src={blobUrl}
-        poster={thumbnail}
         className="w-full h-full object-contain"
         onClick={togglePlay}
       />
@@ -584,7 +582,6 @@ export function MediaPlayback({
         ) : metadata.type === 'video' && blobUrl ? (
           <VideoPlayer
             blobUrl={blobUrl}
-            thumbnail={metadata.thumbnail}
             onProgress={() => {}}
           />
         ) : null}

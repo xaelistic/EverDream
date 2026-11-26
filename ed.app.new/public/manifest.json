@@ -1,7 +1,7 @@
 {
   "name": "EverDream — Dream Journal",
   "short_name": "EverDream",
-  "description": "AI-powered dream journal with analysis, visualization, and NFT minting",
+  "description": "Record the dream in your own words, then come back and sculpt it.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#fffefb",

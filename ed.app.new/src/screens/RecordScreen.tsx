@@ -3,7 +3,7 @@ import { useToast } from '../components/ui/Toast';
 import DreamCapture from '../components/dreams/DreamCapture';
 import VideoCaptureFlow from '../components/capture/VideoCaptureFlow';
 import type { VideoCaptureData } from '../components/capture/VideoCaptureFlow';
-import { CaptureModeBar, type CaptureMode } from '../components/capture/CaptureModeBar';
+import { CaptureModeBar, readCaptureMode, writeCaptureMode, type CaptureMode } from '../components/capture/CaptureModeBar';
 import { RecordingAdvice } from '../components/capture/RecordingAdvice';
 import { AudioWaveform } from '../components/capture/AudioWaveform';
 import { Mic, Square, Loader2, X, Upload, FileText, ArrowLeft } from 'lucide-react';
@@ -395,10 +395,17 @@ function UploadCapturePanel({
 
 export function RecordScreen({ onComplete, onCancel }: RecordScreenProps) {
   const { addToast } = useToast();
-  const [mode, setMode] = useState<CaptureMode>('video');
+  const [mode, setMode] = useState<CaptureMode>(() =>
+    readCaptureMode(typeof localStorage === 'undefined' ? null : localStorage)
+  );
 
   const handleModeChange = (next: CaptureMode) => {
     setMode(next);
+    try {
+      writeCaptureMode(localStorage, next);
+    } catch {
+      // Private mode can refuse storage. The choice still holds for this visit.
+    }
   };
 
   if (mode === 'video') {

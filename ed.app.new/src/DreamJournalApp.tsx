@@ -29,6 +29,7 @@ import { TrackerScreen } from './components/tracker/TrackerScreen';
 import { HomeScreen } from './screens/HomeScreen';
 
 import { JournalScreen } from './screens/JournalScreen';
+import { VideoStill } from './components/media/VideoStill';
 import { InsightsScreen } from './screens/InsightsScreen';
 import { MoreScreen } from './screens/MoreScreen';
 import { RecordScreen } from './screens/RecordScreen';
@@ -2065,7 +2066,6 @@ const DreamJournalApp = () => {
                 <p>• You retain full ownership and control</p>
                 <p>• Dreams are licensed, never sold</p>
                 <p>• Revocable at any time</p>
-                <p>• NFT minting ready when you choose</p>
               </div>
             </div>
 
@@ -2082,7 +2082,9 @@ const DreamJournalApp = () => {
                     }}
                     className="bg-white bg-opacity-10 rounded-xl overflow-hidden cursor-pointer hover:bg-opacity-15 transition"
                   >
-                    {dream.generatedImage && (
+                    {dream.videoCapture ? (
+                      <VideoStill src={dream.videoCapture.thumbnail || dream.generatedImage?.url} />
+                    ) : dream.generatedImage && (
                       <img 
                         src={dream.generatedImage.url} 
                         alt="Dream visualization"
@@ -2867,7 +2869,9 @@ const DreamJournalApp = () => {
           <div className="space-y-4">
             <h2 className="text-xl font-semibold">Dream Asset Details</h2>
             
-            {selectedDream.generatedImage && (
+            {selectedDream.videoCapture ? (
+              <VideoStill src={selectedDream.videoCapture.thumbnail || selectedDream.generatedImage?.url} />
+            ) : selectedDream.generatedImage && (
               <img 
                 src={selectedDream.generatedImage.url} 
                 alt="Dream visualization"
@@ -3031,7 +3035,7 @@ const DreamJournalApp = () => {
                     <p className="text-ink">{selectedDream.themes.join(', ')}</p>
                   </div>
                 )}
-                {selectedDream.generatedImage && (
+                {!selectedDream.videoCapture && selectedDream.generatedImage && (
                   <div>
                     <span className="text-xs text-muted uppercase tracking-wide">Artwork</span>
                     <img
@@ -3315,7 +3319,9 @@ const DreamCard = ({ dream, getCategoryBadgeClass, getEmotionEmoji, onShare: _on
     onKeyDown={(e) => { if (e.key === 'Enter') onClick(); }}
     className="rounded-2xl overflow-hidden border border-line bg-cream shadow-paper transition hover:border-dusk/25 cursor-pointer text-left"
   >
-    {dream.generatedImage && (
+    {dream.videoCapture ? (
+      <VideoStill src={dream.videoCapture.thumbnail || dream.generatedImage?.url} />
+    ) : dream.generatedImage && (
       <img 
         src={dream.generatedImage.url} 
         alt="Dream visualization"

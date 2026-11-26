@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { mediaStorageManager } from '../../lib/mediaStorage';
 import { stopCaptureMedia } from '../../lib/stopCaptureMedia';
+import { cameraIdeal, thumbnailCanvasSize } from '../../lib/videoThumbnail';
 import {
   detectEmotionFromVideo,
   ensureFaceModels,
@@ -80,32 +81,48 @@ function formatDuration(seconds: number): string {
 /**
  * Get a thumbnail from video blob
  */
-async function getVideoThumbnail(videoBlob: Blob): Promise<string> {
+async function getVideoThumbnail(videoBlob: Blob, devicePortrait: boolean): Promise<string> {
   return new Promise((resolve, reject) => {
     const video = document.createElement('video');
     video.preload = 'metadata';
     video.muted = true;
     video.playsInline = true;
-    
+    const url = URL.createObjectURL(videoBlob);
+
+    const fail = (error: Error) => {
+      URL.revokeObjectURL(url);
+      reject(error);
+    };
+
     video.onloadedmetadata = () => {
       video.currentTime = Math.min(1, video.duration / 2);
     };
-    
+
     video.onseeked = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL('image/jpeg', 0.7));
-      } else {
-        reject(new Error('Could not get canvas context'));
+      const size = thumbnailCanvasSize(video.videoWidth, video.videoHeight, devicePortrait);
+      if (!size) {
+        fail(new Error('Video has no frame size'));
+        return;
       }
+      const canvas = document.createElement('canvas');
+      canvas.width = size.width;
+      canvas.height = size.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        fail(new Error('Could not get canvas context'));
+        return;
+      }
+      if (size.rotateClockwise) {
+        ctx.translate(canvas.width, 0);
+        ctx.rotate(Math.PI / 2);
+      }
+      ctx.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/jpeg', 0.7));
     };
-    
-    video.onerror = () => reject(new Error('Failed to load video'));
-    video.src = URL.createObjectURL(videoBlob);
+
+    video.onerror = () => fail(new Error('Failed to load video'));
+    video.src = url;
   });
 }
 
@@ -182,8 +199,7 @@ export function VideoCaptureFlow({
       const constraints: MediaStreamConstraints = {
         video: {
           facingMode,
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
+          ...cameraIdeal(window.matchMedia('(orientation: portrait)').matches),
         },
         audio: audioEnabled,
       };
@@ -279,7 +295,10 @@ export function VideoCaptureFlow({
       try {
         // Note: blob: URLs for <video> can be blocked by page CSP on some deploys.
         // We catch and continue — thumbnail is optional.
-        thumbnail = await getVideoThumbnail(videoBlob);
+        thumbnail = await getVideoThumbnail(
+          videoBlob,
+          window.matchMedia('(orientation: portrait)').matches,
+        );
         console.log('[VideoCapture] Thumbnail generated successfully');
       } catch (e) {
         console.warn('[VideoCapture] Failed to generate thumbnail (CSP or load issue — non-fatal):', e);
